@@ -18394,6 +18394,7 @@ dependencies = [
  "anyhow",
  "collections",
  "gpui",
+ "image",
  "palette",
  "parking_lot",
  "refineable",
