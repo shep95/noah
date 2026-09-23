@@ -2642,7 +2642,90 @@
     "openai": {
       "api_url": "https://api.openai.com/v1",
     },
-    "openai_compatible": {},
+    "openai_compatible": {
+      // noah: built-in Venice AI provider (OpenAI-compatible).
+      // Paste your Venice API key in the Agent panel > Settings > Venice.
+      // Your key stays on your machine and is sent only to Venice.
+      // Venice exposes many models; this seeds a curated set. Add any Venice
+      // model id here (name = the exact id Venice reports at GET /models).
+      "Venice": {
+        "api_url": "https://api.venice.ai/api/v1",
+        "available_models": [
+          {
+            "name": "llama-3.3-70b",
+            "display_name": "Venice · Llama 3.3 70B",
+            "max_tokens": 65536,
+            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "llama-3.1-405b",
+            "display_name": "Venice · Llama 3.1 405B",
+            "max_tokens": 65536,
+            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "llama-3.2-3b",
+            "display_name": "Venice · Llama 3.2 3B (fast)",
+            "max_tokens": 131072,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "qwen-2.5-coder-32b",
+            "display_name": "Venice · Qwen 2.5 Coder 32B",
+            "max_tokens": 32768,
+            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "qwen3-235b",
+            "display_name": "Venice · Qwen3 235B",
+            "max_tokens": 131072,
+            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "qwen3-4b",
+            "display_name": "Venice · Qwen3 4B (fast)",
+            "max_tokens": 32768,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "mistral-31-24b",
+            "display_name": "Venice · Mistral 3.1 24B (vision)",
+            "max_tokens": 131072,
+            "capabilities": { "tools": true, "images": true, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "deepseek-r1-671b",
+            "display_name": "Venice · DeepSeek R1 671B (reasoning)",
+            "max_tokens": 131072,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false, "interleaved_reasoning": true }
+          },
+          {
+            "name": "deepseek-coder-v2-lite",
+            "display_name": "Venice · DeepSeek Coder V2 Lite",
+            "max_tokens": 131072,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "qwen-2.5-qwq-32b",
+            "display_name": "Venice · QwQ 32B (reasoning)",
+            "max_tokens": 32768,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false, "interleaved_reasoning": true }
+          },
+          {
+            "name": "dolphin-2.9.2-qwen2-72b",
+            "display_name": "Venice · Dolphin 72B (uncensored)",
+            "max_tokens": 32768,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
+            "name": "venice-uncensored",
+            "display_name": "Venice · Uncensored",
+            "max_tokens": 32768,
+            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
+          }
+        ]
+      }
+    },
     "opencode": {
       "api_url": "https://opencode.ai/zen",
     },
