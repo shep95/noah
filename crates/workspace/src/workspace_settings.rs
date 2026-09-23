@@ -46,6 +46,10 @@ pub struct WorkspaceSettings {
     pub zoomed_padding: bool,
     pub window_decorations: settings::WindowDecorations,
     pub focus_follows_mouse: FocusFollowsMouse,
+    /// Path to a custom editor wallpaper image. None uses the bundled noah wallpaper.
+    pub wallpaper: Option<String>,
+    /// Opacity of the wallpaper layer behind the workspace (0.0 - 1.0).
+    pub wallpaper_opacity: f32,
 }
 
 #[cfg(target_os = "macos")]
@@ -164,6 +168,8 @@ impl Settings for WorkspaceSettings {
                         .unwrap_or(250),
                 ),
             },
+            wallpaper: workspace.wallpaper.clone(),
+            wallpaper_opacity: workspace.wallpaper_opacity.unwrap_or(0.9),
         }
     }
 }

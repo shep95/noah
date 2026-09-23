@@ -1109,6 +1109,8 @@ impl VsCodeSettings {
             }),
             zoomed_padding: None,
             focus_follows_mouse: None,
+            wallpaper: None,
+            wallpaper_opacity: None,
         }
     }
 

@@ -65,9 +65,9 @@ use gpui::{
     Bounds, ClipboardItem, Context, CursorStyle, Decorations, DragMoveEvent, Entity, EntityId,
     EventEmitter, FocusHandle, Focusable, Global, HitboxBehavior, Hsla, KeyContext, Keystroke,
     ManagedView, MouseButton, PathPromptOptions, Point, PromptLevel, Render, ResizeEdge, Size,
-    ObjectFit, Stateful, StyledImage, Subscription, SystemWindowTabController, Task, TaskExt,
-    Tiling, WeakEntity, WindowBounds, WindowHandle, WindowId, WindowOptions, actions, canvas, img,
-    point, relative, size, transparent_black,
+    ImageSource, ObjectFit, Stateful, StyledImage, Subscription, SystemWindowTabController, Task,
+    TaskExt, Tiling, WeakEntity, WindowBounds, WindowHandle, WindowId, WindowOptions, actions,
+    canvas, img, point, relative, size, transparent_black,
 };
 pub use history_manager::*;
 pub use item::{
@@ -9617,14 +9617,20 @@ impl Render for Workspace {
             // It is only visible where the theme's surfaces are translucent (the
             // noah theme uses a semi-transparent editor background); with opaque
             // themes the panes cover it entirely, so this is a no-op for them.
-            .child(
-                img("images/noah/wallpaper.jpg")
+            // Uses the user's configured wallpaper when set, else the bundled one.
+            .child({
+                let wallpaper = WorkspaceSettings::get_global(cx);
+                let source: ImageSource = match wallpaper.wallpaper.as_deref() {
+                    Some(path) => std::path::PathBuf::from(path).into(),
+                    None => "images/noah/wallpaper.jpg".into(),
+                };
+                img(source)
                     .absolute()
                     .inset_0()
                     .size_full()
                     .object_fit(ObjectFit::Cover)
-                    .opacity(0.9),
-            )
+                    .opacity(wallpaper.wallpaper_opacity)
+            })
             // Expose the title bar as an ARIA toolbar so region navigation
             // (FocusNextPart) can reach the top bar's controls and assistive
             // technology announces it as a toolbar. The contained controls form

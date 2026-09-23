@@ -850,6 +850,7 @@ fn main() {
         let fs = app_state.fs.clone();
         load_user_themes_in_background(fs.clone(), cx);
         watch_themes(fs.clone(), cx);
+        apply_wallpaper_adaptive_theme(fs.clone(), cx);
         #[cfg(debug_assertions)]
         watch_languages(fs.clone(), app_state.languages.clone(), cx);
 
@@ -1936,6 +1937,34 @@ fn load_user_themes_in_background(fs: Arc<dyn fs::Fs>, cx: &mut App) {
             cx.update(theme_settings::reload_theme);
             anyhow::Ok(())
         }
+    })
+    .detach_and_log_err(cx);
+}
+
+/// If the user configured a custom wallpaper (`workspace.wallpaper`), derive a
+/// theme palette from that image and register it under the name "noah", so the
+/// active noah theme adopts the wallpaper's colors. No-op when no custom
+/// wallpaper is set — the bundled noah theme already matches the default one.
+fn apply_wallpaper_adaptive_theme(fs: Arc<dyn fs::Fs>, cx: &mut App) {
+    let Some(wallpaper) = WorkspaceSettings::get_global(cx).wallpaper.clone() else {
+        return;
+    };
+    cx.spawn(async move |cx| {
+        let path = std::path::PathBuf::from(&wallpaper);
+        let bytes = fs
+            .load_bytes(&path)
+            .await
+            .with_context(|| format!("reading wallpaper image at {path:?}"))?;
+        let Some(palette) = theme::palette_from_image_bytes(&bytes) else {
+            anyhow::bail!("could not decode wallpaper image at {path:?}");
+        };
+        let json = theme::adaptive_theme_json("noah", &palette);
+        cx.update(|cx| {
+            let theme_registry = ThemeRegistry::global(cx);
+            load_user_theme(&theme_registry, json.as_bytes()).log_err();
+            theme_settings::reload_theme(cx);
+        })?;
+        anyhow::Ok(())
     })
     .detach_and_log_err(cx);
 }

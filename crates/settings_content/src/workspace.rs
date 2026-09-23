@@ -172,6 +172,16 @@ pub struct WorkspaceSettingsContent {
     /// Whether the focused panel follows the mouse location
     /// Default: false
     pub focus_follows_mouse: Option<FocusFollowsMouse>,
+    /// Path to a custom editor wallpaper image (absolute path, or a path under a
+    /// project root). When set, noah paints it behind the workspace instead of the
+    /// bundled noah wallpaper, and adapts the theme palette to it on startup.
+    ///
+    /// Default: none (uses the bundled noah wallpaper)
+    pub wallpaper: Option<String>,
+    /// Opacity of the wallpaper layer behind the workspace, 0.0 - 1.0.
+    ///
+    /// Default: 0.9
+    pub wallpaper_opacity: Option<f32>,
 }
 
 #[with_fallible_options]
