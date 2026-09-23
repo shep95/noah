@@ -1951,6 +1951,21 @@ fn apply_wallpaper_adaptive_theme(fs: Arc<dyn fs::Fs>, cx: &mut App) {
     };
     cx.spawn(async move |cx| {
         let path = std::path::PathBuf::from(&wallpaper);
+        // Guard the read: skip directories, empty files, character/block devices
+        // (which report len 0, e.g. /dev/zero), and oversized files, so a
+        // project-local `workspace.wallpaper` setting cannot hang or OOM noah by
+        // pointing at a special or huge file.
+        const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
+        let Some(meta) = fs
+            .metadata(&path)
+            .await
+            .with_context(|| format!("reading wallpaper metadata at {path:?}"))?
+        else {
+            return anyhow::Ok(());
+        };
+        if meta.is_dir || meta.len == 0 || meta.len > MAX_WALLPAPER_BYTES {
+            return anyhow::Ok(());
+        }
         let bytes = fs
             .load_bytes(&path)
             .await
@@ -1963,7 +1978,7 @@ fn apply_wallpaper_adaptive_theme(fs: Arc<dyn fs::Fs>, cx: &mut App) {
             let theme_registry = ThemeRegistry::global(cx);
             load_user_theme(&theme_registry, json.as_bytes()).log_err();
             theme_settings::reload_theme(cx);
-        })?;
+        });
         anyhow::Ok(())
     })
     .detach_and_log_err(cx);
