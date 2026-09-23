@@ -2698,6 +2698,12 @@
             "capabilities": { "tools": true, "images": true, "parallel_tool_calls": false, "prompt_cache_key": false }
           },
           {
+            "name": "qwen-2.5-vl",
+            "display_name": "Venice · Qwen 2.5 VL (vision)",
+            "max_tokens": 32768,
+            "capabilities": { "tools": false, "images": true, "parallel_tool_calls": false, "prompt_cache_key": false }
+          },
+          {
             "name": "deepseek-r1-671b",
             "display_name": "Venice · DeepSeek R1 671B (reasoning)",
             "max_tokens": 131072,
