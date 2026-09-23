@@ -115,10 +115,10 @@ export default function IDELayout({ wallpaperUrl, wallpaperBrightness }: IDELayo
         content: f.content,
         language: f.language,
       }))
-      const profile = buildProjectProfile(data.name, analyzerFiles)
-      const ctx = buildProjectContextString(profile)
+      const profileBase = buildProjectProfile(data.name, analyzerFiles)
+      const ctx = buildProjectContextString(profileBase)
       setProjectContext(ctx)
-      await saveProjectProfile(profile)
+      await saveProjectProfile({ ...profileBase, id: `${data.name}_${Date.now()}` })
 
       // Select first file
       if (data.files.length > 0) {

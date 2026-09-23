@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 interface GithubFile {
   name: string
   path: string
-  type: 'file' | 'dir'
+  type: string
   download_url?: string
   sha: string
 }
