@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { loadSettings, saveSettings, type GlobalSettings } from '@/lib/settings'
 import { VENICE_MODELS } from '@/lib/venice'
+import { readCleanDataUrl } from '@/lib/strip-metadata'
 
 interface SettingsProps {
   onClose: () => void
@@ -160,11 +161,29 @@ export default function Settings({ onClose }: SettingsProps) {
               Editor Wallpaper
             </label>
             <div className="space-y-3">
+              {/* Upload image — metadata stripped before use */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <span className="text-text-secondary text-sm flex-shrink-0">Upload image</span>
+                <div className="flex-1 px-3 py-1.5 rounded-lg border border-border border-dashed bg-bg-elevated text-text-muted text-xs text-center hover:border-accent/50 transition-colors">
+                  click to choose · metadata auto-stripped
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const dataUrl = await readCleanDataUrl(file)
+                    update({ wallpaperUrl: dataUrl })
+                  }}
+                />
+              </label>
               <div className="flex items-center gap-3">
-                <span className="text-text-secondary text-sm flex-1">Custom URL</span>
+                <span className="text-text-secondary text-sm flex-shrink-0">Or URL</span>
                 <input
                   type="text"
-                  value={settings.wallpaperUrl === '/wallpaper.jpg' ? '' : settings.wallpaperUrl}
+                  value={settings.wallpaperUrl.startsWith('data:') ? '' : settings.wallpaperUrl === '/wallpaper.jpg' ? '' : settings.wallpaperUrl}
                   onChange={(e) =>
                     update({ wallpaperUrl: e.target.value || '/wallpaper.jpg' })
                   }
@@ -172,6 +191,14 @@ export default function Settings({ onClose }: SettingsProps) {
                   className="flex-1 bg-bg-elevated border border-border rounded-lg px-3 py-1.5 text-text-primary text-xs placeholder:text-text-muted focus:outline-none focus:border-accent/60"
                 />
               </div>
+              {settings.wallpaperUrl !== '/wallpaper.jpg' && (
+                <button
+                  onClick={() => update({ wallpaperUrl: '/wallpaper.jpg' })}
+                  className="text-text-muted text-xs hover:text-text-primary transition-colors"
+                >
+                  Reset to default
+                </button>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-text-secondary text-sm">
                   Opacity ({settings.wallpaperBrightness}%)

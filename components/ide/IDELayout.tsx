@@ -10,6 +10,7 @@ import { loadSettings } from '@/lib/settings'
 import { buildProjectProfile, buildProjectContextString, type FileNode as AnalyzerFile } from '@/lib/project-analyzer'
 import { saveProjectProfile } from '@/lib/pattern-store'
 import { detectLanguage } from '@/lib/project-analyzer'
+import { readCleanText } from '@/lib/strip-metadata'
 
 const Editor = dynamic(() => import('./Editor'), { ssr: false })
 
@@ -135,25 +136,24 @@ export default function IDELayout({ wallpaperUrl, wallpaperBrightness }: IDELayo
     }
   }
 
-  const handleLocalImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLocalImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string
-      const lang = detectLanguage(file.name)
-      const node: FileNode = {
-        name: file.name,
-        path: file.name,
-        type: 'file',
-        content,
-      }
-      setFiles((prev) => [...prev, node])
-      setActiveFile(file.name)
-      setActiveContent(content)
-      setActiveLanguage(lang)
+    // Strip all metadata (EXIF, timestamps, etc.) before reading content
+    const content = await readCleanText(file)
+    const lang = detectLanguage(file.name)
+    const node: FileNode = {
+      name: file.name,
+      path: file.name,
+      type: 'file',
+      content,
     }
-    reader.readAsText(file)
+    setFiles((prev) => [...prev, node])
+    setActiveFile(file.name)
+    setActiveContent(content)
+    setActiveLanguage(lang)
+    // Reset input so same file can be re-imported
+    e.target.value = ''
   }
 
   const s = loadSettings()
