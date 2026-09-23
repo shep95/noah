@@ -25,7 +25,14 @@ pub struct Model {
 }
 
 fn get_max_tokens(_name: &str) -> u64 {
-    const DEFAULT_TOKENS: u64 = 4096;
+    // Fallback context window used only when the local model does not report its
+    // own context length. noah imposes no software cap on model size or context;
+    // the true context is read from the model when available (see the provider's
+    // show_model path) and the real limit is the user's hardware. This fallback
+    // is a sane modern default so large models with unreported metadata are not
+    // throttled to a tiny window; Ollama clamps num_ctx to what the model and
+    // hardware support.
+    const DEFAULT_TOKENS: u64 = 16384;
     DEFAULT_TOKENS
 }
 

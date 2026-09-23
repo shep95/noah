@@ -2633,6 +2633,10 @@
     "google": {
       "api_url": "https://generativelanguage.googleapis.com",
     },
+    // noah runs local models with no software size cap. Any model you install in
+    // Ollama, llama.cpp, or LM Studio appears automatically and can be as large as
+    // your hardware (RAM/VRAM) can load — 7B, 70B, 405B, whatever fits. Context is
+    // read from the model itself; the limit is your machine, not noah.
     "ollama": {
       "api_url": "http://localhost:11434",
     },
