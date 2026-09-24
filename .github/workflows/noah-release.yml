@@ -1,0 +1,144 @@
+# noah release pipeline (unsigned).
+#
+# Builds downloadable installers for macOS, Linux, and Windows on free
+# GitHub-hosted runners and attaches them to a GitHub Release. This is the
+# "prove the flow" version: it does NOT code-sign, so users will see OS security
+# warnings (Gatekeeper on macOS, SmartScreen on Windows) until signing certs are
+# added. See the signing steps documented in the release notes / repo docs.
+#
+# Trigger: push a tag like `v0.1.0`, or run manually from the Actions tab.
+#
+# Note: the first run on a fresh fork is a shakedown — Zed's bundle scripts have
+# platform assumptions and the exact toolchain can shift. Each platform job is
+# independent (fail-fast: false) so a green macOS/Linux build is not blocked by a
+# Windows hiccup.
+
+name: noah release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # A release build, so the app is branded "noah" (not "noah Dev").
+  ZED_RELEASE_CHANNEL: stable
+
+concurrency:
+  group: noah-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: aarch64
+          - runner: macos-13
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable release channel
+        run: echo stable > crates/zed/RELEASE_CHANNEL
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.arch }}-apple-darwin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Bundle (unsigned)
+        run: script/bundle-mac ${{ matrix.arch }}-apple-darwin
+      - name: Collect artifact
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.arch }}-apple-darwin/release/Zed-*.dmg \
+             "dist/noah-macos-${{ matrix.arch }}.dmg"
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          name: ${{ github.ref_name || inputs.tag }}
+          files: dist/*.dmg
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable release channel
+        run: echo stable > crates/zed/RELEASE_CHANNEL
+      - name: Install system dependencies
+        run: ./script/linux
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Bundle
+        run: script/bundle-linux
+      - name: Collect artifact
+        run: |
+          mkdir -p dist
+          cp target/release/zed-linux-*.tar.gz dist/ || true
+          cp target/zed-remote-server-linux-*.gz dist/ || true
+          # Give the main archive a noah-branded name too.
+          for f in dist/zed-linux-*.tar.gz; do
+            [ -e "$f" ] && cp "$f" "dist/noah-linux-x86_64.tar.gz"
+          done
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          name: ${{ github.ref_name || inputs.tag }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  windows:
+    name: Windows (x86_64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable release channel
+        shell: bash
+        run: echo stable > crates/zed/RELEASE_CHANNEL
+      - name: Install Rust target
+        run: rustup target add x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Inno Setup (installer builder)
+        run: choco install innosetup --no-progress -y
+      - name: Bundle installer
+        shell: pwsh
+        env:
+          ZED_WORKSPACE: ${{ github.workspace }}
+        run: ./script/bundle-windows.ps1 -Architecture x86_64
+      - name: Collect artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          find target -maxdepth 4 -iname "*.exe" -path "*installer*" -exec cp {} dist/ \; || true
+          find target -maxdepth 4 -iname "Zed*Setup*.exe" -exec cp {} dist/ \; || true
+          ls -la dist || true
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          name: ${{ github.ref_name || inputs.tag }}
+          files: dist/*
+          fail_on_unmatched_files: false
+          generate_release_notes: true
