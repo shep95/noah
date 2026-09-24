@@ -929,6 +929,10 @@ impl Dock {
         self.panel_entries.len()
     }
 
+    pub fn panel_at(&self, index: usize) -> Option<&Arc<dyn PanelHandle>> {
+        self.panel_entries.get(index).map(|entry| &entry.panel)
+    }
+
     pub fn has_agent_panel(&self, cx: &App) -> bool {
         self.panel_entries
             .iter()

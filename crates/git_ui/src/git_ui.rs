@@ -870,7 +870,7 @@ mod remote_button {
     ) -> SplitButton {
         split_button(
             id,
-            "Fetch",
+            "fetch",
             0,
             0,
             Some(IconName::ArrowCircle),
@@ -901,7 +901,7 @@ mod remote_button {
     ) -> SplitButton {
         split_button(
             id,
-            "Push",
+            "push",
             ahead as usize,
             0,
             None,
@@ -933,7 +933,7 @@ mod remote_button {
     ) -> SplitButton {
         split_button(
             id,
-            "Pull",
+            "pull",
             ahead as usize,
             behind as usize,
             None,

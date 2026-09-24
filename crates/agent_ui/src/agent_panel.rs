@@ -4985,6 +4985,18 @@ impl Panel for AgentPanel {
         "AgentPanel"
     }
 
+    fn icon_label(&self, _: &Window, cx: &App) -> Option<String> {
+        let thread = self.active_agent_thread(cx)?;
+        let thread = thread.read(cx);
+        if thread.is_waiting_for_confirmation() {
+            Some(workspace::SHEPHERD_AWAITING_APPROVAL.to_string())
+        } else if thread.status() == ThreadStatus::Generating {
+            Some(workspace::SHEPHERD_WORKING.to_string())
+        } else {
+            None
+        }
+    }
+
     fn panel_key() -> &'static str {
         AGENT_PANEL_KEY
     }
@@ -6124,7 +6136,7 @@ impl AgentPanel {
             .justify_between();
 
         let empty_thread_title = matches!(mode, ToolbarMode::EmptyThread).then(|| {
-            Label::new(format!("New {} Thread", selected_agent_label))
+            Label::new(format!("new {} thread", selected_agent_label))
                 .color(Color::Muted)
                 .truncate()
                 .into_any_element()

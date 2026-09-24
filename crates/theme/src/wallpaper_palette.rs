@@ -198,7 +198,7 @@ pub fn adaptive_theme_json(name: &str, palette: &WallpaperPalette) -> String {
     let type_name = mix(text, accent, 0.25);
     let property = mix(text, palette.mid, 0.25);
     let variable = mix(text, text_muted, 0.3);
-    let comment = mix(bg_elevated, text_muted, 0.6);
+    let comment = mix(text_muted, text, 0.2);
 
     // Semi-transparent so the wallpaper shows through the editor/panels.
     let translucent = 0xC0u8;

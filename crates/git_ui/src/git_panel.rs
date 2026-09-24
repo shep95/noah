@@ -691,11 +691,11 @@ impl GitHeaderEntry {
     }
     pub fn title(&self) -> &'static str {
         match self.header {
-            Section::Conflict => "Conflicts",
-            Section::Tracked => "Tracked",
-            Section::New => "Untracked",
-            Section::Staged => "Staged",
-            Section::Unstaged => "Unstaged",
+            Section::Conflict => "conflicts",
+            Section::Tracked => "tracked",
+            Section::New => "untracked",
+            Section::Staged => "staged",
+            Section::Unstaged => "unstaged",
         }
     }
 }
@@ -1220,7 +1220,7 @@ pub(crate) fn commit_message_editor(
     commit_editor.set_use_modal_editing(true);
     commit_editor.set_show_wrap_guides(false, cx);
     commit_editor.set_show_indent_guides(false, cx);
-    let placeholder = placeholder.unwrap_or("Enter commit message".into());
+    let placeholder = placeholder.unwrap_or("commit message".into());
     commit_editor.set_placeholder_text(&placeholder, window, cx);
     commit_editor.set_custom_context_menu(|editor, _point, window, cx| {
         let has_selection = editor.has_non_empty_selection(&editor.display_snapshot(cx));
@@ -5616,7 +5616,7 @@ impl GitPanel {
         self.select_last_entry_if_out_of_bounds(window, cx);
 
         let suggested_commit_message = self.suggest_commit_message(cx);
-        let placeholder_text = suggested_commit_message.unwrap_or("Enter commit message".into());
+        let placeholder_text = suggested_commit_message.unwrap_or("commit message".into());
 
         self.commit_editor.update(cx, |editor, cx| {
             editor.set_placeholder_text(&placeholder_text, window, cx)
@@ -6269,16 +6269,16 @@ impl GitPanel {
     pub fn commit_button_title(&self) -> &'static str {
         if self.amend_pending {
             if self.has_staged_changes() {
-                "Amend"
+                "amend"
             } else if self.has_tracked_changes() {
-                "Amend Tracked"
+                "amend tracked"
             } else {
-                "Amend"
+                "amend"
             }
         } else if self.has_staged_changes() {
-            "Commit"
+            "commit"
         } else {
-            "Commit Tracked"
+            "commit tracked"
         }
     }
 
@@ -6369,7 +6369,7 @@ impl GitPanel {
 
     fn render_git_changes_actions_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (text, action, stage, tooltip) = if self.primary_changes_action_stages() {
-            ("Stage All", StageAll.boxed_clone(), true, "git add --all")
+            ("stage all", StageAll.boxed_clone(), true, "git add --all")
         } else {
             ("Unstage All", UnstageAll.boxed_clone(), false, "git reset")
         };
@@ -6434,7 +6434,7 @@ impl GitPanel {
                                         .color(Color::Muted),
                                 )
                                 .child(
-                                    Label::new("View Diff")
+                                    Label::new("view diff")
                                         .size(LabelSize::Small)
                                         .color(Color::Muted),
                                 )
@@ -6937,7 +6937,7 @@ impl GitPanel {
                 ElementId::Name("changes-tab".into()),
                 active_tab == GitPanelTab::Changes,
                 true,
-                "Changes".into(),
+                "changes".into(),
                 GitPanelTab::Changes,
                 ActivateChangesTab.boxed_clone(),
             ))
@@ -6950,7 +6950,7 @@ impl GitPanel {
                 ElementId::Name("history-tab".into()),
                 active_tab != GitPanelTab::Changes,
                 false,
-                "History".into(),
+                "history".into(),
                 GitPanelTab::History,
                 ActivateHistoryTab.boxed_clone(),
             ))
@@ -7568,7 +7568,7 @@ impl GitPanel {
         v_flex()
             .gap_1()
             .items_center()
-            .child(Label::new("No changes to commit").color(Color::Muted))
+            .child(Label::new("nothing to commit").color(Color::Muted))
             .when(show_branch_diff, |this| {
                 this.child(
                     Button::new("view_branch_diff", "View Branch Diff")

@@ -124,7 +124,7 @@ impl RenderOnce for ApiKeysWithoutProviders {
                 h_flex()
                     .gap_2()
                     .child(
-                        Label::new("API Keys")
+                        Label::new("keys")
                             .size(LabelSize::Small)
                             .color(Color::Muted)
                             .buffer_font(cx),
@@ -135,7 +135,7 @@ impl RenderOnce for ApiKeysWithoutProviders {
                 "Venice is set up already. Paste its key, or connect Ollama for local models.",
             )))
             .child(
-                Button::new("configure-providers", "Configure Providers")
+                Button::new("configure-providers", "set up models")
                     .full_width()
                     .style(ButtonStyle::Outlined)
                     .on_click(move |_, window, cx| {

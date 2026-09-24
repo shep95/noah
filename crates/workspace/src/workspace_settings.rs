@@ -169,7 +169,7 @@ impl Settings for WorkspaceSettings {
                 ),
             },
             wallpaper: workspace.wallpaper.clone(),
-            wallpaper_opacity: workspace.wallpaper_opacity.unwrap_or(0.9),
+            wallpaper_opacity: workspace.wallpaper_opacity.unwrap_or(0.5),
         }
     }
 }

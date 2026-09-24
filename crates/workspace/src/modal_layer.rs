@@ -317,14 +317,15 @@ impl Render for ModalLayer {
                     .top_20()
                     .items_center()
                     .track_focus(&active_modal.focus_handle)
-                    .child(
+                    .child(ui::animation::fade_in(
                         h_flex()
                             .occlude()
                             .child(active_modal.modal.view())
                             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation();
                             }),
-                    ),
+                        ("modal-arrival", active_modal.modal.view().entity_id()),
+                    )),
             )
             .into_any_element()
     }

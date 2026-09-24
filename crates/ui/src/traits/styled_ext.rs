@@ -3,17 +3,28 @@ use gpui::{App, Styled, hsla};
 use crate::ElevationIndex;
 use crate::prelude::*;
 
+// Corners grow with elevation so the layer a surface lives on reads from its
+// shape alone: inline controls stay nearly square, surfaces soften a little,
+// popovers more, and modals most.
+fn rounded_for<E: Styled>(this: E, index: ElevationIndex) -> E {
+    match index {
+        ElevationIndex::ModalSurface => this.rounded_xl(),
+        ElevationIndex::ElevatedSurface => this.rounded_lg(),
+        _ => this.rounded_md(),
+    }
+}
+
 fn elevated<E: Styled>(this: E, cx: &App, index: ElevationIndex) -> E {
-    this.bg(cx.theme().colors().elevated_surface_background)
-        .rounded_lg()
+    rounded_for(this, index)
+        .bg(cx.theme().colors().elevated_surface_background)
         .border_1()
         .border_color(cx.theme().colors().border_variant)
         .shadow(index.shadow(cx))
 }
 
 fn elevated_borderless<E: Styled>(this: E, cx: &mut App, index: ElevationIndex) -> E {
-    this.bg(cx.theme().colors().elevated_surface_background)
-        .rounded_lg()
+    rounded_for(this, index)
+        .bg(cx.theme().colors().elevated_surface_background)
         .shadow(index.shadow(cx))
 }
 

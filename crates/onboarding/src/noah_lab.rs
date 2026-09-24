@@ -5,7 +5,7 @@ use anyhow::Result;
 use extension_host::ExtensionStore;
 use fs::Fs;
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
+    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, Styled, WeakEntity, Window, actions,
 };
 use ui::{ButtonLike, Divider, DividerColor, Vector, VectorName, prelude::*};
@@ -261,6 +261,8 @@ impl NoahLab {
                     .child(Icon::new(icon).color(Color::Muted).size(IconSize::Small))
                     .child(
                         v_flex()
+                            .flex_1()
+                            .items_start()
                             .child(Label::new(title))
                             .child(
                                 Label::new(description)
@@ -318,7 +320,7 @@ impl Render for NoahLab {
                         h_flex()
                             .gap_4()
                             .mb_4()
-                            .child(Vector::square(VectorName::ZedLogo, rems_from_px(36.)))
+                            .child(Vector::square(VectorName::ZedLogo, rems_from_px(36_f32)))
                             .child(
                                 v_flex().child(Headline::new("noah lab")).child(
                                     Label::new("build on top of noah. add-ons load live, no rebuild.")

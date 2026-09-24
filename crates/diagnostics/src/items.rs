@@ -32,6 +32,12 @@ impl Render for DiagnosticIndicator {
         if !ProjectSettings::get_global(cx).diagnostics.button {
             return indicator.hidden();
         }
+        // Problems are loud when they exist and absent when they don't; a
+        // permanent "all clear" mark is noise in the status line.
+        let has_problems = self.summary.error_count > 0 || self.summary.warning_count > 0;
+        if !has_problems && self.current_diagnostic.is_none() {
+            return indicator.hidden();
+        }
 
         let diagnostic_indicator = match (self.summary.error_count, self.summary.warning_count) {
             (0, 0) => h_flex().child(

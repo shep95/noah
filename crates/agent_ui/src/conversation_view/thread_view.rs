@@ -9518,7 +9518,8 @@ impl ThreadView {
                 h_flex()
                     .gap_0p5()
                     .child(
-                        Button::new(("allow-btn", entry_ix), "Allow")
+                        Button::new(("allow-btn", entry_ix), "allow")
+                            .style(ButtonStyle::Tinted(TintColor::Success))
                             .disabled(allow_disabled)
                             .start_icon(
                                 Icon::new(IconName::Check)

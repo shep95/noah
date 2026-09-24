@@ -33,6 +33,7 @@ use zed_actions::OpenOnboarding;
 mod base_keymap_picker;
 mod basics_page;
 pub mod multibuffer_hint;
+pub mod noah_lab;
 mod theme_preview;
 
 /// Imports settings from Visual Studio Code.
@@ -70,6 +71,7 @@ actions!(
 );
 
 pub fn init(cx: &mut App) {
+    noah_lab::init(cx);
     cx.observe_new(|workspace: &mut Workspace, _, _cx| {
         workspace
             .register_action(|_workspace, _: &ResetHints, _, cx| MultibufferHint::set_count(0, cx));

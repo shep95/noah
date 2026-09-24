@@ -180,7 +180,7 @@ pub struct WorkspaceSettingsContent {
     pub wallpaper: Option<String>,
     /// Opacity of the wallpaper layer behind the workspace, 0.0 - 1.0.
     ///
-    /// Default: 0.9
+    /// Default: 0.5
     pub wallpaper_opacity: Option<f32>,
 }
 

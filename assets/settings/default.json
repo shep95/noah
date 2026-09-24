@@ -40,7 +40,7 @@
   // The default font size for text in the editor
   "buffer_font_size": 15,
   // The weight of the editor font in standard CSS units from 100 to 900.
-  "buffer_font_weight": 400,
+  "buffer_font_weight": 300,
   // Set the buffer's line height.
   // May take 3 values:
   //  1. Use a line height that's comfortable for reading (1.618)
@@ -66,7 +66,7 @@
     "calt": false,
   },
   // The weight of the UI font in standard CSS units from 100 to 900.
-  "ui_font_weight": 400,
+  "ui_font_weight": 300,
   // The default font size for text in the UI
   "ui_font_size": 16,
   // The font family for agent responses in the agent panel. Falls back to the UI font family if unset.
@@ -613,7 +613,7 @@
     // Whether to show the branch name button in the titlebar.
     "show_branch_name": true,
     // Whether to show the worktree name button in the titlebar.
-    "show_worktree_name": true,
+    "show_worktree_name": false,
     // Whether to show the project host and name in the titlebar.
     "show_project_items": true,
     // Whether to show onboarding banners in the titlebar.
@@ -621,7 +621,7 @@
     // Whether to show user picture in the titlebar.
     "show_user_picture": false,
     // Whether to show the user menu in the titlebar.
-    "show_user_menu": true,
+    "show_user_menu": false,
     // noah has no accounts, so there is nothing to sign in to.
     "show_sign_in": false,
     // Whether to show the menus in the titlebar.
@@ -1359,11 +1359,11 @@
     // Whether to have edit cards in the agent panel expanded, showing a preview of the full diff.
     //
     // Default: true
-    "expand_edit_card": true,
+    "expand_edit_card": false,
     // Whether to have terminal cards in the agent panel expanded, showing the whole command output.
     //
     // Default: true
-    "expand_terminal_card": true,
+    "expand_terminal_card": false,
     // Command to automatically run when Zed creates a Terminal Thread shell in the agent panel.
     // The command is sent to the shell as if typed, so it is interpreted by your
     // configured shell (including on Windows and remote/WSL projects).

@@ -53,8 +53,10 @@ pub trait DefaultAnimations: Styled + Sized + Element {
             animation_id,
             gpui::Animation::new(AnimationDuration::Fast.into()).with_easing(ease_out_quint()),
             move |mut this, delta| {
-                let start_opacity = 0.4;
-                let start_pos = 0.0;
+                // Arrivals fade up from nothing over a short distance, so
+                // things appear quietly instead of sliding in.
+                let start_opacity = 0.0;
+                let start_pos = 24.0;
                 let end_pos = 40.0;
 
                 if fade_in {
@@ -97,6 +99,16 @@ pub trait DefaultAnimations: Styled + Sized + Element {
 }
 
 impl<E: Styled + Element> DefaultAnimations for E {}
+
+/// Fades an element up from nothing when it first appears, for surfaces such
+/// as palettes and dialogs that should arrive without moving.
+pub fn fade_in<E: Styled + Element>(element: E, id: impl Into<ElementId>) -> AnimationElement<E> {
+    element.with_animation(
+        id,
+        gpui::Animation::new(std::time::Duration::from_millis(180)).with_easing(ease_out_quint()),
+        |this, delta| this.opacity(delta),
+    )
+}
 
 // Don't use this directly, it only exists to show animation previews
 #[derive(RegisterComponent)]

@@ -15,6 +15,7 @@ pub mod path_list {
 }
 pub mod path_link;
 mod persistence;
+mod room_rail;
 pub mod searchable;
 pub mod security_modal;
 pub mod shared_screen;
@@ -26,6 +27,10 @@ mod theme_preview;
 mod toast_layer;
 mod toolbar;
 pub mod welcome;
+pub use room_rail::{
+    EnterChangesRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom, EnterWriteRoom, Room,
+    SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
+};
 pub mod workspace_error;
 mod workspace_settings;
 
@@ -50,7 +55,7 @@ use client::{
     proto::{self, ErrorCode, PanelId, PeerId},
 };
 use collections::{HashMap, HashSet, TypeIdHashMap, hash_map};
-use dock::{Dock, DockPosition, PanelButtons, PanelHandle, RESIZE_HANDLE_SIZE};
+use dock::{Dock, DockPosition, PanelHandle, RESIZE_HANDLE_SIZE};
 use fs::Fs;
 use futures::{
     Future, FutureExt, StreamExt,
@@ -1971,20 +1976,14 @@ impl Workspace {
         let left_dock = Dock::new(DockPosition::Left, modal_layer.clone(), window, cx);
         let bottom_dock = Dock::new(DockPosition::Bottom, modal_layer.clone(), window, cx);
         let right_dock = Dock::new(DockPosition::Right, modal_layer.clone(), window, cx);
-        let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx));
-        let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), cx));
-        let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), cx));
         let multi_workspace = window
             .root::<MultiWorkspace>()
             .flatten()
             .map(|mw| mw.downgrade());
         let status_bar = cx.new(|cx| {
-            let mut status_bar =
-                StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
-            status_bar.add_left_item(left_dock_buttons, window, cx);
-            status_bar.add_right_item(right_dock_buttons, window, cx);
-            status_bar.add_right_item(bottom_dock_buttons, window, cx);
-            status_bar
+            // Rooms are entered from the room rail, so the status bar carries only
+            // what is happening, not a row of panel toggles.
+            StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx)
         });
 
         let session_id = app_state.session.read(cx).id().to_owned();
@@ -8059,7 +8058,7 @@ impl Workspace {
             .active_item(cx)
             .is_some_and(|item| !item.capability(cx).editable());
 
-        self.add_workspace_actions_listeners(div, window, cx)
+        room_rail::room_actions(self.add_workspace_actions_listeners(div, window, cx), cx)
             .on_action(cx.listener(
                 |_workspace, action_sequence: &settings::ActionSequence, window, cx| {
                     for action in &action_sequence.0 {
@@ -9681,10 +9680,18 @@ impl Render for Workspace {
                     .flex()
                     .flex_col()
                     .child(
+                        h_flex()
+                            .flex_1()
+                            .w_full()
+                            .items_start()
+                            .overflow_hidden()
+                            .child(self.render_room_rail(window, cx))
+                            .child(
                         // The theme background is painted on the root, under the
                         // wallpaper; painting it here too would cover the wallpaper.
                         div()
                             .id("workspace")
+                            .h_full()
                             .relative()
                             .flex_1()
                             .w_full()
@@ -10035,6 +10042,7 @@ impl Render for Workspace {
                                 })
                             }))
                             .children(self.render_notifications(window, cx)),
+                            ),
                     )
                     .when(self.status_bar_visible(cx), |parent| {
                         parent.child(self.status_bar.clone())

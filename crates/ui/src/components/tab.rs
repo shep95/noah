@@ -144,7 +144,9 @@ impl RenderOnce for Tab {
         self.div
             .h(Tab::container_height(cx))
             .bg(tab_bg)
-            .border_color(cx.theme().colors().border)
+            // Tabs are told apart by text brightness alone; the border widths stay
+            // so tab geometry is unchanged, but nothing is drawn.
+            .border_color(gpui::transparent_black())
             .map(|this| match self.position {
                 TabPosition::First => {
                     if self.selected {

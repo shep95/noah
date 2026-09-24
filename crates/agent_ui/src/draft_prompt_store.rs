@@ -180,7 +180,7 @@ pub fn empty_draft_placeholder_label(
             .unwrap_or_else(|| SharedString::from(agent_id.to_string()))
     };
 
-    format!("New {} Thread", agent_name).into()
+    format!("new {} thread", agent_name).into()
 }
 
 #[cfg(test)]

@@ -191,13 +191,13 @@ impl ApplicationMenu {
                     .trigger_with_tooltip(
                         IconButton::new(
                             SharedString::from(format!("{}-menu-trigger", menu_name)),
-                            ui::IconName::Menu,
+                            ui::IconName::NoahMark,
                         )
                         .style(ButtonStyle::Subtle)
                         .icon_size(IconSize::Small)
                         .tab_index(0isize)
                         .aria_label("Application menu"),
-                        Tooltip::text("Open Application Menu"),
+                        Tooltip::text("menu"),
                     )
                     .with_handle(handle),
             )

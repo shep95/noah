@@ -248,6 +248,11 @@ impl LanguageModelRegistry {
     /// Returns true if a provider should be hidden from the UI.
     /// Built-in providers are hidden when their corresponding extension is installed.
     pub fn should_hide_provider(&self, provider_id: &LanguageModelProviderId) -> bool {
+        // Zed's hosted models need a Zed account, which noah has no way to sign
+        // in to, so offering them would only lead to a dead end.
+        if *provider_id == ZED_CLOUD_PROVIDER_ID {
+            return true;
+        }
         if let Some(ref hiding_fn) = self.builtin_provider_hiding_fn {
             if let Some(extension_id) = hiding_fn(&provider_id.0) {
                 return self.installed_llm_extension_ids.contains(extension_id);
