@@ -1685,9 +1685,10 @@
   //
   // Default: false
   "disable_ai": false,
-  // Automatically update Zed. This setting may be ignored on Linux if
-  // installed through a package manager.
-  "auto_update": true,
+  // Automatically update. Off in noah: the built-in updater targets upstream
+  // Zed's release server and would replace noah with stock Zed. noah updates
+  // ship as new installers from the noah website.
+  "auto_update": false,
   // How to render LSP `textDocument/documentColor` colors in the editor.
   //
   // Possible values:

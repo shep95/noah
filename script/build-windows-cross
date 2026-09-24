@@ -33,12 +33,25 @@ export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 export CARGO_PROFILE_RELEASE_DEBUG=false
 
-cargo build --release -p zed --target "$TARGET"
+cargo build --release -p zed -p cli --target "$TARGET"
 
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
+# Same layout as the official Windows installer (script/bundle-windows.ps1).
+mkdir -p "$stage/bin" "$stage/x64"
 cp "target/$TARGET/release/zed.exe" "$stage/noah.exe"
-x86_64-w64-mingw32-strip "$stage/noah.exe" || true
+cp "target/$TARGET/release/cli.exe" "$stage/bin/zed.exe"
+x86_64-w64-mingw32-strip "$stage/noah.exe" "$stage/bin/zed.exe" || true
+
+# ConPTY gives the integrated terminal full functionality. crates/zed/build.rs
+# fetches it only on Windows hosts, so fetch the same package here.
+conpty_url="https://github.com/microsoft/terminal/releases/download/v1.25.1912.0/Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
+conpty_dir="$(mktemp -d)"
+curl -fsSL "$conpty_url" -o "$conpty_dir/conpty.zip"
+(cd "$conpty_dir" && unzip -q conpty.zip)
+cp "$conpty_dir/runtimes/win-x64/native/conpty.dll" "$stage/conpty.dll"
+cp "$conpty_dir/build/native/runtimes/x64/OpenConsole.exe" "$stage/x64/OpenConsole.exe"
+rm -rf "$conpty_dir"
 
 # Ship any MinGW runtime DLLs the executable links against.
 sysroot_bin="$(dirname "$(x86_64-w64-mingw32-gcc -print-libgcc-file-name)")"

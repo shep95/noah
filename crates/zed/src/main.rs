@@ -15,6 +15,15 @@ const _: () = assert!(
      Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
 );
 
+// MinGW's C runtime does not export `_invoke_watson`, which the crash-handler crate
+// calls on its unhandled invalid-parameter path. Provide it with the MSVC CRT
+// semantics — terminate the process immediately — so windows-gnu builds link.
+#[cfg(all(target_os = "windows", target_env = "gnu"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn _invoke_watson() -> ! {
+    std::process::abort()
+}
+
 use agent_ui::AgentPanel;
 use anyhow::{Context as _, Result};
 use clap::Parser;
