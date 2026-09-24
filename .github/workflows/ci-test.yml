@@ -2,9 +2,12 @@ name: ci test
 
 on:
   workflow_dispatch: {}
+  push:
+    branches:
+      - ci-probe
 
 jobs:
   hello:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - run: echo "hello from noah CI"
