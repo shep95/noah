@@ -1,7 +1,8 @@
 # noah release pipeline (unsigned).
 #
-# Builds downloadable installers for macOS, Linux, and Windows on GitHub-hosted
-# runners and attaches them to a GitHub Release. Uses only the built-in `gh` CLI
+# Builds downloadable installers for macOS and Linux on GitHub-hosted runners
+# and attaches them to a GitHub Release. The Windows installer is built with
+# script/build-windows-cross. Uses only the built-in `gh` CLI
 # and GitHub-authored actions (actions/checkout, actions/setup-node) so it works
 # even under the strictest repo Actions policy (no third-party actions required).
 #
@@ -36,33 +37,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-14
-            arch: aarch64
-          - runner: macos-13
-            arch: x86_64
-    runs-on: ${{ matrix.runner }}
+        # Both builds run on an Apple Silicon runner; the Intel one is
+        # cross-compiled, since GitHub retired its Intel macOS runners.
+        arch: [aarch64, x86_64]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Select stable release channel
         run: echo stable > crates/zed/RELEASE_CHANNEL
       - name: Install Rust target
         run: rustup target add ${{ matrix.arch }}-apple-darwin
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Bundle (unsigned)
+      - name: Bundle (ad-hoc signed)
         run: script/bundle-mac ${{ matrix.arch }}-apple-darwin
       - name: Collect + publish
         run: |
           mkdir -p dist
-          cp target/${{ matrix.arch }}-apple-darwin/release/Zed-*.dmg \
+          cp target/${{ matrix.arch }}-apple-darwin/release/noah-*.dmg \
              "dist/noah-macos-${{ matrix.arch }}.dmg"
           gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
           gh release upload "$TAG" dist/noah-macos-${{ matrix.arch }}.dmg --clobber
 
   linux:
     name: Linux (x86_64)
+    # The oldest supported Ubuntu keeps the glibc requirement low, so the
+    # packages run on more distributions.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -70,47 +68,9 @@ jobs:
         run: echo stable > crates/zed/RELEASE_CHANNEL
       - name: Install system dependencies
         run: ./script/linux
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Bundle
-        run: script/bundle-linux
-      - name: Collect + publish
+      - name: Package
+        run: script/build-linux-package
+      - name: Publish
         run: |
-          mkdir -p dist
-          for f in target/release/zed-linux-*.tar.gz; do
-            [ -e "$f" ] && cp "$f" dist/noah-linux-x86_64.tar.gz
-          done
           gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
-          gh release upload "$TAG" dist/noah-linux-x86_64.tar.gz --clobber
-
-  windows:
-    name: Windows (x86_64)
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select stable release channel
-        shell: bash
-        run: echo stable > crates/zed/RELEASE_CHANNEL
-      - name: Install Rust target
-        run: rustup target add x86_64-pc-windows-msvc
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Bundle installer
-        shell: pwsh
-        env:
-          ZED_WORKSPACE: ${{ github.workspace }}
-        run: ./script/bundle-windows.ps1 -Architecture x86_64
-      - name: Collect + publish
-        shell: bash
-        run: |
-          mkdir -p dist
-          if [ -f target/Zed-x86_64.exe ]; then
-            cp target/Zed-x86_64.exe dist/noah-windows-x86_64.exe
-          else
-            f=$(find target -maxdepth 3 -iname "Zed-*.exe" | head -1)
-            [ -n "$f" ] && cp "$f" dist/noah-windows-x86_64.exe
-          fi
-          gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
-          gh release upload "$TAG" dist/noah-windows-x86_64.exe --clobber
+          gh release upload "$TAG" dist/noah-linux-x86_64.tar.gz dist/noah-linux-amd64.deb --clobber

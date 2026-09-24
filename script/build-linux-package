@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Build noah for Linux: a .deb (double-click install on Debian/Ubuntu/Mint/Pop)
+# and a .tar.gz with an install script for every other distribution.
+#
+# Requirements (Ubuntu/Debian): the packages from script/linux, plus dpkg-deb.
+#
+# Usage: script/build-linux-package [VERSION]
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+VERSION="${1:-$(script/get-crate-version zed)}"
+ARCH="$(uname -m)"
+case "$ARCH" in
+    x86_64) DEB_ARCH=amd64 ;;
+    aarch64) DEB_ARCH=arm64 ;;
+    *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+if [[ -n "${RUSTFLAGS+x}" || -n "${CARGO_ENCODED_RUSTFLAGS+x}" ]]; then
+    echo "Unset RUSTFLAGS; the bundle rpath comes from .cargo/bundle-config.toml." >&2
+    exit 1
+fi
+
+export ZED_RELEASE_CHANNEL=stable
+export RELEASE_CHANNEL=stable
+export ZED_BUNDLE=true
+# LTO off keeps the build within reach of an ordinary machine.
+export CARGO_PROFILE_RELEASE_LTO=false
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+export CARGO_PROFILE_RELEASE_DEBUG=false
+
+# bundle-config.toml sets the rpath to $ORIGIN/../lib so the libraries copied
+# below are found at runtime.
+cargo --config .cargo/bundle-config.toml build --release -p zed -p cli
+release_dir=target/release
+
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+app="$stage/noah.app"
+mkdir -p "$app/bin" "$app/libexec" "$app/lib" \
+    "$app/share/applications" \
+    "$app/share/icons/hicolor/512x512/apps" "$app/share/icons/hicolor/1024x1024/apps"
+
+# The CLI finds the editor at ../libexec/zed-editor relative to itself.
+cp "$release_dir/zed" "$app/libexec/zed-editor"
+cp "$release_dir/cli" "$app/bin/noah"
+strip "$app/libexec/zed-editor" "$app/bin/noah"
+
+# Ship the non-system libraries the editor links against, the same set Zed's
+# own bundle ships; base libraries every desktop already has are left out.
+ldd "$release_dir/zed" | cut -d' ' -f3 | grep '^/' |
+    grep -v '\<\(libc.so\|libgcc_s.so\|libm.so\|libpthread.so\|libdl.so\|libasound.so\)' |
+    grep -v '\<\(libglib-2.0.so\|libgobject-2.0.so\|libgio-2.0.so\|libgmodule-2.0.so\|libpcre.so\|libpcre2-8.so\|libmount.so\|libblkid.so\|libselinux.so\|libffi.so\|libresolv.so\|libz.so\)' |
+    while read -r library; do cp "$library" "$app/lib/"; done
+
+cp crates/zed/resources/app-icon.png "$app/share/icons/hicolor/512x512/apps/noah.png"
+cp crates/zed/resources/app-icon@2x.png "$app/share/icons/hicolor/1024x1024/apps/noah.png"
+
+desktop_entry() {
+    local exec_path="$1" icon="$2"
+    cat <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=noah
+GenericName=Code Editor
+Comment=A native code editor with shepherd, by #houseofasher
+TryExec=$exec_path
+StartupNotify=true
+StartupWMClass=com.asherin.noah
+Exec=$exec_path %U
+Icon=$icon
+Categories=Utility;TextEditor;Development;IDE;
+Keywords=noah;shepherd;editor;ide;code;
+MimeType=text/plain;application/x-zerosize;
+Actions=NewWorkspace;
+
+[Desktop Action NewWorkspace]
+Exec=$exec_path --new %U
+Name=Open a new workspace
+EOF
+}
+desktop_entry noah noah > "$app/share/applications/com.asherin.noah.desktop"
+
+cat > "$app/install.sh" <<'EOF'
+#!/usr/bin/env sh
+# Installs noah for the current user: ~/.local/noah.app, a `noah` command in
+# ~/.local/bin, and a launcher entry. Run with --uninstall to remove it.
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+target="$HOME/.local/noah.app"
+bin_dir="$HOME/.local/bin"
+apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+desktop="$apps_dir/com.asherin.noah.desktop"
+
+if [ "${1:-}" = "--uninstall" ]; then
+    rm -rf "$target" "$bin_dir/noah" "$desktop"
+    echo "noah removed."
+    exit 0
+fi
+
+if [ "$here" != "$target" ]; then
+    rm -rf "$target"
+    mkdir -p "$(dirname "$target")"
+    cp -R "$here" "$target"
+fi
+mkdir -p "$bin_dir" "$apps_dir"
+ln -sf "$target/bin/noah" "$bin_dir/noah"
+sed -e "s|^TryExec=noah|TryExec=$target/bin/noah|" \
+    -e "s|^Exec=noah|Exec=$target/bin/noah|" \
+    -e "s|^Icon=noah|Icon=$target/share/icons/hicolor/512x512/apps/noah.png|" \
+    "$target/share/applications/com.asherin.noah.desktop" > "$desktop"
+chmod +x "$desktop"
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+echo "noah is installed. Open it from your app launcher, or run: noah"
+case ":$PATH:" in *":$bin_dir:"*) ;; *) echo "(add $bin_dir to your PATH to use the noah command)";; esac
+EOF
+chmod +x "$app/install.sh"
+
+mkdir -p dist
+tarball="$PWD/dist/noah-linux-$ARCH.tar.gz"
+tar -czf "$tarball" -C "$stage" noah.app
+echo "built $tarball"
+
+# The .deb installs system-wide under /opt/noah with a /usr/bin/noah command.
+deb_root="$stage/deb"
+mkdir -p "$deb_root/opt" "$deb_root/usr/bin" "$deb_root/usr/share/applications" \
+    "$deb_root/usr/share/icons/hicolor/512x512/apps" "$deb_root/DEBIAN"
+cp -R "$app" "$deb_root/opt/noah"
+rm "$deb_root/opt/noah/install.sh"
+ln -s /opt/noah/bin/noah "$deb_root/usr/bin/noah"
+desktop_entry /opt/noah/bin/noah noah > "$deb_root/usr/share/applications/com.asherin.noah.desktop"
+cp "$app/share/icons/hicolor/512x512/apps/noah.png" "$deb_root/usr/share/icons/hicolor/512x512/apps/noah.png"
+installed_size="$(du -sk "$deb_root" | cut -f1)"
+cat > "$deb_root/DEBIAN/control" <<EOF
+Package: noah
+Version: $VERSION
+Section: devel
+Priority: optional
+Architecture: $DEB_ARCH
+Installed-Size: $installed_size
+Depends: libasound2 | libasound2t64, libxkbcommon0, libxkbcommon-x11-0, libvulkan1, libwayland-client0, libfontconfig1, libx11-xcb1
+Maintainer: #houseofasher <https://asherin.com/>
+Homepage: https://github.com/shep95/noah
+Description: noah, a native code editor with shepherd
+ Free, no account. Built on Zed. Bring a Venice key or run models locally.
+EOF
+deb="$PWD/dist/noah-linux-$DEB_ARCH.deb"
+dpkg-deb --root-owner-group --build "$deb_root" "$deb" >/dev/null
+echo "built $deb"
