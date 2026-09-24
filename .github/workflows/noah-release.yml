@@ -1,17 +1,13 @@
 # noah release pipeline (unsigned).
 #
-# Builds downloadable installers for macOS, Linux, and Windows on free
-# GitHub-hosted runners and attaches them to a GitHub Release. This is the
-# "prove the flow" version: it does NOT code-sign, so users will see OS security
-# warnings (Gatekeeper on macOS, SmartScreen on Windows) until signing certs are
-# added. See the signing steps documented in the release notes / repo docs.
+# Builds downloadable installers for macOS, Linux, and Windows on GitHub-hosted
+# runners and attaches them to a GitHub Release. Uses only the built-in `gh` CLI
+# and GitHub-authored actions (actions/checkout, actions/setup-node) so it works
+# even under the strictest repo Actions policy (no third-party actions required).
+#
+# Unsigned: users see OS security warnings until signing certs are added.
 #
 # Trigger: push a tag like `v0.1.0`, or run manually from the Actions tab.
-#
-# Note: the first run on a fresh fork is a shakedown — Zed's bundle scripts have
-# platform assumptions and the exact toolchain can shift. Each platform job is
-# independent (fail-fast: false) so a green macOS/Linux build is not blocked by a
-# Windows hiccup.
 
 name: noah release
 
@@ -31,12 +27,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # A release build, so the app is branded "noah" (not "noah Dev").
-  ZED_RELEASE_CHANNEL: stable
-
-concurrency:
-  group: noah-release-${{ github.ref }}
-  cancel-in-progress: false
+  TAG: ${{ inputs.tag || github.ref_name }}
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   macos:
@@ -61,19 +53,13 @@ jobs:
           node-version: "20"
       - name: Bundle (unsigned)
         run: script/bundle-mac ${{ matrix.arch }}-apple-darwin
-      - name: Collect artifact
+      - name: Collect + publish
         run: |
           mkdir -p dist
           cp target/${{ matrix.arch }}-apple-darwin/release/Zed-*.dmg \
              "dist/noah-macos-${{ matrix.arch }}.dmg"
-      - name: Publish to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: ${{ inputs.tag || github.ref_name }}
-          files: dist/*.dmg
-          fail_on_unmatched_files: true
-          generate_release_notes: true
+          gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
+          gh release upload "$TAG" dist/noah-macos-${{ matrix.arch }}.dmg --clobber
 
   linux:
     name: Linux (x86_64)
@@ -89,23 +75,14 @@ jobs:
           node-version: "20"
       - name: Bundle
         run: script/bundle-linux
-      - name: Collect artifact
+      - name: Collect + publish
         run: |
           mkdir -p dist
-          cp target/release/zed-linux-*.tar.gz dist/ || true
-          cp target/zed-remote-server-linux-*.gz dist/ || true
-          # Give the main archive a noah-branded name too.
-          for f in dist/zed-linux-*.tar.gz; do
-            [ -e "$f" ] && cp "$f" "dist/noah-linux-x86_64.tar.gz"
+          for f in target/release/zed-linux-*.tar.gz; do
+            [ -e "$f" ] && cp "$f" dist/noah-linux-x86_64.tar.gz
           done
-      - name: Publish to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: ${{ inputs.tag || github.ref_name }}
-          files: dist/*
-          fail_on_unmatched_files: true
-          generate_release_notes: true
+          gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
+          gh release upload "$TAG" dist/noah-linux-x86_64.tar.gz --clobber
 
   windows:
     name: Windows (x86_64)
@@ -120,31 +97,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install Inno Setup (installer builder)
-        run: choco install innosetup --no-progress -y
       - name: Bundle installer
         shell: pwsh
         env:
           ZED_WORKSPACE: ${{ github.workspace }}
         run: ./script/bundle-windows.ps1 -Architecture x86_64
-      - name: Collect artifact
+      - name: Collect + publish
         shell: bash
         run: |
           mkdir -p dist
-          # bundle-windows.ps1 writes the Inno installer to target/Zed-x86_64.exe
           if [ -f target/Zed-x86_64.exe ]; then
             cp target/Zed-x86_64.exe dist/noah-windows-x86_64.exe
           else
-            # fallback: grab the largest .exe that looks like a setup
             f=$(find target -maxdepth 3 -iname "Zed-*.exe" | head -1)
             [ -n "$f" ] && cp "$f" dist/noah-windows-x86_64.exe
           fi
-          ls -la dist || true
-      - name: Publish to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: ${{ inputs.tag || github.ref_name }}
-          files: dist/*
-          fail_on_unmatched_files: false
-          generate_release_notes: true
+          gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
+          gh release upload "$TAG" dist/noah-windows-x86_64.exe --clobber
