@@ -69,8 +69,8 @@ jobs:
       - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || inputs.tag }}
-          name: ${{ github.ref_name || inputs.tag }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
           files: dist/*.dmg
           fail_on_unmatched_files: true
           generate_release_notes: true
@@ -101,8 +101,8 @@ jobs:
       - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || inputs.tag }}
-          name: ${{ github.ref_name || inputs.tag }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
           files: dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
@@ -137,8 +137,8 @@ jobs:
       - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || inputs.tag }}
-          name: ${{ github.ref_name || inputs.tag }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
           files: dist/*
           fail_on_unmatched_files: false
           generate_release_notes: true
