@@ -1691,14 +1691,24 @@ const BUFFER_COUNT: usize = 3;
 pub(crate) mod shader_resources {
     use anyhow::Result;
 
-    #[cfg(debug_assertions)]
+    // Shaders are either precompiled by fxc.exe in build.rs (native Windows
+    // release builds), or compiled at runtime by d3dcompiler_47.dll. The runtime
+    // path is used in debug builds (from the source tree) and when
+    // cross-compiling from a non-Windows host (`gpui_runtime_shaders`, from
+    // source embedded in the binary, since fxc.exe only runs on Windows).
+    #[cfg(any(debug_assertions, gpui_runtime_shaders))]
+    use windows::{Win32::Graphics::Direct3D::ID3DBlob, core::PCSTR};
+
+    #[cfg(all(debug_assertions, not(gpui_runtime_shaders)))]
     use windows::{
-        Win32::Graphics::Direct3D::{
-            Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION, D3DCompileFromFile},
-            ID3DBlob,
+        Win32::Graphics::Direct3D::Fxc::{
+            D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION, D3DCompileFromFile,
         },
-        core::{HSTRING, PCSTR},
+        core::HSTRING,
     };
+
+    #[cfg(gpui_runtime_shaders)]
+    use windows::Win32::Graphics::Direct3D::Fxc::{D3DCOMPILE_OPTIMIZATION_LEVEL3, D3DCompile};
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub(crate) enum ShaderModule {
@@ -1722,17 +1732,17 @@ pub(crate) mod shader_resources {
     pub(crate) struct RawShaderBytes<'t> {
         inner: &'t [u8],
 
-        #[cfg(debug_assertions)]
+        #[cfg(any(debug_assertions, gpui_runtime_shaders))]
         _blob: ID3DBlob,
     }
 
     impl<'t> RawShaderBytes<'t> {
         pub(crate) fn new(module: ShaderModule, target: ShaderTarget) -> Result<Self> {
-            #[cfg(not(debug_assertions))]
+            #[cfg(not(any(debug_assertions, gpui_runtime_shaders)))]
             {
                 Ok(Self::from_bytes(module, target))
             }
-            #[cfg(debug_assertions)]
+            #[cfg(any(debug_assertions, gpui_runtime_shaders))]
             {
                 let blob = build_shader_blob(module, target)?;
                 let inner = unsafe {
@@ -1749,7 +1759,7 @@ pub(crate) mod shader_resources {
             self.inner
         }
 
-        #[cfg(not(debug_assertions))]
+        #[cfg(not(any(debug_assertions, gpui_runtime_shaders)))]
         fn from_bytes(module: ShaderModule, target: ShaderTarget) -> Self {
             let bytes = match module {
                 ShaderModule::Quad => match target {
@@ -1793,14 +1803,15 @@ pub(crate) mod shader_resources {
         }
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, gpui_runtime_shaders))]
     pub(super) fn build_shader_blob(entry: ShaderModule, target: ShaderTarget) -> Result<ID3DBlob> {
         unsafe {
             use windows::Win32::Graphics::{
                 Direct3D::ID3DInclude, Hlsl::D3D_COMPILE_STANDARD_FILE_INCLUDE,
             };
 
-            let shader_name = if matches!(entry, ShaderModule::EmojiRasterization) {
+            let is_emoji = matches!(entry, ShaderModule::EmojiRasterization);
+            let shader_name = if is_emoji {
                 "color_text_raster.hlsl"
             } else {
                 "shaders.hlsl"
@@ -1821,9 +1832,6 @@ pub(crate) mod shader_resources {
 
             let mut compile_blob = None;
             let mut error_blob = None;
-            let shader_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join(&format!("src/{}", shader_name))
-                .canonicalize()?;
 
             let entry_point = PCSTR::from_raw(entry.as_ptr());
             let target_cstr = PCSTR::from_raw(target.as_ptr());
@@ -1833,17 +1841,52 @@ pub(crate) mod shader_resources {
                 D3D_COMPILE_STANDARD_FILE_INCLUDE as usize,
             );
 
-            let ret = D3DCompileFromFile(
-                &HSTRING::from(shader_path.to_str().unwrap()),
-                None,
-                include_handler,
-                entry_point,
-                target_cstr,
-                D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-                0,
-                &mut compile_blob,
-                Some(&mut error_blob),
-            );
+            #[cfg(not(gpui_runtime_shaders))]
+            let ret = {
+                let shader_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join(&format!("src/{}", shader_name))
+                    .canonicalize()?;
+                D3DCompileFromFile(
+                    &HSTRING::from(shader_path.to_str().unwrap()),
+                    None,
+                    include_handler,
+                    entry_point,
+                    target_cstr,
+                    D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+                    0,
+                    &mut compile_blob,
+                    Some(&mut error_blob),
+                )
+            };
+
+            // The source tree is not available on the user's machine, so the
+            // shader source is embedded and its single include is inlined.
+            #[cfg(gpui_runtime_shaders)]
+            let ret = {
+                let body = if is_emoji {
+                    include_str!("color_text_raster.hlsl")
+                } else {
+                    include_str!("shaders.hlsl")
+                };
+                let source = body.replace(
+                    "#include \"alpha_correction.hlsl\"",
+                    include_str!("alpha_correction.hlsl"),
+                );
+                let source_name = format!("{shader_name}\0");
+                D3DCompile(
+                    source.as_ptr().cast(),
+                    source.len(),
+                    PCSTR::from_raw(source_name.as_ptr()),
+                    None,
+                    include_handler,
+                    entry_point,
+                    target_cstr,
+                    D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                    0,
+                    &mut compile_blob,
+                    Some(&mut error_blob),
+                )
+            };
             if ret.is_err() {
                 let Some(error_blob) = error_blob else {
                     return Err(anyhow::anyhow!("{ret:?}"));
@@ -1859,10 +1902,10 @@ pub(crate) mod shader_resources {
         }
     }
 
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(any(debug_assertions, gpui_runtime_shaders)))]
     include!(concat!(env!("OUT_DIR"), "/shaders_bytes.rs"));
 
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, gpui_runtime_shaders))]
     impl ShaderModule {
         pub fn as_str(self) -> &'static str {
             match self {

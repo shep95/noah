@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Build the noah Windows installer from a Linux machine (no Windows or CI needed).
+#
+# Produces dist/noah-windows-x86_64.exe: a per-user, one-click installer.
+#
+# Requirements (Ubuntu/Debian): mingw-w64 nsis, plus Rust (rustup).
+#   sudo apt-get install -y mingw-w64 nsis
+#
+# Usage: script/build-windows-cross [VERSION]
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+VERSION="${1:-$(script/get-crate-version zed)}"
+TARGET=x86_64-pc-windows-gnu
+
+command -v x86_64-w64-mingw32-gcc >/dev/null || { echo "missing mingw-w64" >&2; exit 1; }
+command -v makensis >/dev/null || { echo "missing nsis (makensis)" >&2; exit 1; }
+
+# Rust's windows-gnu target expects the posix threading model.
+if command -v update-alternatives >/dev/null && [ -e /usr/bin/x86_64-w64-mingw32-gcc-posix ]; then
+    update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix >/dev/null 2>&1 || true
+    update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix >/dev/null 2>&1 || true
+fi
+
+rustup target add "$TARGET"
+
+# Stable channel so the app is branded "noah". 8 MiB main-thread stack matches the
+# native MSVC build (see crates/zed/build.rs). LTO off keeps cross builds tractable.
+export ZED_RELEASE_CHANNEL=stable
+export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--stack,8388608"
+export CARGO_PROFILE_RELEASE_LTO=false
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+export CARGO_PROFILE_RELEASE_DEBUG=false
+
+cargo build --release -p zed --target "$TARGET"
+
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+cp "target/$TARGET/release/zed.exe" "$stage/noah.exe"
+x86_64-w64-mingw32-strip "$stage/noah.exe" || true
+
+# Ship any MinGW runtime DLLs the executable links against.
+sysroot_bin="$(dirname "$(x86_64-w64-mingw32-gcc -print-libgcc-file-name)")"
+for dll in $(x86_64-w64-mingw32-objdump -p "$stage/noah.exe" | awk '/DLL Name/ {print $3}'); do
+    for dir in "$sysroot_bin" /usr/x86_64-w64-mingw32/lib /usr/lib/gcc/x86_64-w64-mingw32/*-posix; do
+        if [ -f "$dir/$dll" ]; then cp "$dir/$dll" "$stage/"; break; fi
+    done
+done
+
+mkdir -p dist
+out="$PWD/dist/noah-windows-x86_64.exe"
+(cd script/installer && makensis -V2 -DVERSION="$VERSION" -DSTAGE="$stage" -DOUTFILE="$out" noah.nsi)
+echo "built $out"

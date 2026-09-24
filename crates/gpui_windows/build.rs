@@ -1,6 +1,16 @@
 #![allow(clippy::disallowed_methods, reason = "build scripts are exempt")]
 
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(gpui_runtime_shaders)");
+
+    // Build scripts run on the host. fxc.exe only exists on Windows, so when
+    // cross-compiling for Windows from another OS the shaders are embedded as
+    // source and compiled at runtime by d3dcompiler_47.dll instead.
+    #[cfg(not(target_os = "windows"))]
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rustc-cfg=gpui_runtime_shaders");
+    }
+
     #[cfg(target_os = "windows")]
     {
         // Compile HLSL shaders
