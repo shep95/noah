@@ -20,7 +20,7 @@ use std::{convert::TryFrom, io, time::Duration};
 use thiserror::Error;
 
 pub const OPEN_ROUTER_API_URL: &str = "https://openrouter.ai/api/v1";
-const OPEN_ROUTER_APP_TITLE: &str = "Zed";
+const OPEN_ROUTER_APP_TITLE: &str = "noah";
 
 fn extract_retry_after(headers: &http::HeaderMap) -> Option<std::time::Duration> {
     if let Some(reset) = headers.get("X-RateLimit-Reset") {

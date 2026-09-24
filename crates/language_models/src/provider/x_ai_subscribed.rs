@@ -13,7 +13,7 @@ use ui::{ConfiguredApiCard, prelude::*};
 use x_ai_subscribed::{PROVIDER_ID, PROVIDER_NAME, State, SuperGrokModel, create_language_model};
 
 const SUBSCRIPTION_DESCRIPTION: &str =
-    "Sign in with your SuperGrok subscription to use Grok models in Zed's agent.";
+    "Sign in with your SuperGrok subscription to use Grok models with shepherd.";
 
 pub struct XAiSubscribedProvider {
     state: Entity<State>,

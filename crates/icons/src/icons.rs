@@ -198,6 +198,7 @@ pub enum IconName {
     Mic,
     MicMute,
     Minimize,
+    NoahMark,
     Notepad,
     OnCall,
     Option,

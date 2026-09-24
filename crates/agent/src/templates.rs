@@ -20,6 +20,7 @@ impl Templates {
         let mut handlebars = Handlebars::new();
         handlebars.set_strict_mode(true);
         handlebars.register_helper("contains", Box::new(contains));
+        handlebars.register_helper("brain", Box::new(brain));
         handlebars.register_embed_templates::<Assets>().unwrap();
         Arc::new(Self(handlebars))
     }
@@ -67,6 +68,23 @@ impl Template for SystemPromptTemplate<'_> {
     const TEMPLATE_NAME: &'static str = "system_prompt.hbs";
 }
 
+/// shepherd's brain: the agent's entire identity and behavior. It is the only
+/// source of behavioral rules, so replacing this one file replaces the agent.
+const BRAIN: &str = include_str!("../../../assets/shepherd/shepherd_brain.txt");
+
+// A helper rather than a partial: partials are parsed as templates, so any
+// `{{` in the brain text would be interpreted instead of sent verbatim.
+fn brain(
+    _: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    out.write(BRAIN.trim_end())?;
+    Ok(())
+}
+
 /// Handlebars helper for checking if an item is in a list
 fn contains(
     h: &handlebars::Helper,
@@ -111,9 +129,9 @@ mod tests {
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
-        assert!(rendered.contains("You are the Zed coding agent"));
+        assert!(rendered.contains("you are a pattern-reading assistant"));
         assert!(rendered.contains("Today's Date: 2026-01-01"));
-        assert!(rendered.contains("## Fixing Diagnostics"));
+        assert!(rendered.contains("you are running inside noah"));
         assert!(rendered.contains("test-model"));
     }
 

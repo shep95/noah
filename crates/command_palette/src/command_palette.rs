@@ -865,6 +865,16 @@ impl PickerDelegate for CommandPaletteDelegate {
 }
 
 pub fn humanize_action_name(name: &str) -> String {
+    // Actions keep the `zed::` namespace so keymaps and settings written for Zed
+    // still resolve; only the name people read carries noah's.
+    let renamed;
+    let name = match name.strip_prefix("zed::") {
+        Some(rest) => {
+            renamed = format!("noah::{rest}");
+            renamed.as_str()
+        }
+        None => name,
+    };
     let chars = name.chars().collect::<Vec<_>>();
     let capacity = name.len() + chars.iter().filter(|c| c.is_uppercase()).count();
     let mut result = String::with_capacity(capacity);
@@ -954,6 +964,7 @@ mod tests {
 
     #[test]
     fn test_humanize_action_name() {
+        assert_eq!(humanize_action_name("zed::OpenSettings"), "noah: open settings");
         assert_eq!(
             humanize_action_name("editor::GoToDefinition"),
             "editor: go to definition"

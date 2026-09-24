@@ -28,6 +28,8 @@ rustup target add "$TARGET"
 # Stable channel so the app is branded "noah". 8 MiB main-thread stack matches the
 # native MSVC build (see crates/zed/build.rs). LTO off keeps cross builds tractable.
 export ZED_RELEASE_CHANNEL=stable
+# Read by the Windows resource script for the exe icon and product name.
+export RELEASE_CHANNEL=stable
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--stack,8388608"
 export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16

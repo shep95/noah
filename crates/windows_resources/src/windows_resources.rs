@@ -2,7 +2,6 @@
     clippy::disallowed_methods,
     reason = "build helper used only from build scripts"
 )]
-#![cfg(target_os = "windows")]
 
 use std::process::Command;
 
@@ -41,13 +40,13 @@ fn product_version() -> String {
 const ICON_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../zed/resources/windows");
 const MANIFEST_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/manifest.xml");
 
-pub fn compile(manifest: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn write_rc(manifest: bool) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let channel = option_env!("RELEASE_CHANNEL").unwrap_or("dev");
     let (icon_filename, product_name) = match channel {
-        "stable" => ("app-icon.ico", "Zed"),
-        "preview" => ("app-icon-preview.ico", "Zed Preview"),
-        "nightly" => ("app-icon-nightly.ico", "Zed Nightly"),
-        _ => ("app-icon-dev.ico", "Zed Dev"),
+        "stable" => ("app-icon.ico", "noah"),
+        "preview" => ("app-icon-preview.ico", "noah Preview"),
+        "nightly" => ("app-icon-nightly.ico", "noah Nightly"),
+        _ => ("app-icon-dev.ico", "noah Dev"),
     };
     let icon = std::path::PathBuf::from(ICON_DIR).join(icon_filename);
     let icon_escaped = icon.to_string_lossy().replace('\\', "\\\\");
@@ -74,7 +73,7 @@ pub fn compile(manifest: bool) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let rc_content = format!(
-        r#"1 ICON "{icon_escaped}"
+        r##"1 ICON "{icon_escaped}"
 {manifest_line}
 
 1 VERSIONINFO
@@ -94,8 +93,8 @@ BEGIN
             VALUE "FileVersion", "{pkg_version}\0"
             VALUE "ProductName", "{product_name}\0"
             VALUE "ProductVersion", "{product_version}\0"
-            VALUE "CompanyName", "Zed Industries, Inc.\0"
-            VALUE "LegalCopyright", "Copyright 2022 - 2025 Zed Industries, Inc.\0"
+            VALUE "CompanyName", "#houseofasher\0"
+            VALUE "LegalCopyright", "noah is built on Zed, Copyright 2022 - 2025 Zed Industries, Inc. GPL-3.0-or-later.\0"
         END
     END
     BLOCK "VarFileInfo"
@@ -103,12 +102,18 @@ BEGIN
         VALUE "Translation", 0x0409, 1200
     END
 END
-"#
+"##
     );
 
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR")?);
     let rc_path = out_dir.join("zed_resources.rc");
     std::fs::write(&rc_path, rc_content)?;
+    Ok(rc_path)
+}
+
+#[cfg(target_os = "windows")]
+pub fn compile(manifest: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let rc_path = write_rc(manifest)?;
 
     if let Ok(toolkit_path) = std::env::var("ZED_RC_TOOLKIT_PATH") {
         let rc_exe = std::path::Path::new(&toolkit_path).join("rc.exe");
@@ -121,5 +126,26 @@ END
         .manifest_optional()
         .unwrap();
 
+    Ok(())
+}
+
+/// Embeds the icon and version info when cross-compiling for Windows from
+/// another OS, where `embed-resource` is unavailable, by compiling the same
+/// resource script with MinGW's `windres` and linking the object into the
+/// binaries.
+#[cfg(not(target_os = "windows"))]
+pub fn compile_with_windres(windres: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let rc_path = write_rc(false)?;
+    let object_path = rc_path.with_extension("o");
+    let status = Command::new(windres)
+        .arg("--input")
+        .arg(&rc_path)
+        .args(["--input-format", "rc", "--output-format", "coff", "--output"])
+        .arg(&object_path)
+        .status()?;
+    if !status.success() {
+        return Err(format!("{windres} failed with {status}").into());
+    }
+    println!("cargo:rustc-link-arg-bins={}", object_path.display());
     Ok(())
 }

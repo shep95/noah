@@ -570,7 +570,7 @@ async fn test_system_prompt(cx: &mut TestAppContext) {
         system_message
     );
     assert!(
-        system_prompt.contains("## Fixing Diagnostics"),
+        system_prompt.contains("## tools"),
         "unexpected system message: {:?}",
         system_message
     );
@@ -603,12 +603,12 @@ async fn test_system_prompt_without_tools(cx: &mut TestAppContext) {
         panic!("Expected text content");
     };
     assert!(
-        !system_prompt.contains("## Tool Use"),
+        !system_prompt.contains("## tools"),
         "unexpected system message: {:?}",
         system_message
     );
     assert!(
-        !system_prompt.contains("## Fixing Diagnostics"),
+        system_prompt.contains("no tools are available"),
         "unexpected system message: {:?}",
         system_message
     );

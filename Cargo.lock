@@ -20839,6 +20839,7 @@ dependencies = [
  "http_client",
  "language_model",
  "serde_json",
+ "url",
  "web_search",
 ]
 

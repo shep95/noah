@@ -3,9 +3,9 @@
 //! The image is decoded elsewhere (the app uses the `image` crate); this module
 //! stays dependency-free so it is cheap to compile and unit-test. It takes raw
 //! RGBA8 pixels, samples them into dark / mid / light buckets, and emits a
-//! partial theme-family JSON string. Only chrome colors are set; every other
-//! theme key falls back to defaults during theme refinement, so a short JSON is
-//! a valid theme.
+//! partial theme-family JSON string. Chrome and syntax colors are set; every
+//! other theme key falls back to defaults during theme refinement, so a short
+//! JSON is a valid theme.
 
 /// A sampled color, 0-255 per channel.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,6 +33,15 @@ pub struct WallpaperPalette {
 
 fn luminance(c: Rgb) -> f32 {
     0.2126 * c.r as f32 + 0.7152 * c.g as f32 + 0.0722 * c.b as f32
+}
+
+fn mix(from: Rgb, to: Rgb, amount: f32) -> Rgb {
+    let channel = |a: u8, b: u8| to_u8(a as f32 + (b as f32 - a as f32) * amount);
+    Rgb {
+        r: channel(from.r, to.r),
+        g: channel(from.g, to.g),
+        b: channel(from.b, to.b),
+    }
 }
 
 fn clampf(v: f32, lo: f32, hi: f32) -> f32 {
@@ -176,8 +185,23 @@ pub fn adaptive_theme_json(name: &str, palette: &WallpaperPalette) -> String {
         b: to_u8((bg_elevated.b as f32 + accent.b as f32) * 0.5),
     };
 
+    // Syntax stays inside the wallpaper's own colors. The one fixed warm note
+    // keeps literals distinguishable when an image has almost no hue range.
+    let warm = Rgb {
+        r: 200,
+        g: 176,
+        b: 112,
+    };
+    let keyword = mix(text, accent, 0.45);
+    let string = mix(accent, text, 0.35);
+    let literal = mix(text, warm, 0.5);
+    let type_name = mix(text, accent, 0.25);
+    let property = mix(text, palette.mid, 0.25);
+    let variable = mix(text, text_muted, 0.3);
+    let comment = mix(bg_elevated, text_muted, 0.6);
+
     // Semi-transparent so the wallpaper shows through the editor/panels.
-    let translucent = 0xE0u8;
+    let translucent = 0xC0u8;
     let opaque = 0xFFu8;
 
     format!(
@@ -217,7 +241,37 @@ pub fn adaptive_theme_json(name: &str, palette: &WallpaperPalette) -> String {
         "border.selected": "{accent_o}",
         "element.hover": "{bg_elevated_o}",
         "element.selected": "{bg_elevated_o}",
-        "link_text.hover": "{accent_o}"
+        "link_text.hover": "{accent_o}",
+        "players": [
+          {{ "cursor": "{text_o}", "background": "{text_o}", "selection": "{selection}" }}
+        ],
+        "syntax": {{
+          "keyword": {{ "color": "{keyword}" }},
+          "preproc": {{ "color": "{keyword}" }},
+          "function": {{ "color": "{text_o}" }},
+          "constructor": {{ "color": "{text_o}" }},
+          "variant": {{ "color": "{text_o}" }},
+          "type": {{ "color": "{type_name}" }},
+          "enum": {{ "color": "{type_name}" }},
+          "tag": {{ "color": "{type_name}" }},
+          "attribute": {{ "color": "{type_name}" }},
+          "string": {{ "color": "{string}" }},
+          "text.literal": {{ "color": "{string}" }},
+          "number": {{ "color": "{literal}" }},
+          "boolean": {{ "color": "{literal}" }},
+          "constant": {{ "color": "{literal}" }},
+          "string.escape": {{ "color": "{literal}" }},
+          "string.special": {{ "color": "{literal}" }},
+          "property": {{ "color": "{property}" }},
+          "variable.parameter": {{ "color": "{property}" }},
+          "variable": {{ "color": "{variable}" }},
+          "punctuation": {{ "color": "{text_muted_o}" }},
+          "operator": {{ "color": "{text_muted_o}" }},
+          "comment": {{ "color": "{comment}", "font_style": "italic" }},
+          "comment.doc": {{ "color": "{comment}", "font_style": "italic" }},
+          "link_text": {{ "color": "{accent_o}", "font_style": "italic" }},
+          "title": {{ "color": "{text_o}", "font_weight": 600 }}
+        }}
       }}
     }}
   ]
@@ -231,6 +285,14 @@ pub fn adaptive_theme_json(name: &str, palette: &WallpaperPalette) -> String {
         text_muted_o = hex_rgba(text_muted, opaque),
         accent_o = hex_rgba(accent, opaque),
         border_o = hex_rgba(border, opaque),
+        selection = hex_rgba(text, 0x24),
+        keyword = hex_rgba(keyword, opaque),
+        string = hex_rgba(string, opaque),
+        literal = hex_rgba(literal, opaque),
+        type_name = hex_rgba(type_name, opaque),
+        property = hex_rgba(property, opaque),
+        variable = hex_rgba(variable, opaque),
+        comment = hex_rgba(comment, opaque),
     )
 }
 
@@ -272,6 +334,11 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
         assert_eq!(parsed["name"], "noah (adaptive)");
         assert_eq!(parsed["themes"][0]["appearance"], "dark");
+        assert!(
+            parsed["themes"][0]["style"]["syntax"]["keyword"]["color"]
+                .as_str()
+                .is_some_and(|color| color.starts_with('#'))
+        );
         assert!(
             parsed["themes"][0]["style"]["editor.background"]
                 .as_str()

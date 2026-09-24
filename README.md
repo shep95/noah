@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> Remove this line to confirm you've reviewed this PR before submitting.
+
 # noah
 
 **noah** is a fast, native code editor with a built-in AI pair-programmer called **shepherd**.

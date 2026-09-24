@@ -214,6 +214,15 @@ fn main() {
         }
     }
 
+    #[cfg(not(windows))]
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-env-changed=RELEASE_CHANNEL");
+        let windres = std::env::var("WINDRES")
+            .unwrap_or_else(|_| "x86_64-w64-mingw32-windres".to_string());
+        windows_resources::compile_with_windres(&windres)
+            .expect("failed to compile Windows resources with windres");
+    }
+
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     prepare_app_icon_x11();
 }

@@ -87,7 +87,7 @@
     "border_size": 0.0,
     // Opacity of the inactive panes. 0 means transparent, 1 means opaque.
     // Values are clamped to the [0.0, 1.0] range.
-    "inactive_opacity": 1.0,
+    "inactive_opacity": 0.82,
   },
   // Layout mode of the bottom dock. Defaults to "contained"
   //   choices: contained, full, left_aligned, right_aligned
@@ -282,7 +282,7 @@
   // this option is ignored and Zed will always use the built-in prompts.
   "use_system_prompts": true,
   // Whether the cursor blinks in the editor.
-  "cursor_blink": true,
+  "cursor_blink": false,
   // Cursor shape for the default editor.
   //  1. A vertical bar
   //     "bar"
@@ -346,7 +346,7 @@
   //    "line"
   // 4. Highlight the full line (default):
   //    "all"
-  "current_line_highlight": "all",
+  "current_line_highlight": "gutter",
   // Whether to highlight all occurrences of the selected text in an editor.
   "selection_highlight": true,
   // Whether the text selection should have rounded corners.
@@ -588,9 +588,9 @@
     // Whether to show breadcrumbs.
     "breadcrumbs": true,
     // Whether to show quick action buttons.
-    "quick_actions": true,
+    "quick_actions": false,
     // Whether to show the Selections menu in the editor toolbar.
-    "selections_menu": true,
+    "selections_menu": false,
     // Whether to show agent review buttons in the editor toolbar.
     "agent_review": true,
     // Whether to show code action buttons in the editor toolbar.
@@ -617,13 +617,13 @@
     // Whether to show the project host and name in the titlebar.
     "show_project_items": true,
     // Whether to show onboarding banners in the titlebar.
-    "show_onboarding_banner": true,
+    "show_onboarding_banner": false,
     // Whether to show user picture in the titlebar.
-    "show_user_picture": true,
+    "show_user_picture": false,
     // Whether to show the user menu in the titlebar.
     "show_user_menu": true,
-    // Whether to show the sign in button in the titlebar.
-    "show_sign_in": true,
+    // noah has no accounts, so there is nothing to sign in to.
+    "show_sign_in": false,
     // Whether to show the menus in the titlebar.
     "show_menus": false,
     // The layout of window control buttons in the title bar (Linux only).
@@ -748,7 +748,7 @@
     // Whether to show breakpoints in the gutter.
     "breakpoints": true,
     // Whether to show fold buttons in the gutter.
-    "folds": true,
+    "folds": false,
     // Minimum number of characters to reserve space for in the gutter.
     "min_line_number_digits": 4,
     // The width of the git diff hunk indicators in the gutter.
@@ -1060,8 +1060,8 @@
     "multi_buffer_hide_symbols": false,
   },
   "collaboration_panel": {
-    // Whether to show the collaboration panel button in the status bar.
-    "button": true,
+    // Collaboration runs on Zed's servers; noah does not use them.
+    "button": false,
     // Where to dock the collaboration panel. Can be 'left' or 'right'.
     "dock": "right",
     // Default width of the collaboration panel.
@@ -1186,9 +1186,10 @@
     // The default model to use when creating new threads.
     "default_model": {
       // The provider to use.
-      "provider": "zed.dev",
-      // The model to use.
-      "model": "claude-sonnet-4",
+      "provider": "Venice",
+      // The model to use. shepherd's brain is about 45k tokens, so the default
+      // is a model with a 131k context window.
+      "model": "qwen3-235b",
       // Whether thinking is enabled.
       "enable_thinking": false,
     },
@@ -1273,8 +1274,9 @@
       // 0 is not a valid threshold.
       "threshold": "90%",
     },
-    // When enabled, show voting thumbs for feedback on agent edits.
-    "enable_feedback": true,
+    // When enabled, show voting thumbs for feedback on agent edits. Votes send
+    // the conversation to Zed's servers, so noah leaves them off.
+    "enable_feedback": false,
     "default_profile": "write",
     "profiles": {
       "write": {
@@ -1451,7 +1453,7 @@
     // Whether or not to show the tab bar in the editor
     "show": true,
     // Whether or not to show the navigation history buttons.
-    "show_nav_history_buttons": true,
+    "show_nav_history_buttons": false,
     // Whether or not to show the tab bar buttons.
     "show_tab_bar_buttons": true,
     // Whether or not to show pinned tabs in a separate row.
@@ -1673,10 +1675,10 @@
   "word_diff_enabled": true,
   // Control what info is collected by Zed.
   "telemetry": {
-    // Send debug info like crash reports.
-    "diagnostics": true,
-    // Send anonymized usage data like what languages you're using Zed with.
-    "metrics": true,
+    // noah collects nothing. These would send crash reports and usage data
+    // to Zed's servers, so they stay off.
+    "diagnostics": false,
+    "metrics": false,
     // Allow sending requests to Anthropic models that cannot be offered with
     // Zero Data Retention
     "anthropic_retention": false,
@@ -1805,7 +1807,7 @@
     // Control whether the git blame information is shown for the currently
     // focused line, and where it is rendered.
     "inline_blame": {
-      "enabled": true,
+      "enabled": false,
       // Sets a delay after which the inline blame information is shown.
       // Delay is restarted with every cursor movement.
       "delay_ms": 0,
@@ -1882,8 +1884,9 @@
   //      "load_direnv": "disabled"
   "load_direnv": "direct",
   "edit_predictions": {
-    // Which edit prediction provider to use.
-    "provider": "zed",
+    // Which edit prediction provider to use. Zed's hosted predictions need a
+    // Zed account, so noah starts with none.
+    "provider": "none",
     // Disable edit predictions for files matching these glob patterns.
     //
     // Use `"..."` to add patterns without repeating Zed's defaults. In project
@@ -2059,7 +2062,7 @@
     //         "blinking": "terminal_controlled",
     //  3. Always blink the cursor, ignoring the terminal mode
     //         "blinking": "on",
-    "blinking": "terminal_controlled",
+    "blinking": "off",
     // Default cursor shape for the terminal.
     //  1. A block that surrounds the following character
     //     "block"

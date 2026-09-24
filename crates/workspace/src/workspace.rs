@@ -9611,6 +9611,7 @@ impl Render for Workspace {
             .gap_0()
             .justify_start()
             .items_start()
+            .bg(colors.background)
             .text_color(colors.text)
             .overflow_hidden()
             // noah: wallpaper layer, painted first so it sits behind all panes.
@@ -9680,9 +9681,10 @@ impl Render for Workspace {
                     .flex()
                     .flex_col()
                     .child(
+                        // The theme background is painted on the root, under the
+                        // wallpaper; painting it here too would cover the wallpaper.
                         div()
                             .id("workspace")
-                            .bg(colors.background)
                             .relative()
                             .flex_1()
                             .w_full()
@@ -10705,7 +10707,7 @@ pub fn join_channel(
                         let detail: SharedString = match err.error_code() {
                             ErrorCode::SignedOut => "Please sign in to continue.".into(),
                             ErrorCode::UpgradeRequired => concat!(
-                                "Your are running an unsupported version of Zed. ",
+                                "Your are running an unsupported version of noah. ",
                                 "Please update to continue."
                             )
                             .into(),

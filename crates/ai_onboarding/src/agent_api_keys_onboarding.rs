@@ -132,7 +132,7 @@ impl RenderOnce for ApiKeysWithoutProviders {
                     .child(Divider::horizontal()),
             )
             .child(List::new().child(ListBulletItem::new(
-                "Add your own keys to use AI without signing in.",
+                "Venice is set up already. Paste its key, or connect Ollama for local models.",
             )))
             .child(
                 Button::new("configure-providers", "Configure Providers")

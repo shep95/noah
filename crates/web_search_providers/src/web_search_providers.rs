@@ -1,4 +1,5 @@
 mod cloud;
+mod duckduckgo;
 
 use client::{Client, UserStore};
 use gpui::{App, Context, Entity};
@@ -19,6 +20,13 @@ fn register_web_search_providers(
     user_store: Entity<UserStore>,
     cx: &mut Context<WebSearchRegistry>,
 ) {
+    // Registered first so it is the active provider: it works without a Zed
+    // account, which noah does not use.
+    registry.register_provider(
+        duckduckgo::DuckDuckGoWebSearchProvider::new(client.http_client()),
+        cx,
+    );
+
     register_zed_web_search_provider(
         registry,
         client.clone(),
