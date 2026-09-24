@@ -131,8 +131,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          find target -maxdepth 4 -iname "*.exe" -path "*installer*" -exec cp {} dist/ \; || true
-          find target -maxdepth 4 -iname "Zed*Setup*.exe" -exec cp {} dist/ \; || true
+          # bundle-windows.ps1 writes the Inno installer to target/Zed-x86_64.exe
+          if [ -f target/Zed-x86_64.exe ]; then
+            cp target/Zed-x86_64.exe dist/noah-windows-x86_64.exe
+          else
+            # fallback: grab the largest .exe that looks like a setup
+            f=$(find target -maxdepth 3 -iname "Zed-*.exe" | head -1)
+            [ -n "$f" ] && cp "$f" dist/noah-windows-x86_64.exe
+          fi
           ls -la dist || true
       - name: Publish to release
         uses: softprops/action-gh-release@v2
