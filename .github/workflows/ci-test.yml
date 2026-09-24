@@ -1,0 +1,10 @@
+name: ci test
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  hello:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "hello from noah CI"
