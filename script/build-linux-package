@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build noah for Linux: a .deb (double-click install on Debian/Ubuntu/Mint/Pop)
-# and a .tar.gz with an install script for every other distribution.
+# and a .tar.xz with an install script for every other distribution.
 #
 # Requirements (Ubuntu/Debian): the packages from script/linux, plus dpkg-deb.
 #
@@ -119,8 +119,10 @@ EOF
 chmod +x "$app/install.sh"
 
 mkdir -p dist
-tarball="$PWD/dist/noah-linux-$ARCH.tar.gz"
-tar -czf "$tarball" -C "$stage" noah.app
+# xz rather than gzip keeps the archive under the 100 MB per-file limit of the
+# git host the website ships downloads from.
+tarball="$PWD/dist/noah-linux-$ARCH.tar.xz"
+tar -C "$stage" -cf - noah.app | xz -T0 -9 > "$tarball"
 echo "built $tarball"
 
 # The .deb installs system-wide under /opt/noah with a /usr/bin/noah command.
