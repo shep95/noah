@@ -75,6 +75,12 @@ const TOOLS: &[ToolInfo] = &[
         regex_explanation: "Patterns are matched against the browser command and its arguments, for example `open https://example.com` or `click @e3`.",
     },
     ToolInfo {
+        id: "model_file",
+        name: "Model File",
+        description: "Editing AI model files' metadata and importing them into Ollama or LM Studio",
+        regex_explanation: "Patterns are matched against a description of the action, for example `import /models/qwen.gguf into Ollama as qwen`.",
+    },
+    ToolInfo {
         id: "search_web",
         name: "Web Search",
         description: "Web search queries",

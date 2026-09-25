@@ -36,8 +36,9 @@ use gpui::Stateful;
 use gpui::TaskExt;
 use heapless::Vec as ArrayVec;
 use language_model::{
-    FastModeConfirmation, LanguageModel, LanguageModelEffortLevel, LanguageModelId,
-    LanguageModelProvider, LanguageModelProviderId, LanguageModelRegistry, Speed,
+    CompletionIntent, ConfiguredModel, FastModeConfirmation, LanguageModel,
+    LanguageModelEffortLevel, LanguageModelId, LanguageModelProvider, LanguageModelProviderId,
+    LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage, Role, Speed,
 };
 use notifications::status_toast::StatusToast;
 use settings::{update_settings_file, update_settings_file_with_completion};
@@ -585,6 +586,8 @@ pub struct ThreadView {
     pub permission_dropdown_handle: PopoverMenuHandle<ContextMenu>,
     pub thread_retry_status: Option<RetryStatus>,
     pub(super) thread_error: Option<ThreadError>,
+    /// shepherd rewriting the draft into a clearer prompt, while it runs.
+    sharpening: Option<Task<()>>,
     pub thread_error_markdown: Option<Entity<Markdown>>,
     pub token_limit_callout_dismissed: bool,
     pub last_token_limit_telemetry: Option<acp_thread::TokenUsageRatio>,
@@ -1005,6 +1008,7 @@ impl ThreadView {
             permission_dropdown_handle: PopoverMenuHandle::default(),
             thread_retry_status: None,
             thread_error: None,
+            sharpening: None,
             thread_error_markdown: None,
             token_limit_callout_dismissed: false,
             last_token_limit_telemetry: None,
@@ -4471,6 +4475,7 @@ impl ThreadView {
                                             .children(self.mode_selector.clone())
                                             .children(self.model_selector.clone()),
                                     })
+                                    .child(self.render_sharpen_button(cx))
                                     .child(self.render_send_button(cx)),
                             ),
                     ),
@@ -5419,6 +5424,86 @@ impl ThreadView {
                 y: px(-2.0),
             })
             .anchor(gpui::Anchor::BottomLeft)
+    }
+
+    fn render_sharpen_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_editor_empty = self.message_editor.read(cx).is_empty(cx);
+        let sharpening = self.sharpening.is_some();
+        IconButton::new("sharpen-prompt", IconName::Sparkle)
+            .icon_size(IconSize::Small)
+            .icon_color(Color::Muted)
+            .disabled(is_editor_empty || sharpening)
+            .tooltip(Tooltip::text(if sharpening {
+                "sharpening your prompt…"
+            } else {
+                "sharpen: shepherd rewrites your draft into a clearer prompt for you to review (undo restores yours)"
+            }))
+            .on_click(cx.listener(|this, _, window, cx| this.sharpen_prompt(window, cx)))
+    }
+
+    /// Rewrites the draft into a clearer prompt with the default model and puts
+    /// it back in the message box, unsent, so the person decides.
+    fn sharpen_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let draft = self.message_editor.read(cx).text(cx);
+        if draft.trim().is_empty() || self.sharpening.is_some() {
+            return;
+        }
+        let Some(ConfiguredModel { model, .. }) =
+            LanguageModelRegistry::read_global(cx).default_model()
+        else {
+            self.handle_thread_error(
+                anyhow::anyhow!("choose a model before sharpening a prompt"),
+                cx,
+            );
+            return;
+        };
+        let request = LanguageModelRequest {
+            intent: Some(CompletionIntent::UserPrompt),
+            messages: vec![
+                LanguageModelRequestMessage {
+                    role: Role::System,
+                    content: vec![SHARPEN_PROMPT_INSTRUCTIONS.into()],
+                    cache: false,
+                    reasoning_details: None,
+                },
+                LanguageModelRequestMessage {
+                    role: Role::User,
+                    content: vec![draft.into()],
+                    cache: false,
+                    reasoning_details: None,
+                },
+            ],
+            thinking_allowed: false,
+            ..Default::default()
+        };
+        let message_editor = self.message_editor.clone();
+        self.sharpening = Some(cx.spawn_in(window, async move |this, cx| {
+            let sharpened = async {
+                let response = model.stream_completion_text(request, cx).await?;
+                let mut text = String::new();
+                let mut chunks = response.stream;
+                while let Some(chunk) = futures::StreamExt::next(&mut chunks).await {
+                    text.push_str(&chunk?);
+                }
+                anyhow::Ok(text)
+            }
+            .await;
+            this.update_in(cx, |this, window, cx| {
+                this.sharpening = None;
+                match sharpened {
+                    Ok(text) if !text.trim().is_empty() => {
+                        message_editor.update(cx, |editor, cx| {
+                            editor.set_text(text.trim(), window, cx);
+                        });
+                    }
+                    Ok(_) => {}
+                    Err(error) => this.handle_thread_error(error, cx),
+                }
+                cx.notify();
+            })
+            .ok();
+        }));
+        cx.notify();
     }
 
     fn render_send_button(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -13082,3 +13167,5 @@ pub(crate) fn reset_fast_mode_warnings(cx: &mut App) {
     })
     .detach();
 }
+
+const SHARPEN_PROMPT_INSTRUCTIONS: &str = "You rewrite a person's draft message to shepherd, the coding agent in the noah editor, into a clearer prompt. Keep their intent, their voice and every concrete detail exactly: file names, @ mentions, links, code, numbers. Add what shepherd would otherwise have to ask about, only as far as the draft supports it: the goal, the part of the project involved, constraints, and what finished looks like. Never invent facts, requirements or file names; where something essential is missing, leave a short bracketed placeholder such as [which file?] for the person to fill in. Write it as the person speaking to shepherd. Reply with the rewritten prompt only, with no preamble and no quotation marks.";

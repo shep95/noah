@@ -136,6 +136,7 @@ members = [
     "crates/lsp_command_selector",
     "crates/lsp_locations",
     "crates/markdown",
+    "crates/model_files",
     "crates/markdown_preview",
     "crates/menu",
     "crates/mermaid_render",
@@ -407,6 +408,7 @@ lsp_locations = { path = "crates/lsp_locations" }
 markdown = { path = "crates/markdown" }
 markdown_preview = { path = "crates/markdown_preview" }
 menu = { path = "crates/menu" }
+model_files = { path = "crates/model_files" }
 mermaid_render = { path = "crates/mermaid_render" }
 migrator = { path = "crates/migrator" }
 miniprofiler_ui = { path = "crates/miniprofiler_ui" }

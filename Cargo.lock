@@ -285,6 +285,7 @@ dependencies = [
  "language_models",
  "log",
  "lsp",
+ "model_files",
  "parking_lot",
  "paths",
  "pretty_assertions",
@@ -1417,10 +1418,10 @@ dependencies = [
  "serde",
  "serde_json",
  "settings",
+ "sha2",
  "smol",
  "tempfile",
  "util",
- "which",
  "workspace",
  "zlog",
 ]
@@ -11230,6 +11231,15 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.28.0",
+]
+
+[[package]]
+name = "model_files"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

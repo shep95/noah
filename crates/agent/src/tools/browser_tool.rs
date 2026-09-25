@@ -5,7 +5,9 @@ use agent_client_protocol::schema::v1 as acp;
 use anyhow::{Context as _, Result};
 use futures::FutureExt as _;
 use gpui::{App, AppContext as _, Task};
-use language_model::{LanguageModelImage, LanguageModelImageExt as _, LanguageModelToolResultContent};
+use language_model::{
+    LanguageModelImage, LanguageModelImageExt as _, LanguageModelToolResultContent,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ui::SharedString;
@@ -169,7 +171,10 @@ fn command_arguments(input: &BrowserToolInput) -> Result<Vec<String>, String> {
         );
     }
 
-    let mut arguments = vec!["--content-boundaries".to_string(), input.action.command().into()];
+    let mut arguments = vec![
+        "--content-boundaries".to_string(),
+        input.action.command().into(),
+    ];
     match input.action {
         // The screenshot always goes to a path noah chooses, so a page can't
         // be used to overwrite a file.
@@ -287,7 +292,9 @@ impl AgentTool for BrowserTool {
             }
 
             let Some(browser) = cx.update(|cx| AgentBrowser::global(cx)) else {
-                return Err("the browser isn't available in this build of noah".to_string().into());
+                return Err("the browser isn't available in this build of noah"
+                    .to_string()
+                    .into());
             };
             let command = browser.update(cx, |browser, cx| browser.run(arguments, cx));
             let output = futures::select! {
@@ -341,7 +348,10 @@ mod tests {
     fn input(action: BrowserAction, arguments: &[&str]) -> BrowserToolInput {
         BrowserToolInput {
             action,
-            arguments: arguments.iter().map(|argument| argument.to_string()).collect(),
+            arguments: arguments
+                .iter()
+                .map(|argument| argument.to_string())
+                .collect(),
         }
     }
 
@@ -362,7 +372,13 @@ mod tests {
 
     #[test]
     fn refuses_flags_that_take_control_of_the_browser() {
-        for flag in ["--executable-path", "--cdp", "--session", "--profile", "--headed"] {
+        for flag in [
+            "--executable-path",
+            "--cdp",
+            "--session",
+            "--profile",
+            "--headed",
+        ] {
             assert!(
                 command_arguments(&input(BrowserAction::Open, &["https://a.dev", flag])).is_err(),
                 "{flag} must be refused"
@@ -374,8 +390,11 @@ mod tests {
     fn refuses_local_files() {
         assert!(command_arguments(&input(BrowserAction::Open, &["file:///etc/passwd"])).is_err());
         assert!(
-            command_arguments(&input(BrowserAction::Tab, &["new", "FILE:///C:/secrets.txt"]))
-                .is_err()
+            command_arguments(&input(
+                BrowserAction::Tab,
+                &["new", "FILE:///C:/secrets.txt"]
+            ))
+            .is_err()
         );
         assert!(command_arguments(&input(BrowserAction::Open, &["https://a.dev"])).is_ok());
     }
@@ -383,7 +402,10 @@ mod tests {
     #[test]
     fn screenshots_ignore_a_requested_path() {
         assert_eq!(
-            command_arguments(&input(BrowserAction::Screenshot, &["/home/me/.bashrc", "--full"])),
+            command_arguments(&input(
+                BrowserAction::Screenshot,
+                &["/home/me/.bashrc", "--full"]
+            )),
             Ok(vec![
                 "--content-boundaries".into(),
                 "screenshot".into(),

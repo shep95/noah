@@ -23,6 +23,8 @@ if [[ -n "${RUSTFLAGS+x}" || -n "${CARGO_ENCODED_RUSTFLAGS+x}" ]]; then
 fi
 
 export ZED_RELEASE_CHANNEL=stable
+# The release's build number, which noah's updater compares: the commit time.
+export NOAH_BUILD="${NOAH_BUILD:-$(git log -1 --format=%ct)}"
 export RELEASE_CHANNEL=stable
 export ZED_BUNDLE=true
 # LTO off keeps the build within reach of an ordinary machine.

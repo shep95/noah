@@ -57,11 +57,7 @@ impl AgentBrowser {
 
     /// Runs one agent-browser command (for example `["open", "example.com"]`)
     /// in noah's shared session and returns what it printed.
-    pub fn run(
-        &mut self,
-        arguments: Vec<String>,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<String>> {
+    pub fn run(&mut self, arguments: Vec<String>, cx: &mut Context<Self>) -> Task<Result<String>> {
         self.running_commands += 1;
         cx.notify();
         let command = cx.background_spawn(run_command(arguments));
@@ -214,7 +210,10 @@ mod tests {
     #[test]
     fn addresses_become_urls() {
         assert_eq!(address_to_url("https://a.dev/x"), "https://a.dev/x");
-        assert_eq!(address_to_url("example.com/docs"), "https://example.com/docs");
+        assert_eq!(
+            address_to_url("example.com/docs"),
+            "https://example.com/docs"
+        );
         assert_eq!(address_to_url("localhost:3000"), "http://localhost:3000");
         assert_eq!(
             address_to_url("rust async book"),

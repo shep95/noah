@@ -4,10 +4,10 @@ use base64::Engine as _;
 use editor::Editor;
 use futures::{StreamExt as _, channel::mpsc};
 use gpui::{
-    Action, App, AsyncWindowContext, Bounds, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, KeyDownEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ObjectFit, Pixels, RenderImage, ScrollWheelEvent, SharedString, Subscription, Task, WeakEntity,
-    Window, actions, canvas, img, px,
+    Action, App, AsyncWindowContext, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    KeyDownEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit,
+    Pixels, RenderImage, ScrollWheelEvent, SharedString, Subscription, Task, WeakEntity, Window,
+    actions, canvas, img, px,
 };
 use serde_json::{Value, json};
 use std::{cell::Cell, rc::Rc, sync::Arc};
@@ -170,8 +170,8 @@ impl BrowserPanel {
     }
 
     async fn open_stream(this: WeakEntity<Self>, cx: &mut AsyncWindowContext) -> Result<()> {
-        let status = crate::run_command(vec!["--json".into(), "stream".into(), "status".into()])
-            .await?;
+        let status =
+            crate::run_command(vec!["--json".into(), "stream".into(), "status".into()]).await?;
         let status: Value =
             serde_json::from_str(&status).context("agent-browser sent an unreadable status")?;
         let port = status["data"]["port"]
@@ -271,9 +271,11 @@ impl BrowserPanel {
         if width < 200 || height < 150 {
             return;
         }
-        let close_enough = self.requested_viewport.is_some_and(|(requested_width, requested_height)| {
-            requested_width.abs_diff(width) < 8 && requested_height.abs_diff(height) < 8
-        });
+        let close_enough =
+            self.requested_viewport
+                .is_some_and(|(requested_width, requested_height)| {
+                    requested_width.abs_diff(width) < 8 && requested_height.abs_diff(height) < 8
+                });
         if close_enough {
             return;
         }
@@ -344,20 +346,24 @@ impl BrowserPanel {
     fn handle_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let keystroke = &event.keystroke;
         let modifiers = cdp_modifiers(&keystroke.modifiers);
-        if (keystroke.modifiers.control || keystroke.modifiers.platform)
-            && keystroke.key == "v"
-        {
+        if (keystroke.modifiers.control || keystroke.modifiers.platform) && keystroke.key == "v" {
             if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                self.run(vec!["keyboard".into(), "inserttext".into(), text], window, cx);
+                self.run(
+                    vec!["keyboard".into(), "inserttext".into(), text],
+                    window,
+                    cx,
+                );
             }
             cx.stop_propagation();
             return;
         }
         let (key, text) = match dom_key(&keystroke.key) {
             Some(named) => (named.to_string(), None),
-            None => match keystroke.key_char.as_ref().filter(|_| {
-                !keystroke.modifiers.control && !keystroke.modifiers.platform
-            }) {
+            None => match keystroke
+                .key_char
+                .as_ref()
+                .filter(|_| !keystroke.modifiers.control && !keystroke.modifiers.platform)
+            {
                 Some(character) => (character.clone(), Some(character.clone())),
                 None => (keystroke.key.clone(), None),
             },
@@ -393,9 +399,11 @@ impl BrowserPanel {
                 IconButton::new("browser-back", IconName::ArrowLeft)
                     .icon_size(IconSize::Small)
                     .tooltip(Tooltip::text("back"))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.run(vec!["back".into()], window, cx)
-                    })),
+                    .on_click(
+                        cx.listener(|this, _, window, cx| {
+                            this.run(vec!["back".into()], window, cx)
+                        }),
+                    ),
             )
             .child(
                 IconButton::new("browser-forward", IconName::ArrowRight)
@@ -421,9 +429,11 @@ impl BrowserPanel {
                     .py_0p5()
                     .rounded_md()
                     .bg(cx.theme().colors().element_background)
-                    .on_action(cx.listener(|this, _: &menu::Confirm, window, cx| {
-                        this.navigate(window, cx)
-                    }))
+                    .on_action(
+                        cx.listener(|this, _: &menu::Confirm, window, cx| {
+                            this.navigate(window, cx)
+                        }),
+                    )
                     .child(self.address.clone()),
             )
             .when(busy, |this| {
@@ -647,11 +657,10 @@ impl Render for BrowserPanel {
             })
             .when_some(self.error.clone(), |this, error| {
                 this.child(
-                    div().px_3().py_1p5().child(
-                        Label::new(error)
-                            .size(LabelSize::Small)
-                            .color(Color::Error),
-                    ),
+                    div()
+                        .px_3()
+                        .py_1p5()
+                        .child(Label::new(error).size(LabelSize::Small).color(Color::Error)),
                 )
             })
     }

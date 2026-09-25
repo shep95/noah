@@ -30,6 +30,8 @@ rustup target add "$TARGET"
 export ZED_RELEASE_CHANNEL=stable
 # Read by the Windows resource script for the exe icon and product name.
 export RELEASE_CHANNEL=stable
+# The release's build number, which noah's updater compares: the commit time.
+export NOAH_BUILD="${NOAH_BUILD:-$(git log -1 --format=%ct)}"
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--stack,8388608"
 export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16

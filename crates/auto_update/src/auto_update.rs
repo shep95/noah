@@ -3,12 +3,12 @@ use client::Client;
 use db::kvp::KeyValueStore;
 use futures_lite::StreamExt;
 use gpui::{
-    App, AppContext as _, AsyncApp, BackgroundExecutor, Context, Entity, EventEmitter, Global,
-    Task, TaskExt, Window, actions,
+    App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, Global, Task, TaskExt, Window,
+    actions,
 };
 use http_client::{HttpClient, HttpClientWithUrl};
 use paths::remote_servers_dir;
-use release_channel::{AppCommitSha, ReleaseChannel};
+use release_channel::ReleaseChannel;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use settings::{RegisterSetting, Settings, SettingsStore};
@@ -17,14 +17,12 @@ use smol::{
     fs,
     io::{AsyncReadExt, AsyncWriteExt},
 };
-use std::mem;
 use std::{
     env::{
         self,
         consts::{ARCH, OS},
     },
     ffi::OsStr,
-    ffi::OsString,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
@@ -32,70 +30,26 @@ use std::{
 use util::command::new_command;
 use workspace::Workspace;
 
+mod noah_release;
+
 const SHOULD_SHOW_UPDATE_NOTIFICATION_KEY: &str = "auto-updater-should-show-updated-notification";
 
+/// A newer noah exists but this install can't update itself (a .deb, a folder
+/// noah can't write to, or a system without a build yet). Unlike a failed
+/// network check, this is shown even when the check ran on its own.
 #[derive(Debug)]
-struct MissingDependencyError(String);
+struct ManualUpdateNeeded(String);
 
-impl std::fmt::Display for MissingDependencyError {
+impl std::fmt::Display for ManualUpdateNeeded {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl std::error::Error for MissingDependencyError {}
+impl std::error::Error for ManualUpdateNeeded {}
 const POLL_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const NIGHTLY_POLL_INTERVAL: Duration = Duration::from_secs(15 * 60);
 const REMOTE_SERVER_CACHE_LIMIT: usize = 5;
-
-#[cfg(target_os = "linux")]
-fn linux_rsync_install_hint() -> &'static str {
-    let os_release = match std::fs::read_to_string("/etc/os-release") {
-        Ok(os_release) => os_release,
-        Err(_) => return "Please install rsync using your package manager",
-    };
-
-    let mut distribution_ids = Vec::new();
-    for line in os_release.lines() {
-        let trimmed = line.trim();
-        if let Some(value) = trimmed.strip_prefix("ID=") {
-            distribution_ids.push(value.trim_matches('"').to_ascii_lowercase());
-        } else if let Some(value) = trimmed.strip_prefix("ID_LIKE=") {
-            for id in value.trim_matches('"').split_whitespace() {
-                distribution_ids.push(id.to_ascii_lowercase());
-            }
-        }
-    }
-
-    let package_manager_hint = if distribution_ids
-        .iter()
-        .any(|distribution_id| distribution_id == "arch")
-    {
-        Some("Install it with: sudo pacman -S rsync")
-    } else if distribution_ids
-        .iter()
-        .any(|distribution_id| distribution_id == "debian" || distribution_id == "ubuntu")
-    {
-        Some("Install it with: sudo apt install rsync")
-    } else if distribution_ids.iter().any(|distribution_id| {
-        distribution_id == "fedora"
-            || distribution_id == "rhel"
-            || distribution_id == "centos"
-            || distribution_id == "rocky"
-            || distribution_id == "almalinux"
-    }) {
-        Some("Install it with: sudo dnf install rsync")
-    } else if distribution_ids
-        .iter()
-        .any(|distribution_id| distribution_id == "nixos")
-    {
-        Some("Install pkgs.rsync from nixpkgs")
-    } else {
-        None
-    };
-
-    package_manager_hint.unwrap_or("Please install rsync using your package manager")
-}
 
 actions!(
     auto_update,
@@ -187,64 +141,16 @@ pub struct AutoUpdater {
     update_check_type: UpdateCheckType,
     _wake_subscription: gpui::Subscription,
     dismissed_status: Option<AutoUpdateStatus>,
+    /// This copy's release build; `None` for builds that don't update.
+    installed_build: Option<u64>,
+    /// The release already downloaded and installed this session, if any.
+    downloaded_build: Option<u64>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct ReleaseAsset {
     pub version: String,
     pub url: String,
-}
-
-struct MacOsUnmounter<'a> {
-    mount_path: PathBuf,
-    background_executor: &'a BackgroundExecutor,
-}
-
-impl MacOsUnmounter<'_> {
-    /// Unmounts the disk image and waits for completion. This must happen
-    /// before the `InstallerDir` is dropped: deleting the temp dir while the
-    /// image is still mounted inside it fails silently and leaks the
-    /// directory (and the downloaded DMG) in the system temp dir.
-    async fn unmount(mut self) {
-        let mount_path = mem::take(&mut self.mount_path);
-        unmount_disk_image(&mount_path).await;
-    }
-}
-
-impl Drop for MacOsUnmounter<'_> {
-    fn drop(&mut self) {
-        let mount_path = mem::take(&mut self.mount_path);
-        // Safety net for early exits and cancellation; the happy path calls
-        // `unmount`, which leaves the path empty.
-        if mount_path.as_os_str().is_empty() {
-            return;
-        }
-        self.background_executor
-            .spawn(async move { unmount_disk_image(&mount_path).await })
-            .detach();
-    }
-}
-
-async fn unmount_disk_image(mount_path: &Path) {
-    let unmount_output = new_command("hdiutil")
-        .args(["detach", "-force"])
-        .arg(mount_path)
-        .output()
-        .await;
-    match unmount_output {
-        Ok(output) if output.status.success() => {
-            log::info!("Successfully unmounted the disk image");
-        }
-        Ok(output) => {
-            log::error!(
-                "Failed to unmount disk image: {:?}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        Err(error) => {
-            log::error!("Error while trying to unmount disk image: {:?}", error);
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, RegisterSetting)]
@@ -265,6 +171,19 @@ struct GlobalAutoUpdate(Option<Entity<AutoUpdater>>);
 impl Global for GlobalAutoUpdate {}
 
 pub fn init(client: Arc<Client>, cx: &mut App) {
+    #[cfg(target_os = "windows")]
+    if let Some(install_directory) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        cx.background_spawn(async move {
+            noah_release::remove_set_aside_files(&install_directory);
+            // The installer from the last update, which has already run.
+            std::fs::remove_dir_all(install_directory.join("updates")).ok();
+        })
+        .detach();
+    }
+
     cx.observe_new(|workspace: &mut Workspace, _window, _cx| {
         workspace.register_action(|_, action, window, cx| check(action, window, cx));
 
@@ -432,16 +351,8 @@ impl AutoUpdater {
     }
 
     fn new(current_version: Version, client: Arc<Client>, cx: &mut Context<Self>) -> Self {
-        // On windows, executable files cannot be overwritten while they are
-        // running, so we must wait to overwrite the application until quitting
-        // or restarting. When quitting the app, we spawn the auto update helper
-        // to finish the auto update process after Zed exits. When restarting
-        // the app after an update, we use `set_restart_path` to run the auto
-        // update helper instead of the app, so that it can overwrite the app
-        // and then spawn the new binary.
-        #[cfg(target_os = "windows")]
-        let quit_subscription = Some(cx.on_app_quit(|_, _| finalize_auto_update_on_quit()));
-        #[cfg(not(target_os = "windows"))]
+        // noah installs an update while it runs (see `install_release_windows`),
+        // so nothing has to happen on quit.
         let quit_subscription = None;
 
         cx.on_app_restart(|this, _| {
@@ -468,6 +379,8 @@ impl AutoUpdater {
             update_check_type: UpdateCheckType::Automatic,
             _wake_subscription: wake_subscription,
             dismissed_status: None,
+            installed_build: noah_release::installed_build(),
+            downloaded_build: None,
         }
     }
 
@@ -495,15 +408,6 @@ impl AutoUpdater {
             });
 
         cx.spawn(async move |this, cx| {
-            if cfg!(target_os = "windows") {
-                use util::ResultExt;
-
-                cleanup_windows()
-                    .await
-                    .context("failed to cleanup old directories")
-                    .log_err();
-            }
-
             #[cfg(all(not(target_os = "windows"), not(test)))]
             cx.background_spawn(cleanup_stale_installer_dirs()).detach();
 
@@ -538,10 +442,9 @@ impl AutoUpdater {
             this.update(cx, |this, cx| {
                 this.pending_poll = None;
                 if let Err(error) = result {
-                    let is_missing_dependency =
-                        error.downcast_ref::<MissingDependencyError>().is_some();
+                    let needs_manual_update = error.downcast_ref::<ManualUpdateNeeded>().is_some();
                     this.status = match check_type {
-                        UpdateCheckType::Automatic if is_missing_dependency => {
+                        UpdateCheckType::Automatic if needs_manual_update => {
                             log::warn!("auto-update: {}", error);
                             AutoUpdateStatus::Errored {
                                 error: Arc::new(error),
@@ -738,17 +641,9 @@ impl AutoUpdater {
     }
 
     async fn update(this: Entity<Self>, cx: &mut AsyncApp) -> Result<()> {
-        let (client, installed_version, previous_status, release_channel) =
-            this.read_with(cx, |this, cx| {
-                (
-                    this.client.http_client(),
-                    this.current_version.clone(),
-                    this.status.clone(),
-                    ReleaseChannel::try_global(cx).unwrap_or(ReleaseChannel::Stable),
-                )
-            });
-
-        Self::check_dependencies()?;
+        let (client, previous_status) = this.read_with(cx, |this, _| {
+            (this.client.http_client(), this.status.clone())
+        });
 
         this.update(cx, |this, cx| {
             this.status = AutoUpdateStatus::Checking;
@@ -756,19 +651,17 @@ impl AutoUpdater {
             cx.notify();
         });
 
-        let fetched_release_data =
-            Self::get_release_asset(&this, release_channel, None, "zed", OS, ARCH, cx).await?;
-        let fetched_version = fetched_release_data.clone().version;
-        let app_commit_sha = Ok(cx.update(|cx| AppCommitSha::try_global(cx).map(|sha| sha.full())));
-        let newer_version = Self::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version,
-            previous_status.clone(),
-        )?;
-
-        let Some(newer_version) = newer_version else {
+        let (installed_build, downloaded_build) =
+            this.read_with(cx, |this, _| (this.installed_build, this.downloaded_build));
+        let Some(installed_build) = installed_build else {
+            anyhow::bail!(
+                "this copy of noah was built from source, so it doesn't update itself; \
+                 get releases from {}",
+                noah_release::DOWNLOAD_PAGE
+            );
+        };
+        let manifest = Self::fetch_noah_manifest(&client).await?;
+        if !noah_release::is_newer(manifest.build, installed_build, downloaded_build) {
             this.update(cx, |this, cx| {
                 this.status = match previous_status {
                     AutoUpdateStatus::Updated { .. } => previous_status,
@@ -782,6 +675,18 @@ impl AutoUpdater {
                 cx.notify();
             });
             return Ok(());
+        }
+        let newer_version = manifest.version();
+        let asset = manifest.asset_for(OS, ARCH).cloned().ok_or_else(|| {
+            ManualUpdateNeeded(format!(
+                "noah {} is out, but not built for this system yet; see {}",
+                manifest.version,
+                noah_release::DOWNLOAD_PAGE
+            ))
+        })?;
+        let fetched_release_data = ReleaseAsset {
+            version: manifest.version.clone(),
+            url: asset.url.clone(),
         };
 
         this.update(cx, |this, cx| {
@@ -818,6 +723,13 @@ impl AutoUpdater {
         .await
         .with_context(|| format!("Failed to download update to {}", target_path.display()))?;
 
+        cx.background_spawn({
+            let target_path = target_path.clone();
+            let expected = asset.sha256.clone();
+            async move { noah_release::verify_sha256(&target_path, &expected) }
+        })
+        .await?;
+
         this.update(cx, |this, cx| {
             this.status = AutoUpdateStatus::Installing {
                 version: newer_version.clone(),
@@ -837,14 +749,10 @@ impl AutoUpdater {
         #[cfg(not(test))]
         let install_result = {
             let running_app_path = cx.update(|cx| cx.app_path())?;
-            let background_executor = cx.background_executor().clone();
-            let channel = cx.update(|cx| ReleaseChannel::global(cx).dev_name());
             cx.background_spawn(Self::install_release(
                 installer_dir,
                 target_path.clone(),
                 running_app_path,
-                channel,
-                background_executor,
             ))
             .await
         };
@@ -857,6 +765,7 @@ impl AutoUpdater {
         this.update(cx, |this, cx| {
             this.set_should_show_update_notification(true, cx)
                 .detach_and_log_err(cx);
+            this.downloaded_build = Some(manifest.build);
             this.status = AutoUpdateStatus::Updated {
                 version: newer_version,
             };
@@ -865,66 +774,24 @@ impl AutoUpdater {
         Ok(())
     }
 
-    fn check_if_fetched_version_is_newer(
-        release_channel: ReleaseChannel,
-        app_commit_sha: Result<Option<String>>,
-        installed_version: Version,
-        fetched_version: String,
-        status: AutoUpdateStatus,
-    ) -> Result<Option<Version>> {
-        let fetched_version = fetched_version.parse::<Version>()?;
-
-        match release_channel {
-            ReleaseChannel::Nightly => {
-                let should_download = if let AutoUpdateStatus::Updated { version } = status {
-                    fetched_version != version
-                } else {
-                    let fetched_sha = fetched_version.build.as_str().rsplit('.').next();
-                    app_commit_sha
-                        .ok()
-                        .flatten()
-                        .is_none_or(|sha| fetched_sha != Some(sha.as_str()))
-                };
-                Ok(should_download.then_some(fetched_version))
-            }
-            _ => {
-                let current_version = if let AutoUpdateStatus::Updated { version } = status {
-                    version
-                } else {
-                    installed_version
-                };
-                Ok(Self::check_if_fetched_version_is_newer_non_nightly(
-                    current_version,
-                    fetched_version,
-                ))
-            }
-        }
-    }
-
-    fn check_dependencies() -> Result<()> {
-        #[cfg(target_os = "linux")]
-        if which::which("rsync").is_err() {
-            let install_hint = linux_rsync_install_hint();
-            return Err(MissingDependencyError(format!(
-                "rsync is required for auto-updates but is not installed. {install_hint}"
-            ))
-            .into());
-        }
-
-        #[cfg(target_os = "macos")]
+    async fn fetch_noah_manifest(client: &HttpClientWithUrl) -> Result<noah_release::Manifest> {
+        let url = noah_release::manifest_url();
+        let mut response = client.get(&url, Default::default(), true).await?;
+        let mut body = Vec::new();
+        response.body_mut().read_to_end(&mut body).await?;
         anyhow::ensure!(
-            which::which("rsync").is_ok(),
-            "Could not auto-update because the required rsync utility was not found."
+            response.status().is_success(),
+            "couldn't check for noah updates ({})",
+            response.status()
         );
-
-        Ok(())
+        serde_json::from_slice(&body).context("noah's release information couldn't be read")
     }
 
     async fn target_path(installer_dir: &InstallerDir) -> Result<PathBuf> {
         let filename = match OS {
-            "macos" => anyhow::Ok("Zed.dmg"),
-            "linux" => Ok("zed.tar.gz"),
-            "windows" => Ok("Zed.exe"),
+            "macos" => anyhow::Ok("noah.dmg"),
+            "linux" => Ok("noah.tar.xz"),
+            "windows" => Ok("noah-setup.exe"),
             unsupported_os => anyhow::bail!("not supported: {unsupported_os}"),
         }?;
 
@@ -933,38 +800,22 @@ impl AutoUpdater {
 
     #[cfg_attr(test, allow(dead_code))]
     async fn install_release(
-        installer_dir: InstallerDir,
+        // Owned so the downloaded installer stays on disk until installing ends.
+        _installer_dir: InstallerDir,
         target_path: PathBuf,
         running_app_path: PathBuf,
-        channel: &str,
-        background_executor: BackgroundExecutor,
     ) -> Result<Option<PathBuf>> {
         match OS {
-            "macos" => {
-                install_release_macos(
-                    &installer_dir,
-                    &target_path,
-                    running_app_path,
-                    &background_executor,
-                )
-                .await
-            }
-            "linux" => {
-                install_release_linux(&installer_dir, &target_path, channel, running_app_path).await
-            }
+            // noah has no signed macOS release to update from yet.
+            "macos" => Err(ManualUpdateNeeded(format!(
+                "a new noah is out; install it from {}",
+                noah_release::DOWNLOAD_PAGE
+            ))
+            .into()),
+            "linux" => install_release_linux(&target_path, running_app_path).await,
             "windows" => install_release_windows(&target_path).await,
             unsupported_os => anyhow::bail!("not supported: {unsupported_os}"),
         }
-    }
-
-    fn check_if_fetched_version_is_newer_non_nightly(
-        mut installed_version: Version,
-        fetched_version: Version,
-    ) -> Option<Version> {
-        // For non-nightly releases, ignore build and pre-release fields as they're not provided by our endpoints right now.
-        installed_version.pre = semver::Prerelease::EMPTY;
-        installed_version.build = semver::BuildMetadata::EMPTY;
-        (fetched_version > installed_version).then_some(fetched_version)
     }
 
     pub fn set_should_show_update_notification(
@@ -1127,133 +978,89 @@ async fn download_release(
 }
 
 async fn install_release_linux(
-    temp_dir: &InstallerDir,
-    downloaded_tar_gz: &Path,
-    channel: &str,
+    downloaded_archive: &Path,
     running_app_path: PathBuf,
 ) -> Result<Option<PathBuf>> {
-    let home_dir = PathBuf::from(env::var("HOME").context("no HOME env var set")?);
-
-    let extracted = temp_dir.path().join("zed");
-    fs::create_dir_all(&extracted)
+    let prefix = noah_release::linux_install_prefix(&running_app_path)
+        .map_err(|error| ManualUpdateNeeded(format!("a new noah is out, but {error:#}")))?;
+    // Unpacking beside the current install keeps both on one disk, so the
+    // swap below is two renames rather than a copy that could be interrupted.
+    let staging = prefix.join(format!(".noah-update-{}", std::process::id()));
+    fs::remove_dir_all(&staging).await.ok();
+    fs::create_dir_all(&staging)
         .await
-        .context("failed to create directory into which to extract update")?;
+        .context("failed to create a folder for the noah update")?;
 
-    let mut cmd = new_command("tar");
-    cmd.arg("-xzf")
-        .arg(&downloaded_tar_gz)
+    let output = new_command("tar")
+        .arg("-xJf")
+        .arg(downloaded_archive)
         .arg("-C")
-        .arg(&extracted);
-    let output = cmd
+        .arg(&staging)
         .output()
         .await
-        .with_context(|| "failed to extract: {cmd}")?;
-
-    anyhow::ensure!(
-        output.status.success(),
-        "failed to extract {:?} to {:?}: {:?}",
-        downloaded_tar_gz,
-        extracted,
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let suffix = if channel != "stable" {
-        format!("-{}", channel)
-    } else {
-        String::default()
-    };
-    let app_folder_name = format!("zed{}.app", suffix);
-
-    let from = extracted.join(&app_folder_name);
-    let mut to = home_dir.join(".local");
-
-    let expected_suffix = format!("{}/libexec/zed-editor", app_folder_name);
-
-    if let Some(prefix) = running_app_path
-        .to_str()
-        .and_then(|str| str.strip_suffix(&expected_suffix))
-    {
-        to = PathBuf::from(prefix);
+        .context("failed to run tar on the noah update")?;
+    if !output.status.success() {
+        fs::remove_dir_all(&staging).await.ok();
+        anyhow::bail!(
+            "failed to unpack the noah update: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
-    let mut cmd = new_command("rsync");
-    cmd.args(["-av", "--delete"]).arg(&from).arg(&to);
-    let output = cmd
-        .output()
-        .await
-        .with_context(|| "failed to rsync: {cmd}")?;
-
+    let staged_app = staging.join("noah.app");
+    let installed_app = prefix.join("noah.app");
+    let previous_app = staging.join("previous.app");
     anyhow::ensure!(
-        output.status.success(),
-        "failed to copy Zed update from {:?} to {:?}: {:?}",
-        from,
-        to,
-        String::from_utf8_lossy(&output.stderr)
+        staged_app.join("libexec").join("zed-editor").is_file(),
+        "the noah update doesn't contain the editor"
     );
+    fs::rename(&installed_app, &previous_app)
+        .await
+        .context("failed to move the current noah aside")?;
+    if let Err(error) = fs::rename(&staged_app, &installed_app).await {
+        fs::rename(&previous_app, &installed_app).await.ok();
+        return Err(error).context("failed to put the new noah in place");
+    }
+    // The running editor keeps its files open, so removing them now is safe.
+    fs::remove_dir_all(&staging).await.ok();
 
-    Ok(Some(to.join(expected_suffix)))
+    Ok(Some(installed_app.join("libexec").join("zed-editor")))
 }
 
-async fn install_release_macos(
-    temp_dir: &InstallerDir,
-    downloaded_dmg: &Path,
-    running_app_path: PathBuf,
-    background_executor: &BackgroundExecutor,
-) -> Result<Option<PathBuf>> {
-    let running_app_filename = running_app_path
-        .file_name()
-        .with_context(|| format!("invalid running app path {running_app_path:?}"))?;
-
-    let mount_path = temp_dir.path().join("Zed");
-    let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
-
-    mounted_app_path.push("/");
-    let mut cmd = new_command("hdiutil");
-    cmd.args(["attach", "-nobrowse"])
-        .arg(&downloaded_dmg)
-        .arg("-mountroot")
-        .arg(temp_dir.path());
-    let output = cmd
+/// Runs the new installer silently over the running copy. Windows refuses to
+/// overwrite a program that is running but allows renaming it, so noah's
+/// programs and libraries are moved aside first; they are deleted at the next
+/// start, and put back if the installer fails.
+async fn install_release_windows(downloaded_installer: &Path) -> Result<Option<PathBuf>> {
+    let current_exe = std::env::current_exe()?;
+    let install_directory = current_exe
+        .parent()
+        .context("noah.exe has no parent folder")?
+        .to_path_buf();
+    let moved = noah_release::set_aside_program_files(&install_directory)?;
+    let output = new_command(downloaded_installer)
+        .arg("/S")
+        .arg("/UPDATE")
         .output()
-        .await
-        .with_context(|| "failed to mount: {cmd}")?;
-
-    anyhow::ensure!(
-        output.status.success(),
-        "failed to mount: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let unmounter = MacOsUnmounter {
-        mount_path: mount_path.clone(),
-        background_executor,
-    };
-
-    let mut cmd = new_command("rsync");
-    cmd.args(["-av", "--delete", "--exclude", "Icon?"])
-        .arg(&mounted_app_path)
-        .arg(&running_app_path);
-    let rsync_output = cmd.output().await;
-
-    // Await the unmount (even if rsync failed) so that the installer temp dir
-    // can be deleted once this function returns.
-    unmounter.unmount().await;
-
-    let output = rsync_output.with_context(|| "failed to rsync: {cmd}")?;
-
-    anyhow::ensure!(
-        output.status.success(),
-        "failed to copy app: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    Ok(None)
+        .await;
+    match output {
+        Ok(output) if output.status.success() && current_exe.exists() => Ok(Some(current_exe)),
+        Ok(output) => {
+            noah_release::restore_set_aside(&moved);
+            anyhow::bail!(
+                "the noah installer failed ({}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }
+        Err(error) => {
+            noah_release::restore_set_aside(&moved);
+            Err(error).context("couldn't start the noah installer")
+        }
+    }
 }
 
-/// Removes stale installer dirs from the system temp dir. Older Zed versions
-/// leaked one per update by deleting the dir while the downloaded disk image
-/// was still mounted inside it, which made the deletion fail silently.
-#[cfg(any(rust_analyzer, all(not(target_os = "windows"), not(test))))]
+#[cfg(not(target_os = "windows"))]
 async fn cleanup_stale_installer_dirs() {
     const STALE_INSTALLER_DIR_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -1296,66 +1103,6 @@ async fn cleanup_stale_installer_dirs() {
     }
 }
 
-async fn cleanup_windows() -> Result<()> {
-    let parent = std::env::current_exe()?
-        .parent()
-        .context("No parent dir for Zed.exe")?
-        .to_owned();
-
-    // keep in sync with crates/auto_update_helper/src/updater.rs
-    _ = smol::fs::remove_dir(parent.join("updates")).await;
-    _ = smol::fs::remove_dir(parent.join("install")).await;
-    _ = smol::fs::remove_dir(parent.join("old")).await;
-
-    Ok(())
-}
-
-async fn install_release_windows(downloaded_installer: &Path) -> Result<Option<PathBuf>> {
-    let mut cmd = new_command(downloaded_installer);
-    cmd.arg("/verysilent")
-        .arg("/update=true")
-        .arg("/MERGETASKS=!desktopicon");
-    let output = cmd.output().await?;
-    anyhow::ensure!(
-        output.status.success(),
-        "failed to start installer: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    // We return the path to the update helper program, because it will
-    // perform the final steps of the update process, copying the new binary,
-    // deleting the old one, and launching the new binary.
-    let helper_path = std::env::current_exe()?
-        .parent()
-        .context("No parent dir for Zed.exe")?
-        .join("tools")
-        .join("auto_update_helper.exe");
-    Ok(Some(helper_path))
-}
-
-pub async fn finalize_auto_update_on_quit() {
-    let Some(installer_path) = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("updates")))
-    else {
-        return;
-    };
-
-    // The installer will create a flag file after it finishes updating
-    let flag_file = installer_path.join("versions.txt");
-    if flag_file.exists()
-        && let Some(helper) = installer_path
-            .parent()
-            .map(|p| p.join("tools").join("auto_update_helper.exe"))
-    {
-        let mut command = util::command::new_command(helper);
-        command.arg("--launch");
-        command.arg("false");
-        if let Ok(mut cmd) = command.spawn() {
-            _ = cmd.status().await;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use client::Client;
@@ -1372,6 +1119,8 @@ mod tests {
         },
     };
     use tempfile::tempdir;
+
+    use sha2::Digest as _;
 
     #[ctor::ctor(unsafe)]
     fn init_logger() {
@@ -1403,8 +1152,13 @@ mod tests {
         cx.background_executor.allow_parking();
         zlog::init_test();
         let release_available = Arc::new(AtomicBool::new(false));
+        let update_contents = "<fake-noah-update>";
+        let update_checksum: String = sha2::Sha256::digest(update_contents.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
 
-        let (dmg_tx, dmg_rx) = oneshot::channel::<String>();
+        let (installer_tx, installer_rx) = oneshot::channel::<String>();
 
         cx.update(|cx| {
             settings::init(cx);
@@ -1414,32 +1168,45 @@ mod tests {
 
             let clock = Arc::new(FakeSystemClock::new());
             let release_available = Arc::clone(&release_available);
-            let dmg_rx = Arc::new(parking_lot::Mutex::new(Some(dmg_rx)));
+            let installer_rx = Arc::new(parking_lot::Mutex::new(Some(installer_rx)));
+            let asset_key = format!("{OS}-{ARCH}");
             let fake_client_http = FakeHttpClient::create(move |req| {
                 let release_available = release_available.load(atomic::Ordering::Relaxed);
-                let dmg_rx = dmg_rx.clone();
-                async move {
-                if req.uri().path() == "/releases/stable/latest/asset" {
-                    if release_available {
-                        return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.1","url":"https://test.example/new-download"}"#.into()
-                        ).unwrap());
-                    } else {
-                        return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.0","url":"https://test.example/old-download"}"#.into()
-                        ).unwrap());
+                let installer_rx = installer_rx.clone();
+                let manifest = serde_json::json!({
+                    "build": if release_available { 200 } else { 100 },
+                    "version": if release_available { "0.100.1" } else { "0.100.0" },
+                    "assets": {
+                        asset_key.clone(): {
+                            "url": "https://test.example/new-download",
+                            "sha256": update_checksum.clone(),
+                        }
                     }
-                } else if req.uri().path() == "/new-download" {
-                    return Ok(Response::builder().status(200).body({
-                        let dmg_rx = dmg_rx.lock().take().unwrap();
-                        dmg_rx.await.unwrap().into()
-                    }).unwrap());
-                }
-                Ok(Response::builder().status(404).body("".into()).unwrap())
+                })
+                .to_string();
+                async move {
+                    if req.uri().path() == "/downloads/latest.json" {
+                        return Ok(Response::builder()
+                            .status(200)
+                            .body(manifest.into())
+                            .unwrap());
+                    } else if req.uri().path() == "/new-download" {
+                        return Ok(Response::builder()
+                            .status(200)
+                            .body({
+                                let installer_rx = installer_rx.lock().take().unwrap();
+                                installer_rx.await.unwrap().into()
+                            })
+                            .unwrap());
+                    }
+                    Ok(Response::builder().status(404).body("".into()).unwrap())
                 }
             });
             let client = Client::new(clock, fake_client_http, cx);
             crate::init(client, cx);
+            AutoUpdater::get(cx)
+                .expect("auto updater should exist")
+                .update(cx, |updater, _| updater.installed_build = Some(100));
         });
 
         let auto_updater = cx.update(|cx| AutoUpdater::get(cx).expect("auto updater should exist"));
@@ -1448,7 +1215,6 @@ mod tests {
 
         auto_updater.read_with(cx, |updater, _| {
             assert_eq!(updater.status(), AutoUpdateStatus::Idle);
-            assert_eq!(updater.current_version(), semver::Version::new(0, 100, 0));
         });
 
         release_available.store(true, atomic::Ordering::SeqCst);
@@ -1472,7 +1238,7 @@ mod tests {
             }
         );
 
-        dmg_tx.send("<fake-zed-update>".to_owned()).unwrap();
+        installer_tx.send(update_contents.to_owned()).unwrap();
 
         let tmp_dir = Arc::new(tempdir().unwrap());
 
@@ -1480,7 +1246,7 @@ mod tests {
             let tmp_dir = tmp_dir.clone();
             cx.set_global(InstallOverride(Rc::new(move |target_path, _cx| {
                 let tmp_dir = tmp_dir.clone();
-                let dest_path = tmp_dir.path().join("zed");
+                let dest_path = tmp_dir.path().join("noah");
                 std::fs::copy(&target_path, &dest_path)?;
                 Ok(Some(dest_path))
             })));
@@ -1506,8 +1272,8 @@ mod tests {
         let (path, arguments) = will_restart.await.unwrap();
         assert!(arguments.is_empty());
         let path = path.unwrap();
-        assert_eq!(path, tmp_dir.path().join("zed"));
-        assert_eq!(std::fs::read_to_string(path).unwrap(), "<fake-zed-update>");
+        assert_eq!(path, tmp_dir.path().join("noah"));
+        assert_eq!(std::fs::read_to_string(path).unwrap(), update_contents);
     }
 
     #[gpui::test]
@@ -1616,272 +1382,5 @@ mod tests {
 
         let downloaded_len = std::fs::metadata(&target_path).unwrap().len();
         assert_eq!(downloaded_len, content_length as u64);
-    }
-
-    #[test]
-    fn test_stable_does_not_update_when_fetched_version_is_not_higher() {
-        let release_channel = ReleaseChannel::Stable;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Idle;
-        let fetched_version = semver::Version::new(1, 0, 0);
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.to_string(),
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), None);
-    }
-
-    #[test]
-    fn test_stable_does_update_when_fetched_version_is_higher() {
-        let release_channel = ReleaseChannel::Stable;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Idle;
-        let fetched_version = semver::Version::new(1, 0, 1);
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.to_string(),
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), Some(fetched_version));
-    }
-
-    #[test]
-    fn test_stable_does_not_update_when_fetched_version_is_not_higher_than_cached() {
-        let release_channel = ReleaseChannel::Stable;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Updated {
-            version: semver::Version::new(1, 0, 1),
-        };
-        let fetched_version = semver::Version::new(1, 0, 1);
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.to_string(),
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), None);
-    }
-
-    #[test]
-    fn test_stable_does_update_when_fetched_version_is_higher_than_cached() {
-        let release_channel = ReleaseChannel::Stable;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Updated {
-            version: semver::Version::new(1, 0, 1),
-        };
-        let fetched_version = semver::Version::new(1, 0, 2);
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.to_string(),
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), Some(fetched_version));
-    }
-
-    #[test]
-    fn test_nightly_does_not_update_when_fetched_sha_is_same() {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let mut installed_version = semver::Version::new(1, 0, 0);
-        installed_version.build = semver::BuildMetadata::new("a").unwrap();
-        let status = AutoUpdateStatus::Idle;
-        let fetched_version = "1.0.0+a".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version,
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), None);
-    }
-
-    #[test]
-    fn test_nightly_does_update_when_fetched_sha_is_not_same() {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Idle;
-        let fetched_version = "1.0.0+b".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.clone(),
-            status,
-        );
-
-        assert_eq!(
-            newer_version.unwrap(),
-            Some(fetched_version.parse().unwrap())
-        );
-    }
-
-    #[test]
-    fn test_nightly_does_not_update_when_fetched_version_is_same_as_cached() {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let mut installed_version = semver::Version::new(1, 0, 0);
-        installed_version.build = semver::BuildMetadata::new("a").unwrap();
-        let status = AutoUpdateStatus::Updated {
-            version: "1.0.0+b".parse().unwrap(),
-        };
-        let fetched_version = "1.0.0+b".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version,
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), None);
-    }
-
-    #[test]
-    fn test_nightly_does_update_when_fetched_sha_is_not_same_as_cached() {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(Some("a".to_string()));
-        let mut installed_version = semver::Version::new(1, 0, 0);
-        installed_version.build = semver::BuildMetadata::new("a").unwrap();
-        let status = AutoUpdateStatus::Updated {
-            version: "1.0.0+b".parse().unwrap(),
-        };
-        let fetched_version = "1.0.0+c".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.clone(),
-            status,
-        );
-
-        assert_eq!(
-            newer_version.unwrap(),
-            Some(fetched_version.parse().unwrap())
-        );
-    }
-
-    #[test]
-    fn test_nightly_does_not_redownload_after_updating_to_fetched_version() {
-        let release_channel = ReleaseChannel::Nightly;
-        let installed_version = semver::Version::new(1, 0, 0);
-        let fetched_version = "1.0.0+nightly.b".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            Ok(Some("a".to_string())),
-            installed_version.clone(),
-            fetched_version.clone(),
-            AutoUpdateStatus::Idle,
-        )
-        .unwrap()
-        .expect("a newer nightly version should be available");
-
-        let next_check = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            Ok(Some("a".to_string())),
-            installed_version,
-            fetched_version,
-            AutoUpdateStatus::Updated {
-                version: newer_version,
-            },
-        );
-
-        assert_eq!(next_check.unwrap(), None);
-    }
-
-    #[test]
-    fn test_nightly_does_update_when_installed_versions_sha_cannot_be_retrieved() {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(None);
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Idle;
-        let fetched_version = "1.0.0+a".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.clone(),
-            status,
-        );
-
-        assert_eq!(
-            newer_version.unwrap(),
-            Some(fetched_version.parse().unwrap())
-        );
-    }
-
-    #[test]
-    fn test_nightly_does_not_update_when_cached_update_is_same_as_fetched_and_installed_versions_sha_cannot_be_retrieved()
-     {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(None);
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Updated {
-            version: "1.0.0+b".parse().unwrap(),
-        };
-        let fetched_version = "1.0.0+b".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version,
-            status,
-        );
-
-        assert_eq!(newer_version.unwrap(), None);
-    }
-
-    #[test]
-    fn test_nightly_does_update_when_cached_update_is_not_same_as_fetched_and_installed_versions_sha_cannot_be_retrieved()
-     {
-        let release_channel = ReleaseChannel::Nightly;
-        let app_commit_sha = Ok(None);
-        let installed_version = semver::Version::new(1, 0, 0);
-        let status = AutoUpdateStatus::Updated {
-            version: "1.0.0+b".parse().unwrap(),
-        };
-        let fetched_version = "1.0.0+c".to_string();
-
-        let newer_version = AutoUpdater::check_if_fetched_version_is_newer(
-            release_channel,
-            app_commit_sha,
-            installed_version,
-            fetched_version.clone(),
-            status,
-        );
-
-        assert_eq!(
-            newer_version.unwrap(),
-            Some(fetched_version.parse().unwrap())
-        );
     }
 }

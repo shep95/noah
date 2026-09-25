@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Write latest.json, the manifest noah's updater reads, for the installers in
+# a directory (normally the website's public/downloads).
+#
+# Usage: script/write-release-manifest <downloads-dir> <public-base-url>
+#   e.g. script/write-release-manifest ../unlocket/public/downloads https://unlocket.vercel.app/downloads
+# The build number is the commit time, the same value the release scripts
+# stamp into noah as NOAH_BUILD, so run this from the commit that was built.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+directory="${1:?downloads directory}"
+base_url="${2:?public base URL of that directory}"
+base_url="${base_url%/}"
+build="${NOAH_BUILD:-$(git log -1 --format=%ct)}"
+version="$(date -u -d "@$build" +%Y.%-m.%-d 2>/dev/null || date -u -r "$build" +%Y.%-m.%-d)"
+
+entry() {
+    local key="$1" file="$2"
+    [[ -f "$directory/$file" ]] || return 0
+    local sum
+    sum="$(sha256sum "$directory/$file" | cut -d' ' -f1)"
+    printf '    "%s": { "url": "%s/%s", "sha256": "%s" }' "$key" "$base_url" "$file" "$sum"
+}
+
+entries=()
+for pair in \
+    "windows-x86_64:noah-windows-x86_64.exe" \
+    "linux-x86_64:noah-linux-x86_64.tar.xz" \
+    "linux-aarch64:noah-linux-aarch64.tar.xz"; do
+    line="$(entry "${pair%%:*}" "${pair#*:}")"
+    [[ -n "$line" ]] && entries+=("$line")
+done
+
+{
+    echo "{"
+    echo "  \"build\": $build,"
+    echo "  \"version\": \"$version\","
+    echo "  \"assets\": {"
+    (IFS=$'\n'; echo "${entries[*]}" | sed '$!s/$/,/')
+    echo "  }"
+    echo "}"
+} > "$directory/latest.json"
+cat "$directory/latest.json"

@@ -1302,6 +1302,7 @@
           "go_to_definition": true,
           "list_agents_and_models": true,
           "list_directory": true,
+          "model_file": true,
           "move_path": true,
           "rename_symbol": true,
           "read_file": true,
@@ -1690,10 +1691,10 @@
   //
   // Default: false
   "disable_ai": false,
-  // Automatically update. Off in noah: the built-in updater targets upstream
-  // Zed's release server and would replace noah with stock Zed. noah updates
-  // ship as new installers from the noah website.
-  "auto_update": false,
+  // Keep noah up to date: it checks the noah website every hour, downloads a
+  // new release in the background, verifies its checksum and installs it; the
+  // title bar then offers a restart. Nothing about you is sent with the check.
+  "auto_update": true,
   // How to render LSP `textDocument/documentColor` colors in the editor.
   //
   // Possible values:

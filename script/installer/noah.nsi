@@ -31,6 +31,7 @@ ShowInstDetails nevershow
 ShowUninstDetails nevershow
 
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 
 !define MUI_ICON "noah.ico"
 !define MUI_UNICON "noah.ico"
@@ -55,15 +56,26 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "GPL-3.0 / Apache-2.0"
 
 Section "Install"
-  ; Replace a running copy cleanly on upgrade.
-  nsExec::Exec 'taskkill /F /IM noah.exe'
+  ; noah's own updater runs this with /S /UPDATE while noah is open: it has
+  ; already moved its running files aside, so noah must not be closed, and the
+  ; shortcuts the person arranged are left alone.
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/UPDATE" $R1
+  IfErrors 0 updating
+    nsExec::Exec 'taskkill /F /IM noah.exe'
+  updating:
 
   SetOutPath "$INSTDIR"
   File /r "${STAGE}\*.*"
   File "noah.ico"
 
-  CreateShortCut "$SMPROGRAMS\${APPNAME}.lnk" "$INSTDIR\noah.exe" "" "$INSTDIR\noah.ico" 0
-  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\noah.exe" "" "$INSTDIR\noah.ico" 0
+  ClearErrors
+  ${GetOptions} $R0 "/UPDATE" $R1
+  IfErrors 0 shortcuts_done
+    CreateShortCut "$SMPROGRAMS\${APPNAME}.lnk" "$INSTDIR\noah.exe" "" "$INSTDIR\noah.ico" 0
+    CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\noah.exe" "" "$INSTDIR\noah.ico" 0
+  shortcuts_done:
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 

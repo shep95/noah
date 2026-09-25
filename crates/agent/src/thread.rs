@@ -1,9 +1,9 @@
 use crate::{
-    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, ContextServerRegistry, CopyPathTool,
-    CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
+    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, ContextServerRegistry,
+    CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
     DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, FindReferencesTool, GetCodeActionsTool,
-    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, MovePathTool,
-    ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
+    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool,
+    MovePathTool, ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
     SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
     WriteFileTool, decide_permission_from_settings,
 };
@@ -2189,6 +2189,7 @@ impl Thread {
         ));
         self.add_tool(WebSearchTool);
         self.add_tool(BrowserTool);
+        self.add_tool(ModelFileTool);
 
         self.add_tool(AskUserTool);
 

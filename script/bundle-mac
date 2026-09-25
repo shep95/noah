@@ -58,6 +58,8 @@ export ZED_RELEASE_CHANNEL="${channel}"
 popd
 
 export ZED_BUNDLE=true
+# The release's build number, which noah's updater compares: the commit time.
+export NOAH_BUILD="${NOAH_BUILD:-$(git log -1 --format=%ct)}"
 export CARGO_BUNDLE_SKIP_BUILD=true
 
 cargo_bundle_version=$(cargo -q bundle --help 2>&1 | head -n 1 || echo "")
