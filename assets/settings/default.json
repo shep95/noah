@@ -320,6 +320,13 @@
   // 2. Never reduce motion:
   //    "off"
   "reduce_motion": "off",
+  // An image to paint behind the editor, as an absolute path. Unset, noah uses
+  // its own wallpaper. Choose one in Settings > Appearance > Background.
+  // "wallpaper": "/path/to/image.jpg",
+  // How visible the wallpaper is, from 0 (hidden) to 1 (full strength).
+  "wallpaper_opacity": 0.5,
+  // Whether the noah theme takes its colors from the wallpaper.
+  "wallpaper_adapts_theme": true,
   // Determines whether the focused panel follows the mouse location.
   "focus_follows_mouse": {
     "enabled": false,
@@ -1183,16 +1190,11 @@
     // Maximum content width in pixels when limit_content_width is enabled.
     // Content will be centered within the panel.
     "max_content_width": 850,
-    // The default model to use when creating new threads.
-    "default_model": {
-      // The provider to use.
-      "provider": "Venice",
-      // The model to use. shepherd's brain is about 45k tokens, so the default
-      // is a model with a 131k context window.
-      "model": "qwen3-235b",
-      // Whether thinking is enabled.
-      "enable_thinking": false,
-    },
+    // The default model for new threads. Unset, noah uses Venice's recommended
+    // model for tool use as soon as a Venice key is added; picking a model in
+    // the agent panel saves your choice here.
+    //
+    // "default_model": { "provider": "venice", "model": "<model id>" },
     // Additional parameters for language model requests. When making a request to a model, parameters will be taken
     // from the last entry in this list that matches the model's provider and name. In each entry, both provider
     // and model are optional, so that you can specify parameters for either one.
@@ -1283,6 +1285,7 @@
         "name": "Write",
         "enable_all_context_servers": true,
         "tools": {
+          "browser": true,
           "copy_path": true,
           "create_directory": true,
           "create_thread": true,
@@ -2650,95 +2653,11 @@
     "openai": {
       "api_url": "https://api.openai.com/v1",
     },
-    "openai_compatible": {
-      // noah: built-in Venice AI provider (OpenAI-compatible).
-      // Paste your Venice API key in the Agent panel > Settings > Venice.
-      // Your key stays on your machine and is sent only to Venice.
-      // Venice exposes many models; this seeds a curated set. Add any Venice
-      // model id here (name = the exact id Venice reports at GET /models).
-      "Venice": {
-        "api_url": "https://api.venice.ai/api/v1",
-        "available_models": [
-          {
-            "name": "llama-3.3-70b",
-            "display_name": "Venice · Llama 3.3 70B",
-            "max_tokens": 65536,
-            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "llama-3.1-405b",
-            "display_name": "Venice · Llama 3.1 405B",
-            "max_tokens": 65536,
-            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "llama-3.2-3b",
-            "display_name": "Venice · Llama 3.2 3B (fast)",
-            "max_tokens": 131072,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "qwen-2.5-coder-32b",
-            "display_name": "Venice · Qwen 2.5 Coder 32B",
-            "max_tokens": 32768,
-            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "qwen3-235b",
-            "display_name": "Venice · Qwen3 235B",
-            "max_tokens": 131072,
-            "capabilities": { "tools": true, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "qwen3-4b",
-            "display_name": "Venice · Qwen3 4B (fast)",
-            "max_tokens": 32768,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "mistral-31-24b",
-            "display_name": "Venice · Mistral 3.1 24B (vision)",
-            "max_tokens": 131072,
-            "capabilities": { "tools": true, "images": true, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "qwen-2.5-vl",
-            "display_name": "Venice · Qwen 2.5 VL (vision)",
-            "max_tokens": 32768,
-            "capabilities": { "tools": false, "images": true, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "deepseek-r1-671b",
-            "display_name": "Venice · DeepSeek R1 671B (reasoning)",
-            "max_tokens": 131072,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false, "interleaved_reasoning": true }
-          },
-          {
-            "name": "deepseek-coder-v2-lite",
-            "display_name": "Venice · DeepSeek Coder V2 Lite",
-            "max_tokens": 131072,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "qwen-2.5-qwq-32b",
-            "display_name": "Venice · QwQ 32B (reasoning)",
-            "max_tokens": 32768,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false, "interleaved_reasoning": true }
-          },
-          {
-            "name": "dolphin-2.9.2-qwen2-72b",
-            "display_name": "Venice · Dolphin 72B (uncensored)",
-            "max_tokens": 32768,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          },
-          {
-            "name": "venice-uncensored",
-            "display_name": "Venice · Uncensored",
-            "max_tokens": 32768,
-            "capabilities": { "tools": false, "images": false, "parallel_tool_calls": false, "prompt_cache_key": false }
-          }
-        ]
-      }
+    "openai_compatible": {},
+    // noah talks to Venice directly: your key stays on this machine and is sent
+    // only to Venice, and the model list is read live from Venice's API.
+    "venice": {
+      "api_url": "https://api.venice.ai/api/v1",
     },
     "opencode": {
       "api_url": "https://opencode.ai/zen",

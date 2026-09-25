@@ -174,7 +174,7 @@ pub struct WorkspaceSettingsContent {
     pub focus_follows_mouse: Option<FocusFollowsMouse>,
     /// Path to a custom editor wallpaper image (absolute path, or a path under a
     /// project root). When set, noah paints it behind the workspace instead of the
-    /// bundled noah wallpaper, and adapts the theme palette to it on startup.
+    /// bundled noah wallpaper, and adapts the theme palette to it.
     ///
     /// Default: none (uses the bundled noah wallpaper)
     pub wallpaper: Option<String>,
@@ -182,6 +182,11 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: 0.5
     pub wallpaper_opacity: Option<f32>,
+    /// Whether the noah theme takes its colors from the wallpaper. Only the
+    /// hue and saturation change; brightness and contrast stay as designed.
+    ///
+    /// Default: true
+    pub wallpaper_adapts_theme: Option<bool>,
 }
 
 #[with_fallible_options]

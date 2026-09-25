@@ -1111,6 +1111,7 @@ impl VsCodeSettings {
             focus_follows_mouse: None,
             wallpaper: None,
             wallpaper_opacity: None,
+            wallpaper_adapts_theme: None,
         }
     }
 

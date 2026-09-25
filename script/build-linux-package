@@ -12,8 +12,8 @@ cd "$(dirname "$0")/.."
 VERSION="${1:-$(script/get-crate-version zed)}"
 ARCH="$(uname -m)"
 case "$ARCH" in
-    x86_64) DEB_ARCH=amd64 ;;
-    aarch64) DEB_ARCH=arm64 ;;
+    x86_64) DEB_ARCH=amd64; BROWSER_PLATFORM=linux-x64 ;;
+    aarch64) DEB_ARCH=arm64; BROWSER_PLATFORM=linux-arm64 ;;
     *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
@@ -46,6 +46,8 @@ mkdir -p "$app/bin" "$app/libexec" "$app/lib" \
 cp "$release_dir/zed" "$app/libexec/zed-editor"
 cp "$release_dir/cli" "$app/bin/noah"
 strip "$app/libexec/zed-editor" "$app/bin/noah"
+# shepherd's browser: the editor looks for agent-browser beside itself.
+script/fetch-agent-browser "$BROWSER_PLATFORM" "$app/libexec/agent-browser"
 
 # Ship the non-system libraries the editor links against, the same set Zed's
 # own bundle ships; base libraries every desktop already has are left out.

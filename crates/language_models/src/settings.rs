@@ -10,7 +10,7 @@ use crate::provider::{
     mistral::MistralSettings, ollama::OllamaSettings, open_ai::OpenAiSettings,
     open_ai_compatible::OpenAiCompatibleSettings, open_router, open_router::OpenRouterSettings,
     opencode, opencode::OpenCodeSettings, resolve_custom_headers,
-    vercel_ai_gateway::VercelAiGatewaySettings, x_ai::XAiSettings,
+    venice::VeniceSettings, vercel_ai_gateway::VercelAiGatewaySettings, x_ai::XAiSettings,
 };
 
 #[derive(Debug, RegisterSetting)]
@@ -28,6 +28,7 @@ pub struct AllLanguageModelSettings {
     pub open_router: OpenRouterSettings,
     pub openai: OpenAiSettings,
     pub openai_compatible: HashMap<Arc<str>, OpenAiCompatibleSettings>,
+    pub venice: VeniceSettings,
     pub vercel_ai_gateway: VercelAiGatewaySettings,
     pub x_ai: XAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
@@ -191,6 +192,12 @@ impl settings::Settings for AllLanguageModelSettings {
                     )
                 })
                 .collect(),
+            venice: VeniceSettings {
+                api_url: language_models
+                    .venice
+                    .and_then(|venice| venice.api_url)
+                    .unwrap_or_default(),
+            },
             vercel_ai_gateway: VercelAiGatewaySettings {
                 api_url: vercel_ai_gateway.api_url.unwrap(),
                 available_models: vercel_ai_gateway.available_models.unwrap_or_default(),

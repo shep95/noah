@@ -12,6 +12,8 @@ It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and exte
 - **shepherd** reads your project's aesthetics, architecture, and code conventions, then
   matches your patterns.
 - Custom editor wallpaper: the UI palette adapts to the image you choose.
+- A real browser inside noah: shepherd can open pages, read them, click and fill forms, and you
+  watch it live in the browser room (ctrl-alt-6) and can take over at any time.
 
 Community: [Discord](https://discord.gg/M9hnebRwvk) · [asherin.com](https://asherin.com)
 
@@ -47,3 +49,7 @@ cargo build --release -p zed
 
 noah stands on the shoulders of [Zed](https://zed.dev) by Zed Industries, licensed under
 GPL-3.0 / Apache-2.0. See `LICENSE-GPL` and `LICENSE-APACHE`. This fork retains those licenses.
+
+shepherd's browser is [agent-browser](https://github.com/vercel-labs/agent-browser) by Vercel
+Labs, Apache-2.0. noah's installers include its binary unchanged, with its license alongside
+(`script/fetch-agent-browser` pins and verifies the release).

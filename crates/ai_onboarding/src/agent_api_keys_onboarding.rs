@@ -132,7 +132,7 @@ impl RenderOnce for ApiKeysWithoutProviders {
                     .child(Divider::horizontal()),
             )
             .child(List::new().child(ListBulletItem::new(
-                "Venice is set up already. Paste its key, or connect Ollama for local models.",
+                "Paste your Venice API key and every Venice model appears, or connect Ollama for local models.",
             )))
             .child(
                 Button::new("configure-providers", "set up models")

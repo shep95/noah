@@ -187,18 +187,24 @@ impl LanguageModelRegistry {
     }
 
     pub fn providers(&self) -> Vec<Arc<dyn LanguageModelProvider>> {
-        let zed_provider_id = LanguageModelProviderId("zed.dev".into());
+        // Venice is noah's own provider, so it leads every list and is the
+        // first authenticated provider considered for the fallback model.
+        let leading_provider_ids = [
+            LanguageModelProviderId("zed.dev".into()),
+            LanguageModelProviderId("venice".into()),
+        ];
         let mut providers = Vec::with_capacity(self.providers.len());
-        if let Some(provider) = self.providers.get(&zed_provider_id) {
-            providers.push(provider.clone());
-        }
-        providers.extend(self.providers.values().filter_map(|p| {
-            if p.id() != zed_provider_id {
-                Some(p.clone())
-            } else {
-                None
+        for provider_id in &leading_provider_ids {
+            if let Some(provider) = self.providers.get(provider_id) {
+                providers.push(provider.clone());
             }
-        }));
+        }
+        providers.extend(
+            self.providers
+                .values()
+                .filter(|provider| !leading_provider_ids.contains(&provider.id()))
+                .cloned(),
+        );
         providers
     }
 

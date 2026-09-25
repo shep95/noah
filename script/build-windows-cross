@@ -44,6 +44,8 @@ mkdir -p "$stage/bin" "$stage/x64"
 cp "target/$TARGET/release/zed.exe" "$stage/noah.exe"
 cp "target/$TARGET/release/cli.exe" "$stage/bin/zed.exe"
 x86_64-w64-mingw32-strip "$stage/noah.exe" "$stage/bin/zed.exe" || true
+# shepherd's browser: noah looks for agent-browser.exe beside noah.exe.
+script/fetch-agent-browser win32-x64 "$stage/agent-browser.exe"
 
 # ConPTY gives the integrated terminal full functionality. crates/zed/build.rs
 # fetches it only on Windows hosts, so fetch the same package here.

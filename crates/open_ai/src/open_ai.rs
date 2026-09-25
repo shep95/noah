@@ -1096,12 +1096,12 @@ where
     .boxed())
 }
 
-pub async fn stream_completion(
+pub async fn stream_completion<RequestBody: Serialize>(
     client: &dyn HttpClient,
     provider_name: &str,
     api_url: &str,
     api_key: &str,
-    request: Request,
+    request: RequestBody,
     extra_headers: &CustomHeaders,
 ) -> Result<BoxStream<'static, Result<ResponseStreamEvent>>, RequestError> {
     let events = stream_chat_completion(

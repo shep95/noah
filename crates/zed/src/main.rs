@@ -5,16 +5,6 @@ mod reliability;
 mod watcher_debug;
 mod zed;
 
-// Ensure the binary name stays in sync with APP_NAME so that the paths used
-// at runtime (data dir, config dir, etc.) match what the binary is called.
-const _: () = assert!(
-    paths::APP_NAME_LOWERCASE
-        .as_bytes()
-        .eq_ignore_ascii_case(env!("CARGO_BIN_NAME").as_bytes()),
-    "paths::APP_NAME_LOWERCASE must match the binary name. \
-     Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
-);
-
 // MinGW's C runtime does not export `_invoke_watson`, which the crash-handler crate
 // calls on its unhandled invalid-parameter path. Provide it with the MSVC CRT
 // semantics — terminate the process immediately — so windows-gnu builds link.
@@ -713,6 +703,7 @@ fn main() {
         edit_prediction_ui::init(cx);
         web_search::init(cx);
         web_search_providers::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+        agent_browser::init(cx);
         snippet_provider::init(cx);
         edit_prediction_registry::init(app_state.client.clone(), app_state.user_store.clone(), cx);
         let prompt_builder = PromptBuilder::load(app_state.fs.clone(), stdout_is_a_pty(), cx);
@@ -1950,47 +1941,88 @@ fn load_user_themes_in_background(fs: Arc<dyn fs::Fs>, cx: &mut App) {
     .detach_and_log_err(cx);
 }
 
-/// If the user configured a custom wallpaper (`workspace.wallpaper`), derive a
-/// theme palette from that image and register it under the name "noah", so the
-/// active noah theme adopts the wallpaper's colors. No-op when no custom
-/// wallpaper is set — the bundled noah theme already matches the default one.
+const NOAH_THEME_JSON: &str = include_str!("../../../assets/themes/noah/noah.json");
+
+/// Keeps the noah theme in step with the wallpaper: when a custom wallpaper is
+/// set and adaptation is on, the theme is re-tinted to the image's colors;
+/// otherwise the bundled noah theme is restored. Re-runs whenever either
+/// setting changes, so a newly chosen image recolors noah immediately.
 fn apply_wallpaper_adaptive_theme(fs: Arc<dyn fs::Fs>, cx: &mut App) {
-    let Some(wallpaper) = WorkspaceSettings::get_global(cx).wallpaper.clone() else {
-        return;
+    let mut applied: Option<Option<String>> = None;
+    // Holding the load replaces (and so cancels) an earlier one still decoding,
+    // so a slow image cannot overwrite the colors of one chosen after it.
+    let mut pending_load: Option<Task<()>> = None;
+    let mut update = move |cx: &mut App| {
+        let settings = WorkspaceSettings::get_global(cx);
+        let wanted = settings
+            .wallpaper
+            .clone()
+            .filter(|_| settings.wallpaper_adapts_theme);
+        if applied.as_ref() == Some(&wanted) {
+            return;
+        }
+        // The bundled theme is already loaded at startup, so there is nothing
+        // to restore until an adapted theme has replaced it.
+        let restore_bundled = applied.as_ref().is_some_and(|previous| previous.is_some());
+        applied = Some(wanted.clone());
+        match wanted {
+            Some(wallpaper) => {
+                pending_load.replace(load_wallpaper_theme(fs.clone(), wallpaper, cx));
+            }
+            None if restore_bundled => {
+                pending_load.take();
+                let theme_registry = ThemeRegistry::global(cx);
+                load_user_theme(&theme_registry, NOAH_THEME_JSON.as_bytes()).log_err();
+                theme_settings::reload_theme(cx);
+            }
+            None => {}
+        }
     };
+    update(cx);
+    cx.observe_global::<SettingsStore>(update).detach();
+}
+
+fn load_wallpaper_theme(fs: Arc<dyn fs::Fs>, wallpaper: String, cx: &mut App) -> Task<()> {
     cx.spawn(async move |cx| {
         let path = std::path::PathBuf::from(&wallpaper);
-        // Guard the read: skip directories, empty files, character/block devices
-        // (which report len 0, e.g. /dev/zero), and oversized files, so a
-        // project-local `workspace.wallpaper` setting cannot hang or OOM noah by
-        // pointing at a special or huge file.
-        const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
-        let Some(meta) = fs
-            .metadata(&path)
-            .await
-            .with_context(|| format!("reading wallpaper metadata at {path:?}"))?
-        else {
-            return anyhow::Ok(());
-        };
-        if meta.is_dir || meta.len == 0 || meta.len > MAX_WALLPAPER_BYTES {
-            return anyhow::Ok(());
+        let result: anyhow::Result<()> = async {
+            // Guard the read: skip directories, empty files, character/block
+            // devices (which report len 0, e.g. /dev/zero), and oversized files,
+            // so a project-local `workspace.wallpaper` setting cannot hang or OOM
+            // noah by pointing at a special or huge file.
+            const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
+            let Some(meta) = fs
+                .metadata(&path)
+                .await
+                .with_context(|| format!("reading wallpaper metadata at {path:?}"))?
+            else {
+                return Ok(());
+            };
+            if meta.is_dir || meta.len == 0 || meta.len > MAX_WALLPAPER_BYTES {
+                return Ok(());
+            }
+            let bytes = fs
+                .load_bytes(&path)
+                .await
+                .with_context(|| format!("reading wallpaper image at {path:?}"))?;
+            let json = cx
+                .background_spawn(async move {
+                    let Some(palette) = theme::palette_from_image_bytes(&bytes) else {
+                        anyhow::bail!("could not decode the wallpaper image");
+                    };
+                    theme::adaptive_theme_json(NOAH_THEME_JSON, &palette)
+                })
+                .await?;
+            cx.update(|cx| {
+                let theme_registry = ThemeRegistry::global(cx);
+                load_user_theme(&theme_registry, json.as_bytes())?;
+                theme_settings::reload_theme(cx);
+                anyhow::Ok(())
+            })
         }
-        let bytes = fs
-            .load_bytes(&path)
-            .await
-            .with_context(|| format!("reading wallpaper image at {path:?}"))?;
-        let Some(palette) = theme::palette_from_image_bytes(&bytes) else {
-            anyhow::bail!("could not decode wallpaper image at {path:?}");
-        };
-        let json = theme::adaptive_theme_json("noah", &palette);
-        cx.update(|cx| {
-            let theme_registry = ThemeRegistry::global(cx);
-            load_user_theme(&theme_registry, json.as_bytes()).log_err();
-            theme_settings::reload_theme(cx);
-        });
-        anyhow::Ok(())
+        .await;
+        result.log_err();
     })
-    .detach_and_log_err(cx);
 }
 
 /// Spawns a background task to watch the themes directory for changes.

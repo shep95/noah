@@ -4688,6 +4688,87 @@ fn open_user_settings_in_workspace(
     .detach();
 }
 
+/// The largest image accepted as a background; bigger files are almost always
+/// a wrong pick, and decoding them would stall.
+const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Asks for an image, stores a metadata-free copy of it in noah's config
+/// folder and makes that copy the background.
+pub(crate) fn choose_wallpaper(window: &mut Window, cx: &mut App) {
+    let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: Some("Use as Background".into()),
+    });
+    let fs = <dyn fs::Fs>::global(cx);
+    window
+        .spawn(cx, async move |cx| {
+            let stored: Result<Option<PathBuf>> = async {
+                let Some(source) = chosen.await??.and_then(|mut paths| paths.pop()) else {
+                    return Ok(None);
+                };
+                let stored = cx
+                    .background_spawn(async move { store_wallpaper(&source) })
+                    .await?;
+                Ok(Some(stored))
+            }
+            .await;
+            match stored {
+                Ok(Some(stored)) => cx.update(|_window, cx| {
+                    SettingsStore::global(cx).update_settings_file(fs, move |content, _| {
+                        content.workspace.wallpaper = Some(stored.to_string_lossy().into_owned());
+                    });
+                }),
+                Ok(None) => Ok(()),
+                Err(error) => {
+                    let detail = format!("{error:#}");
+                    let answer = cx.update(|window, cx| {
+                        window.prompt(
+                            gpui::PromptLevel::Warning,
+                            "noah couldn't use that image",
+                            Some(&detail),
+                            &["ok"],
+                            cx,
+                        )
+                    })?;
+                    answer.await.log_err();
+                    Ok(())
+                }
+            }
+        })
+        .detach_and_log_err(cx);
+}
+
+fn store_wallpaper(source: &std::path::Path) -> Result<PathBuf> {
+    let metadata = std::fs::metadata(source)
+        .with_context(|| format!("couldn't read {}", source.display()))?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_WALLPAPER_BYTES {
+        anyhow::bail!("choose an image file smaller than 64 MB");
+    }
+    let bytes = std::fs::read(source)
+        .with_context(|| format!("couldn't read {}", source.display()))?;
+    let sanitized = theme::sanitize_wallpaper_image(&bytes)
+        .context("that file isn't an image noah can read")?;
+
+    let directory = paths::config_dir().join("wallpapers");
+    std::fs::create_dir_all(&directory)?;
+    // Images are cached by path, so each chosen image gets a new name; reusing
+    // one would keep showing the previous picture.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis();
+    let destination = directory.join(format!("wallpaper-{stamp}.jpg"));
+    std::fs::write(&destination, sanitized)?;
+    for entry in std::fs::read_dir(&directory)? {
+        let path = entry?.path();
+        if path != destination {
+            std::fs::remove_file(&path).log_err();
+        }
+    }
+    Ok(destination)
+}
+
 fn update_settings_file(
     file: SettingsUiFile,
     file_name: Option<&'static str>,

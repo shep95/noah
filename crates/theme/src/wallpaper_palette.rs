@@ -1,11 +1,5 @@
-//! Derive a coherent dark editor theme from a wallpaper image's colors.
-//!
-//! The image is decoded elsewhere (the app uses the `image` crate); this module
-//! stays dependency-free so it is cheap to compile and unit-test. It takes raw
-//! RGBA8 pixels, samples them into dark / mid / light buckets, and emits a
-//! partial theme-family JSON string. Chrome and syntax colors are set; every
-//! other theme key falls back to defaults during theme refinement, so a short
-//! JSON is a valid theme.
+//! Adapt the noah theme to a wallpaper image's colors, and prepare chosen
+//! wallpapers for storage.
 
 /// A sampled color, 0-255 per channel.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,25 +29,12 @@ fn luminance(c: Rgb) -> f32 {
     0.2126 * c.r as f32 + 0.7152 * c.g as f32 + 0.0722 * c.b as f32
 }
 
-fn mix(from: Rgb, to: Rgb, amount: f32) -> Rgb {
-    let channel = |a: u8, b: u8| to_u8(a as f32 + (b as f32 - a as f32) * amount);
-    Rgb {
-        r: channel(from.r, to.r),
-        g: channel(from.g, to.g),
-        b: channel(from.b, to.b),
-    }
-}
-
 fn clampf(v: f32, lo: f32, hi: f32) -> f32 {
     v.max(lo).min(hi)
 }
 
 fn to_u8(v: f32) -> u8 {
     clampf(v, 0.0, 255.0).round() as u8
-}
-
-fn hex_rgba(c: Rgb, alpha: u8) -> String {
-    format!("#{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, alpha)
 }
 
 /// Sample RGBA8 pixels (4 bytes per pixel) into a wallpaper palette. Robust to
@@ -141,159 +122,230 @@ pub fn sample_palette(rgba: &[u8]) -> WallpaperPalette {
     }
 }
 
-/// Build a partial theme-family JSON (a single dark theme named `name`) whose
-/// chrome colors are derived from `palette`. The editor and surface backgrounds
-/// are semi-transparent so a wallpaper painted behind the workspace shows
-/// through while code stays legible.
-pub fn adaptive_theme_json(name: &str, palette: &WallpaperPalette) -> String {
-    // Push the background toward near-black while keeping the image's hue tint.
-    let bg_base = Rgb {
-        r: to_u8(palette.dark.r as f32 * 0.35 + 4.0),
-        g: to_u8(palette.dark.g as f32 * 0.40 + 5.0),
-        b: to_u8(palette.dark.b as f32 * 0.35 + 4.0),
-    };
-    let bg_surface = Rgb {
-        r: to_u8(bg_base.r as f32 * 1.6 + 4.0),
-        g: to_u8(bg_base.g as f32 * 1.6 + 5.0),
-        b: to_u8(bg_base.b as f32 * 1.6 + 4.0),
-    };
-    let bg_elevated = Rgb {
-        r: to_u8(bg_surface.r as f32 * 1.4 + 4.0),
-        g: to_u8(bg_surface.g as f32 * 1.4 + 5.0),
-        b: to_u8(bg_surface.b as f32 * 1.4 + 4.0),
-    };
-    // Text pulled from the light bucket into a legible range.
-    let text = Rgb {
-        r: to_u8(clampf(palette.light.r as f32, 170.0, 224.0)),
-        g: to_u8(clampf(palette.light.g as f32, 180.0, 230.0)),
-        b: to_u8(clampf(palette.light.b as f32, 170.0, 224.0)),
-    };
-    let text_muted = Rgb {
-        r: to_u8(text.r as f32 * 0.62),
-        g: to_u8(text.g as f32 * 0.64),
-        b: to_u8(text.b as f32 * 0.62),
-    };
-    // Accent kept in a mid range so it reads against both bg and text.
-    let accent = Rgb {
-        r: to_u8(clampf(palette.accent.r as f32, 40.0, 150.0)),
-        g: to_u8(clampf(palette.accent.g as f32, 60.0, 170.0)),
-        b: to_u8(clampf(palette.accent.b as f32, 40.0, 150.0)),
-    };
-    let border = Rgb {
-        r: to_u8((bg_elevated.r as f32 + accent.r as f32) * 0.5),
-        g: to_u8((bg_elevated.g as f32 + accent.g as f32) * 0.5),
-        b: to_u8((bg_elevated.b as f32 + accent.b as f32) * 0.5),
-    };
+/// The mid tone of the bundled wallpaper (`assets/images/noah/wallpaper.jpg`)
+/// as [`sample_palette`] measures it. The noah theme was tuned against that
+/// image, so adapting to another wallpaper is a shift from this tint to the new
+/// image's tint.
+const BUNDLED_WALLPAPER_TINT: Rgb = Rgb {
+    r: 90,
+    g: 114,
+    b: 105,
+};
 
-    // Syntax stays inside the wallpaper's own colors. The one fixed warm note
-    // keeps literals distinguishable when an image has almost no hue range.
-    let warm = Rgb {
-        r: 200,
-        g: 176,
-        b: 112,
+/// Theme keys whose color carries meaning (errors, warnings, git states, the
+/// approval accent) keep their hue, so a red wallpaper cannot make an error
+/// look like success.
+const SEMANTIC_KEY_PREFIXES: &[&str] = &[
+    "error",
+    "warning",
+    "success",
+    "created",
+    "deleted",
+    "modified",
+    "conflict",
+    "renamed",
+    "version_control.",
+];
+
+/// Re-tints a theme family (the bundled noah theme, as JSON) toward the colors
+/// of `palette`. Every color is rotated by the hue difference between the
+/// bundled wallpaper and the new one and its saturation scaled to match, while
+/// its luminance is held fixed, so layering, alpha and text contrast stay
+/// exactly as designed. Semantic colors are left alone.
+pub fn adaptive_theme_json(template: &str, palette: &WallpaperPalette) -> anyhow::Result<String> {
+    let mut theme_family: serde_json::Value = serde_json::from_str(template)?;
+    let shift = TintShift::between(BUNDLED_WALLPAPER_TINT, palette.mid);
+    let themes = theme_family
+        .get_mut("themes")
+        .and_then(|themes| themes.as_array_mut())
+        .ok_or_else(|| anyhow::anyhow!("theme family has no themes"))?;
+    for theme in themes {
+        if let Some(style) = theme.get_mut("style").and_then(|style| style.as_object_mut()) {
+            for (key, value) in style.iter_mut() {
+                if !SEMANTIC_KEY_PREFIXES
+                    .iter()
+                    .any(|prefix| key.starts_with(prefix))
+                {
+                    retint_value(value, &shift);
+                }
+            }
+        }
+    }
+    Ok(serde_json::to_string(&theme_family)?)
+}
+
+struct TintShift {
+    hue_degrees: f32,
+    saturation_scale: f32,
+}
+
+impl TintShift {
+    fn between(from: Rgb, to: Rgb) -> Self {
+        let (from_hue, from_saturation, _) = rgb_to_hsl(from);
+        let (to_hue, to_saturation, _) = rgb_to_hsl(to);
+        let saturation_scale = if from_saturation > 0.01 {
+            // Capped so a vivid wallpaper tints the chrome without turning the
+            // near-black layers into saturated color.
+            (to_saturation / from_saturation).clamp(0.0, 2.5)
+        } else {
+            1.0
+        };
+        Self {
+            hue_degrees: to_hue - from_hue,
+            saturation_scale,
+        }
+    }
+
+    fn apply(&self, color: Rgb) -> Rgb {
+        let target_luminance = relative_luminance(color);
+        let (hue, saturation, _) = rgb_to_hsl(color);
+        let hue = (hue + self.hue_degrees).rem_euclid(360.0);
+        let saturation = (saturation * self.saturation_scale).min(1.0);
+        // Lightness is solved for rather than copied: the same HSL lightness is
+        // darker in blue than in green, and holding luminance is what keeps
+        // every contrast ratio of the original theme.
+        let (mut low, mut high) = (0.0f32, 1.0f32);
+        for _ in 0..24 {
+            let lightness = (low + high) / 2.0;
+            if relative_luminance(hsl_to_rgb(hue, saturation, lightness)) < target_luminance {
+                low = lightness;
+            } else {
+                high = lightness;
+            }
+        }
+        hsl_to_rgb(hue, saturation, (low + high) / 2.0)
+    }
+}
+
+fn retint_value(value: &mut serde_json::Value, shift: &TintShift) {
+    match value {
+        serde_json::Value::String(text) => {
+            if let Some((color, alpha)) = parse_hex_color(text) {
+                *text = hex_color(shift.apply(color), alpha);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                retint_value(item, shift);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for item in map.values_mut() {
+                retint_value(item, shift);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn parse_hex_color(text: &str) -> Option<(Rgb, Option<u8>)> {
+    let digits = text.strip_prefix('#')?;
+    if !digits.is_ascii() || (digits.len() != 6 && digits.len() != 8) {
+        return None;
+    }
+    let channel = |index: usize| u8::from_str_radix(digits.get(index..index + 2)?, 16).ok();
+    let color = Rgb {
+        r: channel(0)?,
+        g: channel(2)?,
+        b: channel(4)?,
     };
-    let keyword = mix(text, accent, 0.45);
-    let string = mix(accent, text, 0.35);
-    let literal = mix(text, warm, 0.5);
-    let type_name = mix(text, accent, 0.25);
-    let property = mix(text, palette.mid, 0.25);
-    let variable = mix(text, text_muted, 0.3);
-    let comment = mix(text_muted, text, 0.2);
+    let alpha = if digits.len() == 8 {
+        Some(channel(6)?)
+    } else {
+        None
+    };
+    Some((color, alpha))
+}
 
-    // Semi-transparent so the wallpaper shows through the editor/panels.
-    let translucent = 0xC0u8;
-    let opaque = 0xFFu8;
+fn hex_color(color: Rgb, alpha: Option<u8>) -> String {
+    match alpha {
+        Some(alpha) => format!("#{:02x}{:02x}{:02x}{:02x}", color.r, color.g, color.b, alpha),
+        None => format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b),
+    }
+}
 
-    format!(
-        r##"{{
-  "$schema": "https://zed.dev/schema/themes/v0.2.0.json",
-  "name": "{name}",
-  "author": "#houseofasher / asherin.com",
-  "themes": [
-    {{
-      "name": "{name}",
-      "appearance": "dark",
-      "style": {{
-        "background": "{bg_base_o}",
-        "editor.background": "{bg_base_t}",
-        "editor.gutter.background": "{bg_base_t}",
-        "editor.foreground": "{text_o}",
-        "surface.background": "{bg_surface_t}",
-        "elevated_surface.background": "{bg_elevated_o}",
-        "panel.background": "{bg_surface_t}",
-        "status_bar.background": "{bg_base_o}",
-        "title_bar.background": "{bg_base_o}",
-        "toolbar.background": "{bg_base_t}",
-        "tab_bar.background": "{bg_base_o}",
-        "tab.active_background": "{bg_base_t}",
-        "tab.inactive_background": "{bg_base_o}",
-        "terminal.background": "{bg_base_t}",
-        "terminal.foreground": "{text_o}",
-        "text": "{text_o}",
-        "text.muted": "{text_muted_o}",
-        "text.accent": "{accent_o}",
-        "icon": "{text_o}",
-        "icon.muted": "{text_muted_o}",
-        "icon.accent": "{accent_o}",
-        "border": "{border_o}",
-        "border.variant": "{bg_elevated_o}",
-        "border.focused": "{accent_o}",
-        "border.selected": "{accent_o}",
-        "element.hover": "{bg_elevated_o}",
-        "element.selected": "{bg_elevated_o}",
-        "link_text.hover": "{accent_o}",
-        "players": [
-          {{ "cursor": "{text_o}", "background": "{text_o}", "selection": "{selection}" }}
-        ],
-        "syntax": {{
-          "keyword": {{ "color": "{keyword}" }},
-          "preproc": {{ "color": "{keyword}" }},
-          "function": {{ "color": "{text_o}" }},
-          "constructor": {{ "color": "{text_o}" }},
-          "variant": {{ "color": "{text_o}" }},
-          "type": {{ "color": "{type_name}" }},
-          "enum": {{ "color": "{type_name}" }},
-          "tag": {{ "color": "{type_name}" }},
-          "attribute": {{ "color": "{type_name}" }},
-          "string": {{ "color": "{string}" }},
-          "text.literal": {{ "color": "{string}" }},
-          "number": {{ "color": "{literal}" }},
-          "boolean": {{ "color": "{literal}" }},
-          "constant": {{ "color": "{literal}" }},
-          "string.escape": {{ "color": "{literal}" }},
-          "string.special": {{ "color": "{literal}" }},
-          "property": {{ "color": "{property}" }},
-          "variable.parameter": {{ "color": "{property}" }},
-          "variable": {{ "color": "{variable}" }},
-          "punctuation": {{ "color": "{text_muted_o}" }},
-          "operator": {{ "color": "{text_muted_o}" }},
-          "comment": {{ "color": "{comment}", "font_style": "italic" }},
-          "comment.doc": {{ "color": "{comment}", "font_style": "italic" }},
-          "link_text": {{ "color": "{accent_o}", "font_style": "italic" }},
-          "title": {{ "color": "{text_o}", "font_weight": 600 }}
-        }}
-      }}
-    }}
-  ]
-}}"##,
-        name = name,
-        bg_base_o = hex_rgba(bg_base, opaque),
-        bg_base_t = hex_rgba(bg_base, translucent),
-        bg_surface_t = hex_rgba(bg_surface, translucent),
-        bg_elevated_o = hex_rgba(bg_elevated, opaque),
-        text_o = hex_rgba(text, opaque),
-        text_muted_o = hex_rgba(text_muted, opaque),
-        accent_o = hex_rgba(accent, opaque),
-        border_o = hex_rgba(border, opaque),
-        selection = hex_rgba(text, 0x24),
-        keyword = hex_rgba(keyword, opaque),
-        string = hex_rgba(string, opaque),
-        literal = hex_rgba(literal, opaque),
-        type_name = hex_rgba(type_name, opaque),
-        property = hex_rgba(property, opaque),
-        variable = hex_rgba(variable, opaque),
-        comment = hex_rgba(comment, opaque),
-    )
+fn relative_luminance(color: Rgb) -> f32 {
+    let linear = |channel: u8| {
+        let value = channel as f32 / 255.0;
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
+}
+
+fn rgb_to_hsl(color: Rgb) -> (f32, f32, f32) {
+    let red = color.r as f32 / 255.0;
+    let green = color.g as f32 / 255.0;
+    let blue = color.b as f32 / 255.0;
+    let max = red.max(green).max(blue);
+    let min = red.min(green).min(blue);
+    let lightness = (max + min) / 2.0;
+    let delta = max - min;
+    if delta <= f32::EPSILON {
+        return (0.0, 0.0, lightness);
+    }
+    let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs());
+    let hue = if max == red {
+        60.0 * ((green - blue) / delta).rem_euclid(6.0)
+    } else if max == green {
+        60.0 * ((blue - red) / delta + 2.0)
+    } else {
+        60.0 * ((red - green) / delta + 4.0)
+    };
+    (hue, saturation.min(1.0), lightness)
+}
+
+fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> Rgb {
+    let chroma = (1.0 - (2.0 * lightness - 1.0).abs()) * saturation;
+    let sector = hue / 60.0;
+    let second = chroma * (1.0 - (sector.rem_euclid(2.0) - 1.0).abs());
+    let (red, green, blue) = match sector as u32 {
+        0 => (chroma, second, 0.0),
+        1 => (second, chroma, 0.0),
+        2 => (0.0, chroma, second),
+        3 => (0.0, second, chroma),
+        4 => (second, 0.0, chroma),
+        _ => (chroma, 0.0, second),
+    };
+    let offset = lightness - chroma / 2.0;
+    Rgb {
+        r: to_u8((red + offset) * 255.0),
+        g: to_u8((green + offset) * 255.0),
+        b: to_u8((blue + offset) * 255.0),
+    }
+}
+
+/// The longest edge a chosen wallpaper is stored at. Larger images only cost
+/// memory and GPU upload time behind a translucent editor.
+const MAX_WALLPAPER_EDGE: u32 = 3840;
+
+/// Decodes a chosen wallpaper and re-encodes it as a plain JPEG, which drops
+/// every piece of metadata the original carried (EXIF, GPS, camera model,
+/// timestamps). The EXIF orientation is applied first so phone photos keep
+/// their intended rotation once the tag is gone.
+pub fn sanitize_wallpaper_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    use image::ImageDecoder as _;
+
+    let mut decoder = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()?
+        .into_decoder()?;
+    let orientation = decoder.orientation()?;
+    let mut image = image::DynamicImage::from_decoder(decoder)?;
+    image.apply_orientation(orientation);
+    if image.width().max(image.height()) > MAX_WALLPAPER_EDGE {
+        image = image.resize(
+            MAX_WALLPAPER_EDGE,
+            MAX_WALLPAPER_EDGE,
+            image::imageops::FilterType::Lanczos3,
+        );
+    }
+    let mut encoded = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 90)
+        .encode_image(&image.to_rgb8())?;
+    Ok(encoded)
 }
 
 /// Decode image bytes (jpeg / png / webp / etc.) and derive a wallpaper palette.
@@ -327,23 +379,131 @@ mod tests {
         assert!(luminance(p.light) >= 165.0);
     }
 
+    const NOAH_THEME: &str = include_str!("../../../assets/themes/noah/noah.json");
+
+    fn style_color(json: &serde_json::Value, key: &str) -> (Rgb, Option<u8>) {
+        json["themes"][0]["style"][key]
+            .as_str()
+            .and_then(parse_hex_color)
+            .expect("color")
+    }
+
+    fn contrast(first: Rgb, second: Rgb) -> f32 {
+        let (first, second) = (relative_luminance(first), relative_luminance(second));
+        (first.max(second) + 0.05) / (first.min(second) + 0.05)
+    }
+
+    fn palette_with_mid(mid: Rgb) -> WallpaperPalette {
+        WallpaperPalette {
+            dark: mid,
+            mid,
+            light: mid,
+            accent: mid,
+        }
+    }
+
     #[test]
-    fn generates_valid_json() {
-        let p = sample_palette(&[60, 110, 70, 255, 5, 8, 5, 255, 210, 220, 205, 255]);
-        let json = adaptive_theme_json("noah (adaptive)", &p);
-        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
-        assert_eq!(parsed["name"], "noah (adaptive)");
-        assert_eq!(parsed["themes"][0]["appearance"], "dark");
-        assert!(
-            parsed["themes"][0]["style"]["syntax"]["keyword"]["color"]
+    fn bundled_tint_leaves_theme_unchanged() {
+        let adapted = adaptive_theme_json(NOAH_THEME, &palette_with_mid(BUNDLED_WALLPAPER_TINT))
+            .expect("adapts");
+        let original: serde_json::Value = serde_json::from_str(NOAH_THEME).expect("json");
+        let adapted: serde_json::Value = serde_json::from_str(&adapted).expect("json");
+        for key in ["background", "editor.background", "text", "border"] {
+            let (before, before_alpha) = style_color(&original, key);
+            let (after, after_alpha) = style_color(&adapted, key);
+            assert_eq!(before_alpha, after_alpha, "{key}");
+            for (a, b) in [(before.r, after.r), (before.g, after.g), (before.b, after.b)] {
+                assert!(a.abs_diff(b) <= 2, "{key}: {before:?} -> {after:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn adapts_hue_but_keeps_contrast_and_meaning() {
+        let blue = Rgb {
+            r: 70,
+            g: 96,
+            b: 150,
+        };
+        let adapted = adaptive_theme_json(NOAH_THEME, &palette_with_mid(blue)).expect("adapts");
+        let original: serde_json::Value = serde_json::from_str(NOAH_THEME).expect("json");
+        let adapted: serde_json::Value = serde_json::from_str(&adapted).expect("json");
+
+        let comment = |json: &serde_json::Value| {
+            json["themes"][0]["style"]["syntax"]["comment"]["color"]
                 .as_str()
-                .is_some_and(|color| color.starts_with('#'))
-        );
-        assert!(
-            parsed["themes"][0]["style"]["editor.background"]
-                .as_str()
-                .unwrap()
-                .starts_with('#')
-        );
+                .and_then(parse_hex_color)
+                .expect("comment")
+        };
+        assert_ne!(comment(&original), comment(&adapted));
+
+        let (background_before, _) = style_color(&original, "background");
+        let (background_after, _) = style_color(&adapted, "background");
+        let (text_before, _) = style_color(&original, "text");
+        let (text_after, _) = style_color(&adapted, "text");
+        let before = contrast(text_before, background_before);
+        let after = contrast(text_after, background_after);
+        assert!((before - after).abs() < 0.3, "{before} vs {after}");
+
+        assert_eq!(style_color(&original, "error"), style_color(&adapted, "error"));
+        assert_eq!(style_color(&original, "success"), style_color(&adapted, "success"));
+    }
+
+    #[test]
+    fn hsl_round_trips() {
+        for color in [
+            Rgb { r: 0, g: 0, b: 0 },
+            Rgb {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+            Rgb {
+                r: 111,
+                g: 157,
+                b: 120,
+            },
+            Rgb { r: 200, g: 40, b: 90 },
+        ] {
+            let (hue, saturation, lightness) = rgb_to_hsl(color);
+            let back = hsl_to_rgb(hue, saturation, lightness);
+            assert!(color.r.abs_diff(back.r) <= 1 && color.g.abs_diff(back.g) <= 1 && color.b.abs_diff(back.b) <= 1);
+        }
+    }
+
+    #[test]
+    fn sanitizing_strips_metadata_and_keeps_pixels() {
+        let mut png = Vec::new();
+        image::DynamicImage::new_rgb8(8, 4)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("encode");
+        let sanitized = sanitize_wallpaper_image(&png).expect("sanitizes");
+        let decoded = image::load_from_memory(&sanitized).expect("decodes");
+        assert_eq!((decoded.width(), decoded.height()), (8, 4));
+        assert_eq!(&sanitized[..2], &[0xff, 0xd8]);
+    }
+
+    #[test]
+    fn sanitizing_removes_exif_and_gps() {
+        let mut jpeg = Vec::new();
+        image::DynamicImage::new_rgb8(16, 16)
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .expect("encode");
+        // An APP1 Exif segment carrying a camera model and a GPS tag marker,
+        // spliced in right after the start-of-image marker.
+        let mut exif_payload = b"Exif\0\0MM\0*\0\0\0\x08".to_vec();
+        exif_payload.extend_from_slice(b"TestCam 9000 GPSLatitude 40.7484");
+        let segment_length = u16::try_from(exif_payload.len() + 2).expect("fits");
+        let mut with_exif = jpeg[..2].to_vec();
+        with_exif.extend_from_slice(&[0xff, 0xe1]);
+        with_exif.extend_from_slice(&segment_length.to_be_bytes());
+        with_exif.extend_from_slice(&exif_payload);
+        with_exif.extend_from_slice(&jpeg[2..]);
+        assert!(with_exif.windows(7).any(|window| window == b"TestCam"));
+
+        let sanitized = sanitize_wallpaper_image(&with_exif).expect("sanitizes");
+        assert!(!sanitized.windows(7).any(|window| window == b"TestCam"));
+        assert!(!sanitized.windows(4).any(|window| window == b"Exif"));
+        assert!(!sanitized.windows(3).any(|window| window == b"GPS"));
     }
 }

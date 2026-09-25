@@ -500,8 +500,24 @@ impl ApiKeyConfiguration {
             is_from_env_var,
             env_var_name,
             api_key_url,
+            status: None,
         }
     }
+
+    /// A line shown under a configured key, such as whether the provider
+    /// accepted it.
+    pub fn status(mut self, status: ApiKeyStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+}
+
+/// What a provider learned the last time it used its API key.
+#[derive(Clone)]
+pub enum ApiKeyStatus {
+    Checking,
+    Working(SharedString),
+    Failed(SharedString),
 }
 
 /// A live snapshot of a single-API-key provider's credential state, used by the
@@ -512,6 +528,7 @@ pub struct ApiKeyConfiguration {
     pub is_from_env_var: bool,
     pub env_var_name: SharedString,
     pub api_key_url: SharedString,
+    pub status: Option<ApiKeyStatus>,
 }
 
 /// The subtitle rendered beneath a provider's name when its configuration is

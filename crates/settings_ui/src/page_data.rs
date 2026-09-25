@@ -1583,8 +1583,91 @@ fn appearance_page() -> SettingsPage {
         ]
     }
 
+    fn background_section() -> [SettingsPageItem; 6] {
+        [
+            SettingsPageItem::SectionHeader("Background"),
+            SettingsPageItem::ActionLink(ActionLink {
+                title: "Background Image".into(),
+                description: Some(
+                    "Choose a photo or image to show behind your code. noah keeps its own copy with all metadata removed."
+                        .into(),
+                ),
+                button_text: "Choose Image".into(),
+                on_click: Arc::new(|_settings_window, window, cx| {
+                    crate::choose_wallpaper(window, cx);
+                }),
+                files: USER,
+            }),
+            SettingsPageItem::ActionLink(ActionLink {
+                title: "Use noah's Background".into(),
+                description: Some("Go back to the wallpaper noah ships with.".into()),
+                button_text: "Reset".into(),
+                on_click: Arc::new(|_settings_window, _window, cx| {
+                    cx.global::<settings::SettingsStore>().update_settings_file(
+                        <dyn fs::Fs>::global(cx),
+                        |settings_content, _| settings_content.workspace.wallpaper = None,
+                    );
+                }),
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Background Opacity",
+                description: "How strongly the background shows through, from 0 (hidden) to 1 (full strength).",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("wallpaper_opacity"),
+                    pick: |settings_content| settings_content.workspace.wallpaper_opacity.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.workspace.wallpaper_opacity =
+                            value.map(|opacity| opacity.clamp(0.0, 1.0));
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Colors Follow Background",
+                description: "Tint noah's colors to match your background image. Contrast stays the same.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("wallpaper_adapts_theme"),
+                    pick: |settings_content| {
+                        settings_content.workspace.wallpaper_adapts_theme.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.workspace.wallpaper_adapts_theme = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Background Image Path",
+                description: "The image in use. Empty means noah's own background.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("wallpaper"),
+                    pick: |settings_content| {
+                        settings_content
+                            .workspace
+                            .wallpaper
+                            .as_ref()
+                            .or(DEFAULT_EMPTY_STRING)
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.workspace.wallpaper =
+                            value.filter(|path| !path.trim().is_empty());
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+        ]
+    }
+
     let items: Box<[SettingsPageItem]> = concat_sections!(
         theme_section(),
+        background_section(),
         buffer_font_section(),
         ui_font_section(),
         agent_panel_font_section(),

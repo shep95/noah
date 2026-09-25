@@ -28,8 +28,8 @@ mod toast_layer;
 mod toolbar;
 pub mod welcome;
 pub use room_rail::{
-    EnterChangesRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom, EnterWriteRoom, Room,
-    SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
+    EnterBrowserRoom, EnterChangesRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom,
+    EnterWriteRoom, Room, SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
 };
 pub mod workspace_error;
 mod workspace_settings;

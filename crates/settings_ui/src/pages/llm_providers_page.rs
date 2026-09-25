@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use editor::Editor;
 use gpui::{AnyView, Entity, Focusable as _, ScrollHandle, prelude::*};
 use language_model::{
-    ApiKeyConfiguration, CreateProviderSettingsView, IconOrSvg, InlineDescription,
+    ApiKeyConfiguration, ApiKeyStatus, CreateProviderSettingsView, IconOrSvg, InlineDescription,
     LanguageModelProvider, LanguageModelProviderId, LanguageModelRegistry, ProviderSettingsView,
 };
 
@@ -220,6 +220,7 @@ fn render_api_key_providers_item(
     let is_from_env_var = config.is_from_env_var;
     let env_var_name = config.env_var_name;
     let api_key_url = config.api_key_url;
+    let status = config.status;
 
     if has_key {
         let configured_label = if is_from_env_var {
@@ -246,7 +247,22 @@ fn render_api_key_providers_item(
             })
             .into_any_element();
 
-        return v_flex().gap_2().child(card).into_any_element();
+        let status_label = status.map(|status| match status {
+            ApiKeyStatus::Checking => Label::new("Checking the key…")
+                .size(LabelSize::Small)
+                .color(Color::Muted),
+            ApiKeyStatus::Working(message) => Label::new(message)
+                .size(LabelSize::Small)
+                .color(Color::Success),
+            ApiKeyStatus::Failed(message) => Label::new(message)
+                .size(LabelSize::Small)
+                .color(Color::Error),
+        });
+        return v_flex()
+            .gap_2()
+            .child(card)
+            .children(status_label)
+            .into_any_element();
     }
 
     let input_id = format!("{}-api-key-input", provider_id.0);

@@ -199,6 +199,14 @@ function sign_app_binaries() {
     echo "Downloading git binary"
     download_git "${target_triple}" "${app_path}/Contents/MacOS/git"
 
+    # shepherd's browser: noah looks for agent-browser beside the editor.
+    case "${target_triple}" in
+        aarch64-apple-darwin) browser_platform=darwin-arm64 ;;
+        *) browser_platform=darwin-x64 ;;
+    esac
+    script/fetch-agent-browser "${browser_platform}" "${app_path}/Contents/MacOS/agent-browser"
+    mv "${app_path}/Contents/MacOS/agent-browser-LICENSE" "${app_path}/Contents/Resources/agent-browser-LICENSE"
+
     # Note: The app identifier for our development builds is the same as the app identifier for nightly.
     cp crates/zed/contents/$channel/embedded.provisionprofile "${app_path}/Contents/"
 
@@ -207,6 +215,7 @@ function sign_app_binaries() {
         # sequence of codesign commands modeled after this example: https://developer.apple.com/forums/thread/701514
         /usr/bin/codesign --deep --force --timestamp --options runtime --sign "$IDENTITY" "${app_path}/Contents/MacOS/cli" -v
         /usr/bin/codesign --deep --force --timestamp --options runtime --sign "$IDENTITY" "${app_path}/Contents/MacOS/git" -v
+        /usr/bin/codesign --deep --force --timestamp --options runtime --sign "$IDENTITY" "${app_path}/Contents/MacOS/agent-browser" -v
         /usr/bin/codesign --deep --force --timestamp --options runtime --entitlements crates/zed/resources/zed.entitlements --sign "$IDENTITY" "${app_path}/Contents/MacOS/zed" -v
         /usr/bin/codesign --force --timestamp --options runtime --entitlements crates/zed/resources/zed.entitlements --sign "$IDENTITY" "${app_path}" -v
     else

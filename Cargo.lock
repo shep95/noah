@@ -248,6 +248,7 @@ dependencies = [
  "acp_thread",
  "action_log",
  "agent-client-protocol",
+ "agent_browser",
  "agent_servers",
  "agent_settings",
  "agent_skills",
@@ -372,6 +373,28 @@ dependencies = [
  "serde_with",
  "strum 0.28.0",
  "tracing",
+]
+
+[[package]]
+name = "agent_browser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-tungstenite",
+ "base64 0.22.1",
+ "editor",
+ "futures 0.3.34",
+ "gpui",
+ "image",
+ "log",
+ "menu",
+ "serde",
+ "serde_json",
+ "smol",
+ "ui",
+ "util",
+ "which",
+ "workspace",
 ]
 
 [[package]]
@@ -22867,6 +22890,7 @@ dependencies = [
  "activity_indicator",
  "agent",
  "agent-client-protocol",
+ "agent_browser",
  "agent_servers",
  "agent_settings",
  "agent_skills",

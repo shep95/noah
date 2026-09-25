@@ -641,6 +641,7 @@
       "ctrl-alt-3": "workspace::EnterFilesRoom",
       "ctrl-alt-4": "workspace::EnterChangesRoom",
       "ctrl-alt-5": "workspace::EnterTerminalRoom",
+      "ctrl-alt-6": "workspace::EnterBrowserRoom",
       // Move focus between the major regions of the window (editor, open
       // panels, status bar). Accessibility navigation; mirrors VS Code's
       // "Focus Next/Previous Part". `ctrl-f6` mirrors `f6` so region navigation

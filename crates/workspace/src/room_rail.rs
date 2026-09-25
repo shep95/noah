@@ -19,6 +19,8 @@ actions!(
         EnterChangesRoom,
         /// Opens the terminal and closes the other rooms.
         EnterTerminalRoom,
+        /// Opens the browser shepherd shares with you and closes the other rooms.
+        EnterBrowserRoom,
     ]
 );
 
@@ -36,15 +38,17 @@ pub enum Room {
     Files,
     Changes,
     Terminal,
+    Browser,
 }
 
 impl Room {
-    const ALL: [Room; 5] = [
+    const ALL: [Room; 6] = [
         Room::Write,
         Room::Shepherd,
         Room::Files,
         Room::Changes,
         Room::Terminal,
+        Room::Browser,
     ];
 
     // Must match each panel's `Panel::persistent_name`.
@@ -55,6 +59,7 @@ impl Room {
             Room::Files => Some("Project Panel"),
             Room::Changes => Some("GitPanel"),
             Room::Terminal => Some("TerminalPanel"),
+            Room::Browser => Some("BrowserPanel"),
         }
     }
 
@@ -65,6 +70,7 @@ impl Room {
             Room::Files => "files",
             Room::Changes => "changes",
             Room::Terminal => "terminal",
+            Room::Browser => "browser",
         }
     }
 
@@ -75,6 +81,7 @@ impl Room {
             Room::Files => IconName::Folder,
             Room::Changes => IconName::GitBranch,
             Room::Terminal => IconName::Terminal,
+            Room::Browser => IconName::ToolWeb,
         }
     }
 
@@ -85,6 +92,7 @@ impl Room {
             Room::Files => Box::new(EnterFilesRoom),
             Room::Changes => Box::new(EnterChangesRoom),
             Room::Terminal => Box::new(EnterTerminalRoom),
+            Room::Browser => Box::new(EnterBrowserRoom),
         }
     }
 }
@@ -104,6 +112,9 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     }))
     .on_action(cx.listener(|workspace, _: &EnterTerminalRoom, window, cx| {
         workspace.enter_room(Room::Terminal, window, cx)
+    }))
+    .on_action(cx.listener(|workspace, _: &EnterBrowserRoom, window, cx| {
+        workspace.enter_room(Room::Browser, window, cx)
     }))
 }
 
@@ -246,5 +257,19 @@ impl Workspace {
                             })),
                     )
             }))
+            .child(div().flex_1())
+            .child(
+                div().pb_3().child(
+                    IconButton::new("settings", IconName::Settings)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("settings", &zed_actions::OpenSettings, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(zed_actions::OpenSettings.boxed_clone(), cx);
+                        }),
+                ),
+            )
     }
 }
