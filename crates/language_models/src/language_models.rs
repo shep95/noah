@@ -29,6 +29,7 @@ use crate::provider::open_ai_compatible::OpenAiCompatibleLanguageModelProvider;
 use crate::provider::open_router::OpenRouterLanguageModelProvider;
 use crate::provider::openai_subscribed::OpenAiSubscribedProvider;
 use crate::provider::opencode::OpenCodeLanguageModelProvider;
+use crate::provider::presets::{PRESETS, PresetLanguageModelProvider};
 use crate::provider::venice::VeniceLanguageModelProvider;
 use crate::provider::vercel_ai_gateway::VercelAiGatewayLanguageModelProvider;
 use crate::provider::x_ai::XAiLanguageModelProvider;
@@ -351,6 +352,17 @@ fn register_language_model_providers(
         cx,
     );
     registry.register_provider(Arc::new(CopilotChatLanguageModelProvider::new(cx)), cx);
+    for preset in PRESETS {
+        registry.register_provider(
+            Arc::new(PresetLanguageModelProvider::new(
+                preset,
+                client.http_client(),
+                credentials_provider.clone(),
+                cx,
+            )),
+            cx,
+        );
+    }
     registry.register_provider(
         Arc::new(OpenAiSubscribedProvider::new(
             client.http_client(),

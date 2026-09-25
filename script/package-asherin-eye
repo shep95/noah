@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Package ADAM's source as asherin-eye.tar.gz, the tarball noah downloads the
+# first time someone opens asherin.eye. It unpacks to one folder, asherin.eye/,
+# which becomes the person's own editable copy in ~/noah-lab.
+#
+# Usage: script/package-asherin-eye <adam-dir> <out-dir>
+#   e.g. script/package-asherin-eye ~/src/adam ../unlocket/public/downloads
+# Then run script/write-release-manifest on that downloads directory, which
+# lists and signs the tarball under the key `asherin-eye`.
+#
+# The same source produces the same bytes: names are sorted, times, owners and
+# permissions are fixed, and gzip leaves out the name and time.
+
+set -euo pipefail
+
+source_directory="${1:?ADAM source directory}"
+out_directory="${2:?output directory}"
+[[ -f "$source_directory/package.json" ]] || {
+    echo "$source_directory has no package.json; point this at the ADAM checkout" >&2
+    exit 1
+}
+source_directory="$(cd "$source_directory" && pwd)"
+mkdir -p "$out_directory"
+out_directory="$(cd "$out_directory" && pwd)"
+
+# Build outputs, caches, logs and local credential files. ADAM's own
+# .gitignore lists the same; pinokio/ENVIRONMENT is where its launcher writes
+# keys, so it must never ship.
+excludes=(
+    --exclude=./node_modules --exclude='./*/node_modules' --exclude=node_modules
+    --exclude=.git
+    --exclude=./.gev-cache
+    --exclude=./.gev-logs
+    --exclude=./dist
+    --exclude=./screenshots
+    --exclude=./qa-shots
+    --exclude=./output
+    --exclude=./.gstack
+    --exclude=./3d-models
+    --exclude=./pinokio/ENVIRONMENT
+    --exclude=./pinokio/.installed
+    --exclude='*.log'
+    --exclude=.DS_Store
+)
+
+staging="$(mktemp -d)"
+trap 'rm -rf "$staging"' EXIT
+mkdir "$staging/asherin.eye"
+tar -C "$source_directory" "${excludes[@]}" -cf - . | tar -C "$staging/asherin.eye" -xf -
+
+# Every .env variant can hold live keys; only the template ships.
+find "$staging/asherin.eye" -name '.env*' ! -name '.env.example' -print0 | xargs -0 rm -rf
+
+if find "$staging/asherin.eye" -type l | grep -q .; then
+    echo "refusing to package: symbolic links aren't allowed in the tarball:" >&2
+    find "$staging/asherin.eye" -type l >&2
+    exit 1
+fi
+
+# Shapes of real credentials. Test fixtures such as `sk-fixture-only` are too
+# short to match; a real key never is.
+secret_patterns=(
+    -e 'sk-(ant-api[0-9]{2}-|proj-|svcacct-|admin-)?[A-Za-z0-9_-]{40,}'
+    -e 'AIza[0-9A-Za-z_-]{35}'
+    -e '(AKIA|ASIA)[0-9A-Z]{16}'
+    -e 'gh[pousr]_[A-Za-z0-9]{36,}'
+    -e 'github_pat_[A-Za-z0-9_]{22,}'
+    -e 'glpat-[A-Za-z0-9_-]{20,}'
+    -e 'xox[abprs]-[A-Za-z0-9-]{10,}'
+    -e '(sk|rk)_live_[A-Za-z0-9]{16,}'
+    -e 'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+)
+if hits="$(grep -rIEno "${secret_patterns[@]}" "$staging/asherin.eye")"; then
+    echo "refusing to package: these look like real secrets:" >&2
+    echo "$hits" | sed "s|^$staging/||" | cut -c1-160 >&2
+    exit 1
+fi
+
+# A value in .env.example would ship to everyone; the template names keys only.
+if values="$(grep -En '^[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]#]{16,}' \
+    "$staging/asherin.eye/.env.example" 2>/dev/null)"; then
+    echo "refusing to package: .env.example has values that look like real keys:" >&2
+    echo "$values" | cut -c1-160 >&2
+    exit 1
+fi
+
+tarball="$out_directory/asherin-eye.tar.gz"
+LC_ALL=C tar -C "$staging" \
+    --sort=name \
+    --format=gnu \
+    --mtime='2000-01-01 00:00:00Z' \
+    --owner=0 --group=0 --numeric-owner \
+    --mode='u+rwX,go+rX,go-w' \
+    -cf - asherin.eye | gzip -n -9 > "$tarball.partial"
+mv "$tarball.partial" "$tarball"
+
+echo "$tarball"
+echo "size:   $(wc -c < "$tarball") bytes"
+echo "sha256: $(sha256sum "$tarball" | cut -d' ' -f1)"

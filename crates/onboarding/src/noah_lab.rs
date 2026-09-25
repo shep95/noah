@@ -2,10 +2,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use editor::Editor;
 use extension_host::ExtensionStore;
 use fs::Fs;
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, Styled, WeakEntity, Window, actions,
 };
 use ui::{ButtonLike, Divider, DividerColor, Vector, VectorName, prelude::*};
@@ -35,7 +36,7 @@ pub fn init(cx: &mut App) {
             if let Some(existing) = existing {
                 workspace.activate_item(&existing, true, true, window, cx);
             } else {
-                let lab = cx.new(|cx| NoahLab::new(workspace.weak_handle(), cx));
+                let lab = cx.new(|cx| NoahLab::new(workspace.weak_handle(), window, cx));
                 workspace.add_item_to_active_pane(Box::new(lab), None, true, window, cx);
             }
         });
@@ -49,10 +50,10 @@ enum Starter {
 }
 
 impl Starter {
-    fn folder_prefix(self) -> &'static str {
+    fn default_name(self) -> &'static str {
         match self {
-            Starter::Theme => "noah-theme",
-            Starter::Extension => "noah-extension",
+            Starter::Theme => "theme",
+            Starter::Extension => "extension",
         }
     }
 
@@ -91,7 +92,7 @@ impl Starter {
                 (PathBuf::from("AGENTS.md"), theme_guide(name)),
             ],
             Starter::Extension => {
-                let crate_name = name.replace('-', "_");
+                let crate_name = name.replace(['-', '.'], "_");
                 vec![
                     (PathBuf::from("extension.toml"), manifest_header),
                     (
@@ -178,14 +179,21 @@ Building needs Rust installed through rustup. To try it: run
 pub struct NoahLab {
     workspace: WeakEntity<Workspace>,
     focus_handle: FocusHandle,
+    name_editor: Entity<Editor>,
     status: Option<SharedString>,
 }
 
 impl NoahLab {
-    fn new(workspace: WeakEntity<Workspace>, cx: &mut Context<Self>) -> Self {
+    fn new(workspace: WeakEntity<Workspace>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let name_editor = cx.new(|cx| {
+            let mut editor = Editor::single_line(window, cx);
+            editor.set_placeholder_text("name it (it becomes asherin.<name>)", window, cx);
+            editor
+        });
         Self {
             workspace,
             focus_handle: cx.focus_handle(),
+            name_editor,
             status: None,
         }
     }
@@ -196,12 +204,13 @@ impl NoahLab {
         };
         let app_state = workspace.read(cx).app_state().clone();
         let fs = app_state.fs.clone();
+        let requested = self.name_editor.read(cx).text(cx);
         self.status = Some(format!("creating a {}…", starter.label()).into());
         cx.notify();
 
         cx.spawn_in(window, async move |this, cx| {
             let result = async {
-                let folder = create_starter(fs, starter).await?;
+                let folder = create_starter(fs, starter, &requested).await?;
                 if starter.installs_immediately() {
                     cx.update(|_, cx| {
                         ExtensionStore::global(cx).update(cx, |store, cx| {
@@ -275,13 +284,35 @@ impl NoahLab {
     }
 }
 
-async fn create_starter(fs: Arc<dyn Fs>, starter: Starter) -> Result<PathBuf> {
+/// Everything made in noah is named `asherin.<name>`, with the name the
+/// person chose, reduced to lowercase letters, digits and dashes.
+fn asherin_name(requested: &str, fallback: &str) -> String {
+    let requested = requested.trim().to_lowercase();
+    let requested = requested.strip_prefix("asherin.").unwrap_or(&requested);
+    let mut name = String::new();
+    for character in requested.chars() {
+        if character.is_ascii_alphanumeric() {
+            name.push(character);
+        } else if !name.ends_with('-') && !name.is_empty() {
+            name.push('-');
+        }
+    }
+    let name = name.trim_end_matches('-');
+    format!("asherin.{}", if name.is_empty() { fallback } else { name })
+}
+
+async fn create_starter(fs: Arc<dyn Fs>, starter: Starter, requested: &str) -> Result<PathBuf> {
     let lab_dir = paths::home_dir().join("noah-lab");
     fs.create_dir(&lab_dir).await?;
 
+    let base = asherin_name(requested, starter.default_name());
     let mut number = 1;
     let (name, folder) = loop {
-        let name = format!("{}-{number}", starter.folder_prefix());
+        let name = if number == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{number}")
+        };
         let folder = lab_dir.join(&name);
         if fs.metadata(&folder).await?.is_none() {
             break (name, folder);
@@ -327,6 +358,24 @@ impl Render for NoahLab {
                                         .size(LabelSize::Small)
                                         .color(Color::Muted),
                                 ),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                Label::new("name for a new theme or extension")
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .border_1()
+                                    .border_color(cx.theme().colors().border)
+                                    .child(self.name_editor.clone()),
                             ),
                     )
                     .child(self.render_row(
@@ -440,12 +489,21 @@ mod tests {
 
     #[test]
     fn extension_starter_uses_a_valid_crate_name() {
-        let files = Starter::Extension.files("noah-extension-1");
+        let files = Starter::Extension.files("asherin.weather-2");
         let cargo = files
             .iter()
             .find(|(path, _)| path == &PathBuf::from("Cargo.toml"))
             .map(|(_, contents)| contents.as_str())
             .unwrap_or_default();
-        assert!(cargo.contains("name = \"noah_extension_1\""));
+        assert!(cargo.contains("name = \"asherin_weather_2\""));
+        assert!(files[0].1.contains("id = \"asherin.weather-2\""));
+    }
+
+    #[test]
+    fn names_start_with_asherin() {
+        assert_eq!(asherin_name("", "theme"), "asherin.theme");
+        assert_eq!(asherin_name("  My Dark Theme! ", "theme"), "asherin.my-dark-theme");
+        assert_eq!(asherin_name("asherin.notes", "extension"), "asherin.notes");
+        assert_eq!(asherin_name("***", "extension"), "asherin.extension");
     }
 }

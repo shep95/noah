@@ -17,6 +17,7 @@ doctest = false
 default = []
 
 [dependencies]
+editor.workspace = true
 anyhow.workspace = true
 client.workspace = true
 cloud_api_types.workspace = true

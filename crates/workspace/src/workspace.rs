@@ -15,6 +15,7 @@ pub mod path_list {
 }
 pub mod path_link;
 mod persistence;
+pub mod rail_apps;
 mod room_rail;
 pub mod searchable;
 pub mod security_modal;
@@ -28,7 +29,7 @@ mod toast_layer;
 mod toolbar;
 pub mod welcome;
 pub use room_rail::{
-    EnterBrowserRoom, EnterChangesRoom, EnterMissionRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom,
+    EnterBrowserRoom, EnterChangesRoom, EnterDeviceRoom, EnterMissionRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom,
     EnterWriteRoom, Room, SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
 };
 pub mod workspace_error;
@@ -999,6 +1000,7 @@ pub fn init(app_state: Arc<AppState>, cx: &mut App) {
     theme_preview::init(cx);
     toast_layer::init(cx);
     history_manager::init(app_state.fs.clone(), cx);
+    rail_apps::init(cx);
 
     cx.on_app_quit(flush_windows_serialization_on_quit).detach();
 

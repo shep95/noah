@@ -10,6 +10,11 @@ use web_search::{WebSearchProvider, WebSearchProviderId};
 pub const DUCKDUCKGO_WEB_SEARCH_PROVIDER_ID: &str = "duckduckgo";
 
 const SEARCH_URL: &str = "https://html.duckduckgo.com/html/";
+/// DuckDuckGo's text-only page, tried when the main one refuses the search.
+const LITE_SEARCH_URL: &str = "https://lite.duckduckgo.com/lite/";
+/// DuckDuckGo turns away requests that don't look like a browser.
+const USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
 const MAX_RESULTS: usize = 10;
 
 /// Searches through DuckDuckGo's HTML endpoint, which needs no account or API
@@ -39,29 +44,119 @@ async fn perform_search(
     http_client: Arc<dyn HttpClient>,
     query: String,
 ) -> Result<WebSearchResponse> {
+    // `NOAH_WEB_SEARCH_URL` points both searches at another server that
+    // answers with DuckDuckGo's pages, such as a local one in tests.
+    let override_url = std::env::var("NOAH_WEB_SEARCH_URL").ok();
+    let main_url = override_url.as_deref().unwrap_or(SEARCH_URL);
+    let main_error = match search_page(&http_client, main_url, &query).await {
+        Ok(html) => {
+            let results = parse_results(&html);
+            if !results.is_empty() || !is_challenge(&html) {
+                return Ok(WebSearchResponse { results });
+            }
+            anyhow::anyhow!("DuckDuckGo asked to confirm the search is from a person")
+        }
+        Err(error) => error,
+    };
+    let lite_url = override_url
+        .as_deref()
+        .map(|url| format!("{}/lite/", url.trim_end_matches('/')))
+        .unwrap_or_else(|| LITE_SEARCH_URL.to_string());
+    let html = search_page(&http_client, &lite_url, &query)
+        .await
+        .map_err(|lite_error| {
+            anyhow::anyhow!("web search failed: {main_error:#}; the backup search also failed: {lite_error:#}")
+        })?;
+    let results = parse_lite_results(&html);
+    if results.is_empty() && is_challenge(&html) {
+        bail!("DuckDuckGo is rate-limiting searches right now. Try again in a minute.");
+    }
+    Ok(WebSearchResponse { results })
+}
+
+async fn search_page(
+    http_client: &Arc<dyn HttpClient>,
+    url: &str,
+    query: &str,
+) -> Result<String> {
     let body = url::form_urlencoded::Serializer::new(String::new())
-        .append_pair("q", &query)
+        .append_pair("q", query)
         .finish();
     let request = Request::builder()
         .method(Method::POST)
-        .uri(SEARCH_URL)
+        .uri(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("User-Agent", USER_AGENT)
+        .header("Accept", "text/html")
         .body(AsyncBody::from(body))?;
     let mut response = http_client.send(request).await?;
     let status = response.status();
     let mut html = String::new();
     response.body_mut().read_to_string(&mut html).await?;
-
     if !status.is_success() {
         bail!("DuckDuckGo search failed with status {status}");
     }
-    let results = parse_results(&html);
-    // DuckDuckGo answers suspected automated traffic with a challenge page
-    // instead of an error status.
-    if results.is_empty() && html.contains("anomaly") {
-        bail!("DuckDuckGo is rate-limiting searches right now. Try again in a minute.");
+    Ok(html)
+}
+
+/// DuckDuckGo answers suspected automated traffic with a challenge page
+/// instead of an error status.
+fn is_challenge(html: &str) -> bool {
+    html.contains("anomaly") || html.contains("challenge-form")
+}
+
+/// Results on the lite page are table rows: a `result-link` anchor, then a
+/// `result-snippet` cell.
+fn parse_lite_results(html: &str) -> Vec<WebSearchResult> {
+    let mut results = Vec::new();
+    let mut rest = html;
+    while let Some(marker) = find_class(rest, "result-link") {
+        let Some(tag_start) = rest[..marker].rfind("<a") else {
+            break;
+        };
+        let Some(tag_length) = rest[marker..].find('>') else {
+            break;
+        };
+        let tag = &rest[tag_start..marker + tag_length];
+        let after_tag = &rest[marker + tag_length + 1..];
+        let title_end = after_tag.find("</a>").unwrap_or(after_tag.len());
+        let title = clean_text(&after_tag[..title_end]);
+        let after_title = &after_tag[title_end..];
+        let next_result = find_class(after_title, "result-link").unwrap_or(after_title.len());
+        let text = find_class(&after_title[..next_result], "result-snippet")
+            .and_then(|snippet_marker| {
+                let section = &after_title[snippet_marker..next_result];
+                let content_start = section.find('>')? + 1;
+                let content_end = section[content_start..]
+                    .find("</td>")
+                    .map_or(section.len(), |offset| content_start + offset);
+                Some(clean_text(&section[content_start..content_end]))
+            })
+            .unwrap_or_default();
+        rest = after_title;
+
+        let Some(url) = attribute(tag, "href").and_then(|href| resolve_url(&href)) else {
+            continue;
+        };
+        if title.is_empty() {
+            continue;
+        }
+        results.push(WebSearchResult { title, url, text });
+        if results.len() == MAX_RESULTS {
+            break;
+        }
     }
-    Ok(WebSearchResponse { results })
+    results
+}
+
+/// Finds `class="name"` or `class='name'`, as the lite page uses both.
+fn find_class(html: &str, name: &str) -> Option<usize> {
+    let double = html.find(&format!("class=\"{name}\""));
+    let single = html.find(&format!("class='{name}'"));
+    match (double, single) {
+        (Some(double), Some(single)) => Some(double.min(single)),
+        (double, single) => double.or(single),
+    }
 }
 
 fn parse_results(html: &str) -> Vec<WebSearchResult> {
@@ -238,6 +333,33 @@ mod tests {
         );
         assert_eq!(results[1].url, "https://tokio.rs/tokio/tutorial");
         assert_eq!(results[1].text, "Tokio is an asynchronous runtime.");
+    }
+
+    #[test]
+    fn parses_the_lite_page() {
+        let page = r#"
+<table>
+<tr><td>1.&nbsp;</td><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.rust-lang.org%2F&amp;rut=1" class='result-link'>Rust Programming <b>Language</b></a></td></tr>
+<tr><td>&nbsp;</td><td class='result-snippet'>A language empowering everyone to build reliable &amp; efficient software.</td></tr>
+<tr><td>2.&nbsp;</td><td><a rel="nofollow" href="https://doc.rust-lang.org/book/" class='result-link'>The Rust Book</a></td></tr>
+<tr><td>&nbsp;</td><td class='result-snippet'>An introductory book about Rust.</td></tr>
+</table>"#;
+        let results = parse_lite_results(page);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].title, "Rust Programming Language");
+        assert_eq!(results[0].url, "https://www.rust-lang.org/");
+        assert_eq!(
+            results[0].text,
+            "A language empowering everyone to build reliable & efficient software."
+        );
+        assert_eq!(results[1].url, "https://doc.rust-lang.org/book/");
+        assert_eq!(results[1].text, "An introductory book about Rust.");
+    }
+
+    #[test]
+    fn recognizes_the_challenge_page() {
+        assert!(is_challenge("<form id=\"challenge-form\">"));
+        assert!(!is_challenge(PAGE));
     }
 
     #[test]

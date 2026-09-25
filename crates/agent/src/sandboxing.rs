@@ -219,13 +219,21 @@ pub(crate) fn sandboxing_enabled(cx: &App) -> bool {
 /// distinguish "sandboxing isn't relevant here" (don't show the indicator) from
 /// "sandboxing is available but turned off in settings" (show it, struck out).
 pub(crate) fn sandboxing_available_for_project(project: &Project, cx: &App) -> bool {
-    sandboxing_enabled(cx)
-        && project.is_local()
-        && cfg!(any(
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "windows"
-        ))
+    sandboxing_enabled(cx) && project.is_local() && platform_has_sandbox()
+}
+
+/// On Windows the sandbox runs commands inside WSL. Without a WSL distro it
+/// can never be created, and every command would stop to report that, so
+/// commands run in the normal Windows shell instead.
+fn platform_has_sandbox() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        sandbox::wsl_distro_registered()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cfg!(any(target_os = "macos", target_os = "linux"))
+    }
 }
 
 /// Network escalation requested for (or granted to) a sandboxed command.

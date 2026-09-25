@@ -31,6 +31,20 @@ It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and exte
   committing from noah warns you before a key or password in your changes reaches GitHub.
 - No Git on Windows? Cloning a repository downloads the official portable Git for Windows
   (checksum-verified) the first time it's needed.
+- asherin.chat (rail): think with shepherd outside any project. Chat threads can talk, search
+  the web and read, but can't edit files or run commands.
+- asherin.pages (rail): describe a PDF, a digital book or a slideshow and shepherd makes it,
+  previews it live and exports it.
+- Chat history: the sidebar groups chats by project; pin chats and projects, drag to reorder.
+- Device room: security checks (antivirus, firewall, encryption, updates, remote access, open
+  ports), health, what starts with the computer, a duplicate-file finder that keeps the newest
+  copy, and an ad blocker for every app through the hosts file.
+- Web search with sources, and a reasoning level (low, medium, high) for models that think.
+- Bring a key for nearly 50 providers: OpenAI, Anthropic, Google, Mistral, xAI, DeepSeek, Groq, Together,
+  Fireworks, Perplexity, Cerebras, Qwen, Kimi, GLM, MiniMax, Doubao, Hunyuan and more, or run
+  models locally.
+- Pin any app or page you build to the rail and switch back to it in one click.
+- Updates are signed with noah's release key and checked before they install.
 
 Community: [Discord](https://discord.gg/M9hnebRwvk) · [asherin.com](https://asherin.com)
 

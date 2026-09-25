@@ -907,6 +907,37 @@ impl MultiWorkspace {
         true
     }
 
+    /// Moves a project group to just before another, as when it's dragged
+    /// onto that group in the chat history.
+    pub fn move_project_group_before(
+        &mut self,
+        key: &ProjectGroupKey,
+        target: &ProjectGroupKey,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if key == target {
+            return false;
+        }
+        let Some(index) = self
+            .project_groups
+            .iter()
+            .position(|group| group.key == *key)
+        else {
+            return false;
+        };
+        let group = self.project_groups.remove(index);
+        let target_index = self
+            .project_groups
+            .iter()
+            .position(|group| group.key == *target)
+            .unwrap_or(self.project_groups.len());
+        self.project_groups.insert(target_index, group);
+        cx.emit(MultiWorkspaceEvent::ProjectGroupsChanged);
+        self.serialize(cx);
+        cx.notify();
+        true
+    }
+
     pub fn move_project_group_down(
         &mut self,
         key: &ProjectGroupKey,

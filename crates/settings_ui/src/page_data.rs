@@ -141,7 +141,7 @@ fn general_page(cx: &App) -> SettingsPage {
             SettingsPageItem::SectionHeader("General Settings"),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Language",
-                description: "The language noah's interface and shepherd use. Every language is listed; \"system\" follows your operating system. Text noah hasn't translated yet stays in English, and shepherd still writes code, commands and file names as they are.",
+                description: "The language shepherd speaks and noah's own labels use; some of the editor's built-in menus stay in English. \"system\" follows your operating system. shepherd still writes code, commands and file names as they are.",
                 field: Box::new(SettingField {
                     organization_override: None,
                     json_path: Some("language"),

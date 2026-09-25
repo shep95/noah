@@ -3694,6 +3694,10 @@ impl GitPanel {
                 .update(cx, |repo, cx| repo.stage_entries(changed_files.clone(), cx));
             (Some(stage_task), changed_files)
         };
+        let provenance_log = noah_trust::project_files::path(
+            &active_repository.read(cx).work_directory_abs_path,
+            noah_trust::project_files::PROVENANCE,
+        );
         let task = cx.spawn_in(window, async move |this, cx| {
             let result = async {
                 if let Some(stage_task) = stage_task {
@@ -3740,6 +3744,15 @@ impl GitPanel {
                         return anyhow::Ok(false);
                     }
                 }
+                let provenance_head = cx
+                    .background_spawn(async move {
+                        noah_trust::provenance::chain_head(&provenance_log)
+                    })
+                    .await;
+                let message = match provenance_head {
+                    Some(head) => noah_trust::provenance::with_provenance_trailer(&message, &head),
+                    None => message,
+                };
                 // Repository serializes all git operations, so we can just send a commit immediately
                 let commit_task = active_repository.update(cx, |repo, cx| {
                     repo.commit(message.into(), None, options, askpass, cx)

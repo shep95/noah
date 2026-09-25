@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Builds every noah icon from one square source image: the app and taskbar
+# icons for Windows and Linux, the installer icon, and (when the website
+# checkout is given) the site's favicon and touch icons.
+#
+#   script/generate-icons assets/brand/icon-source.png [../unlocket]
+#
+# Needs ImageMagick (`convert`).
+
+set -euo pipefail
+
+source_image="${1:?usage: script/generate-icons <source image> [website dir]}"
+website="${2:-}"
+cd "$(dirname "$0")/.."
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+# Center-crop to a square and round the corners the way the source art is
+# drawn, so the icon keeps its shape on a taskbar or dock of any color.
+size=1024
+radius=$((size * 22 / 100))
+convert "$source_image" -auto-orient -resize "${size}x${size}^" -gravity center \
+  -extent "${size}x${size}" "$work/square.png"
+convert -size "${size}x${size}" xc:none -fill white \
+  -draw "roundrectangle 0,0 $((size - 1)),$((size - 1)) $radius,$radius" "$work/mask.png"
+convert "$work/square.png" "$work/mask.png" -alpha off -compose CopyOpacity -composite \
+  "$work/master.png"
+
+png() { convert "$work/master.png" -filter Lanczos -resize "$1x$1" -strip "$2"; }
+ico() {
+  local output="$1"
+  shift
+  local frames=()
+  for frame_size in "$@"; do
+    png "$frame_size" "$work/ico-$frame_size.png"
+    frames+=("$work/ico-$frame_size.png")
+  done
+  convert "${frames[@]}" "$output"
+}
+
+resources=crates/zed/resources
+for channel in "" -dev -nightly -preview; do
+  png 512 "$resources/app-icon$channel.png"
+  png 1024 "$resources/app-icon$channel@2x.png"
+  ico "$resources/windows/app-icon$channel.ico" 16 24 32 48 64 128 256
+done
+cp "$resources/windows/app-icon.ico" script/installer/noah.ico
+
+if [[ -n "$website" ]]; then
+  ico "$website/app/favicon.ico" 16 32 48 64 128 256
+  png 512 "$website/app/icon.png"
+  png 512 "$website/public/icon-512.png"
+  png 192 "$website/public/icon-192.png"
+  # iOS draws its own rounded mask, so the touch icon stays square.
+  convert "$work/square.png" -filter Lanczos -resize 180x180 -strip "$website/public/apple-touch-icon.png"
+fi
+
+echo "icons written from $source_image"

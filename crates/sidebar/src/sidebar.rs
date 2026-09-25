@@ -132,6 +132,106 @@ struct SerializedSidebar {
     active_view: SerializedSidebarView,
 }
 
+/// How the person arranged their chat history: pinned chats and projects, and
+/// the order they dragged chats into. Kept in noah's data folder so it's the
+/// same in every window.
+#[derive(Default, Serialize, Deserialize)]
+struct ChatHistoryLayout {
+    #[serde(default)]
+    pinned_threads: Vec<ThreadId>,
+    #[serde(default)]
+    pinned_projects: Vec<String>,
+    #[serde(default)]
+    thread_order: HashMap<String, Vec<ThreadId>>,
+}
+
+impl ChatHistoryLayout {
+    fn file() -> PathBuf {
+        paths::data_dir().join("chat_history.json")
+    }
+
+    fn load() -> Self {
+        if cfg!(test) {
+            return Self::default();
+        }
+        std::fs::read(Self::file())
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).log_err())
+            .unwrap_or_default()
+    }
+
+    fn save(&self, cx: &App) {
+        if cfg!(test) {
+            return;
+        }
+        let Some(json) = serde_json::to_vec_pretty(self).log_err() else {
+            return;
+        };
+        cx.background_spawn(async move {
+            let file = Self::file();
+            if let Some(directory) = file.parent() {
+                std::fs::create_dir_all(directory)?;
+            }
+            std::fs::write(file, json)?;
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn project_id(key: &ProjectGroupKey) -> String {
+        key.path_list()
+            .paths()
+            .iter()
+            .map(|path| path.to_string_lossy())
+            .join("\n")
+    }
+
+    fn is_thread_pinned(&self, thread_id: &ThreadId) -> bool {
+        self.pinned_threads.contains(thread_id)
+    }
+
+    fn is_project_pinned(&self, key: &ProjectGroupKey) -> bool {
+        self.pinned_projects.contains(&Self::project_id(key))
+    }
+
+    fn order_for(&self, key: &ProjectGroupKey) -> &[ThreadId] {
+        self.thread_order
+            .get(&Self::project_id(key))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+}
+
+/// A chat being dragged in the chat history.
+#[derive(Clone)]
+struct DraggedChat {
+    thread_id: ThreadId,
+    group: ProjectGroupKey,
+    title: SharedString,
+}
+
+/// A project being dragged in the chat history.
+#[derive(Clone)]
+struct DraggedProject {
+    key: ProjectGroupKey,
+    label: SharedString,
+}
+
+struct DraggedChatHistoryRow(SharedString);
+
+impl Render for DraggedChatHistoryRow {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_2()
+            .py_1()
+            .rounded_sm()
+            .bg(cx.theme().colors().elevated_surface_background)
+            .border_1()
+            .border_color(cx.theme().colors().border)
+            .child(Label::new(self.0.clone()).size(LabelSize::Small))
+    }
+}
+
 #[derive(Debug, Default)]
 enum SidebarView {
     #[default]
@@ -826,6 +926,7 @@ pub struct Sidebar {
     /// Display names of other release channels that have threads available to
     /// import.
     cross_channel_import_channels: Vec<SharedString>,
+    chat_history_layout: ChatHistoryLayout,
 }
 
 impl Sidebar {
@@ -854,7 +955,7 @@ impl Sidebar {
 
         let filter_editor = cx.new(|cx| {
             let mut editor = Editor::single_line(window, cx);
-            editor.set_placeholder_text("Search threads…", window, cx);
+            editor.set_placeholder_text("Search chat history…", window, cx);
             editor
         });
         let rename_editor = cx.new(|cx| Editor::single_line(window, cx));
@@ -970,6 +1071,7 @@ impl Sidebar {
             update_task: None,
             import_banners_use_verbose_labels: None,
             cross_channel_import_channels: Vec::new(),
+            chat_history_layout: ChatHistoryLayout::load(),
         }
     }
 
@@ -1437,7 +1539,8 @@ impl Sidebar {
             (icon, icon_from_external_svg)
         };
 
-        let groups = mw.project_groups(cx);
+        let mut groups = mw.project_groups(cx);
+        groups.sort_by_key(|group| !self.chat_history_layout.is_project_pinned(&group.key));
         let mut live_notified_terminal_ids: HashSet<TerminalId> = HashSet::new();
         for workspace in &workspaces {
             if let Some(agent_panel) = workspace.read(cx).panel::<AgentPanel>(cx) {
@@ -1947,6 +2050,8 @@ impl Sidebar {
                     &mut entries,
                     matched_terminals,
                     matched_threads,
+                    &self.chat_history_layout,
+                    group_key,
                     &mut current_session_ids,
                     &mut current_thread_ids,
                 );
@@ -1997,6 +2102,8 @@ impl Sidebar {
                     &mut entries,
                     terminals,
                     threads,
+                    &self.chat_history_layout,
+                    group_key,
                     &mut current_session_ids,
                     &mut current_thread_ids,
                 );
@@ -2269,6 +2376,7 @@ impl Sidebar {
                 self.render_terminal(ix, terminal, is_active, is_selected, cx)
             }
         };
+        let rendered = self.make_arrangeable(ix, rendered, cx);
 
         if is_group_header_after_first {
             v_flex()
@@ -2280,6 +2388,196 @@ impl Sidebar {
         } else {
             rendered
         }
+    }
+
+    /// Lets a chat or project row be dragged onto another to move it there.
+    fn make_arrangeable(
+        &self,
+        ix: usize,
+        rendered: AnyElement,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let drop_background = cx.theme().colors().drop_target_background;
+        match self.contents.entries.get(ix) {
+            Some(ListEntry::ProjectHeader { key, label, .. }) => {
+                let dragged = DraggedProject {
+                    key: key.clone(),
+                    label: label.clone(),
+                };
+                let target = key.clone();
+                div()
+                    .id(("chat-history-project", ix))
+                    .w_full()
+                    .on_drag(dragged, |dragged, _, _, cx| {
+                        cx.new(|_| DraggedChatHistoryRow(dragged.label.clone()))
+                    })
+                    .drag_over::<DraggedProject>(move |style, _, _, _| style.bg(drop_background))
+                    .on_drop(cx.listener(move |this, dragged: &DraggedProject, _, cx| {
+                        this.drop_project_on(&target, dragged, cx);
+                    }))
+                    .child(rendered)
+                    .into_any_element()
+            }
+            Some(ListEntry::Thread(thread))
+                if thread.draft.is_none() && thread.metadata.session_id.is_some() =>
+            {
+                let Some(group) = self.group_key_for_entry(ix) else {
+                    return rendered;
+                };
+                let dragged = DraggedChat {
+                    thread_id: thread.metadata.thread_id,
+                    group: group.clone(),
+                    title: thread.metadata.display_title(),
+                };
+                let target = thread.metadata.thread_id;
+                let can_drop_group = group.clone();
+                div()
+                    .id(("chat-history-thread", ix))
+                    .w_full()
+                    .on_drag(dragged, |dragged, _, _, cx| {
+                        cx.new(|_| DraggedChatHistoryRow(dragged.title.clone()))
+                    })
+                    .can_drop(move |dragged, _, _| {
+                        dragged
+                            .downcast_ref::<DraggedChat>()
+                            .is_some_and(|dragged| dragged.group == can_drop_group)
+                    })
+                    .drag_over::<DraggedChat>(move |style, _, _, _| style.bg(drop_background))
+                    .on_drop(cx.listener(move |this, dragged: &DraggedChat, _, cx| {
+                        this.drop_chat_on(target, &group, dragged, cx);
+                    }))
+                    .child(rendered)
+                    .into_any_element()
+            }
+            _ => rendered,
+        }
+    }
+
+    fn group_key_for_entry(&self, ix: usize) -> Option<ProjectGroupKey> {
+        self.contents.entries.get(..=ix)?.iter().rev().find_map(|entry| match entry {
+            ListEntry::ProjectHeader { key, .. } => Some(key.clone()),
+            _ => None,
+        })
+    }
+
+    /// The chats shown under a project, in their current order.
+    fn visible_thread_ids(&self, group: &ProjectGroupKey) -> Vec<ThreadId> {
+        self.contents
+            .entries
+            .iter()
+            .skip_while(|entry| {
+                !matches!(entry, ListEntry::ProjectHeader { key, .. } if key == group)
+            })
+            .skip(1)
+            .take_while(|entry| !matches!(entry, ListEntry::ProjectHeader { .. }))
+            .filter_map(|entry| match entry {
+                ListEntry::Thread(thread) if thread.draft.is_none() => {
+                    Some(thread.metadata.thread_id)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn toggle_thread_pin(&mut self, thread_id: ThreadId, cx: &mut Context<Self>) {
+        let layout = &mut self.chat_history_layout;
+        if layout.is_thread_pinned(&thread_id) {
+            layout.pinned_threads.retain(|pinned| *pinned != thread_id);
+        } else {
+            layout.pinned_threads.push(thread_id);
+        }
+        layout.save(cx);
+        self.update_entries(cx);
+    }
+
+    fn toggle_project_pin(&mut self, key: &ProjectGroupKey, cx: &mut Context<Self>) {
+        let layout = &mut self.chat_history_layout;
+        let project_id = ChatHistoryLayout::project_id(key);
+        if layout.pinned_projects.contains(&project_id) {
+            layout.pinned_projects.retain(|pinned| *pinned != project_id);
+        } else {
+            layout.pinned_projects.push(project_id);
+        }
+        layout.save(cx);
+        self.update_entries(cx);
+    }
+
+    /// Dropping a chat onto a pinned chat pins it there; onto any other chat
+    /// unpins it and places it just above that chat.
+    fn drop_chat_on(
+        &mut self,
+        target: ThreadId,
+        group: &ProjectGroupKey,
+        dragged: &DraggedChat,
+        cx: &mut Context<Self>,
+    ) {
+        if dragged.thread_id == target || dragged.group != *group {
+            return;
+        }
+        let visible = self.visible_thread_ids(group);
+        let layout = &mut self.chat_history_layout;
+        let target_pinned = layout.is_thread_pinned(&target);
+        layout
+            .pinned_threads
+            .retain(|pinned| *pinned != dragged.thread_id);
+        if target_pinned {
+            let position = layout
+                .pinned_threads
+                .iter()
+                .position(|pinned| *pinned == target)
+                .unwrap_or(layout.pinned_threads.len());
+            layout.pinned_threads.insert(position, dragged.thread_id);
+        } else {
+            let mut order: Vec<ThreadId> = visible
+                .into_iter()
+                .filter(|thread_id| {
+                    *thread_id != dragged.thread_id && !layout.is_thread_pinned(thread_id)
+                })
+                .collect();
+            let position = order
+                .iter()
+                .position(|thread_id| *thread_id == target)
+                .unwrap_or(order.len());
+            order.insert(position, dragged.thread_id);
+            layout
+                .thread_order
+                .insert(ChatHistoryLayout::project_id(group), order);
+        }
+        layout.save(cx);
+        self.update_entries(cx);
+    }
+
+    /// Dropping a project onto another moves it just above that one, pinned
+    /// if the target is pinned.
+    fn drop_project_on(
+        &mut self,
+        target: &ProjectGroupKey,
+        dragged: &DraggedProject,
+        cx: &mut Context<Self>,
+    ) {
+        if dragged.key == *target {
+            return;
+        }
+        let layout = &mut self.chat_history_layout;
+        let dragged_id = ChatHistoryLayout::project_id(&dragged.key);
+        let target_pinned = layout.is_project_pinned(target);
+        layout.pinned_projects.retain(|pinned| *pinned != dragged_id);
+        if target_pinned {
+            let target_id = ChatHistoryLayout::project_id(target);
+            let position = layout
+                .pinned_projects
+                .iter()
+                .position(|pinned| *pinned == target_id)
+                .unwrap_or(layout.pinned_projects.len());
+            layout.pinned_projects.insert(position, dragged_id);
+        }
+        layout.save(cx);
+        self.multi_workspace
+            .update(cx, |multi_workspace, cx| {
+                multi_workspace.move_project_group_before(&dragged.key, target, cx);
+            })
+            .ok();
+        self.update_entries(cx);
     }
 
     fn render_remote_project_icon(
@@ -2354,6 +2652,20 @@ impl Sidebar {
                 .when(!is_active, |this| this.color(Color::Muted))
                 .when(!opaque_window, |this| this.truncate())
                 .into_any_element()
+        };
+        let label = if self.chat_history_layout.is_project_pinned(key) {
+            h_flex()
+                .gap_1()
+                .min_w_0()
+                .child(
+                    Icon::new(IconName::Pin)
+                        .size(IconSize::XSmall)
+                        .color(Color::Muted),
+                )
+                .child(label)
+                .into_any_element()
+        } else {
+            label
         };
 
         let color = cx.theme().colors();
@@ -2904,10 +3216,40 @@ impl Sidebar {
                     .map(|workspace| active_workspace.as_ref() == Some(workspace))
                     .collect();
 
+                let project_pinned = this_for_menu
+                    .read_with(cx, |sidebar, _| {
+                        sidebar
+                            .chat_history_layout
+                            .is_project_pinned(&project_group_key)
+                    })
+                    .unwrap_or(false);
+                let pin_sidebar = this_for_menu.clone();
+                let pin_key = project_group_key.clone();
+
                 let menu =
                     ContextMenu::build_persistent(window, cx, move |menu, _window, menu_cx| {
                         let menu = menu.end_slot_action(Box::new(menu::SecondaryConfirm));
                         let weak_menu = menu_cx.weak_entity();
+
+                        let menu = menu.entry(
+                            if project_pinned {
+                                "Unpin Project"
+                            } else {
+                                "Pin Project"
+                            },
+                            None,
+                            {
+                                let pin_sidebar = pin_sidebar.clone();
+                                let pin_key = pin_key.clone();
+                                move |_window, cx| {
+                                    pin_sidebar
+                                        .update(cx, |sidebar, cx| {
+                                            sidebar.toggle_project_pin(&pin_key, cx)
+                                        })
+                                        .ok();
+                                }
+                            },
+                        );
 
                         let menu = menu.when(show_multi_project_entries, |this| {
                             this.entry(
@@ -5800,13 +6142,39 @@ impl Sidebar {
         metadata.interacted_at.unwrap_or(metadata.updated_at)
     }
 
+    /// Orders a project's rows: an empty draft first, then pinned chats in
+    /// pin order, then chats not yet arranged (newest first), then the ones
+    /// the person dragged into place.
     fn push_entries_by_display_time(
         entries: &mut Vec<ListEntry>,
         terminals: Vec<TerminalEntry>,
         threads: Vec<Arc<ThreadEntry>>,
+        layout: &ChatHistoryLayout,
+        group_key: &ProjectGroupKey,
         current_session_ids: &mut HashSet<acp::SessionId>,
         current_thread_ids: &mut HashSet<agent_ui::ThreadId>,
     ) {
+        let order = layout.order_for(group_key);
+        let arrangement = |entry: &ListEntry| -> (u8, usize) {
+            let ListEntry::Thread(thread) = entry else {
+                return (2, 0);
+            };
+            if thread.draft == Some(DraftKind::Empty) {
+                return (0, 0);
+            }
+            let thread_id = &thread.metadata.thread_id;
+            if let Some(position) = layout
+                .pinned_threads
+                .iter()
+                .position(|pinned| pinned == thread_id)
+            {
+                return (1, position);
+            }
+            match order.iter().position(|ordered| ordered == thread_id) {
+                Some(position) => (3, position),
+                None => (2, 0),
+            }
+        };
         fn display_time(entry: &ListEntry) -> DateTime<Utc> {
             match entry {
                 ListEntry::Thread(thread) if thread.draft == Some(DraftKind::Empty) => {
@@ -5822,7 +6190,10 @@ impl Sidebar {
             .into_iter()
             .map(ListEntry::Terminal)
             .chain(threads.into_iter().map(ListEntry::Thread))
-            .sorted_by_key(|right| std::cmp::Reverse(display_time(right)));
+            .sorted_by_key(|entry| {
+                let (tier, position) = arrangement(entry);
+                (tier, position, std::cmp::Reverse(display_time(entry)))
+            });
 
         for entry in row_entries {
             if let ListEntry::Thread(thread) = &entry {
@@ -6279,15 +6650,22 @@ impl Sidebar {
                 .regenerating_titles
                 .contains(&thread.metadata.thread_id);
 
+        let is_pinned = self
+            .chat_history_layout
+            .is_thread_pinned(&thread.metadata.thread_id);
+        let can_arrange = !is_draft && thread.metadata.session_id.is_some();
+
+        // A pinned chat shows the pin in place of its agent icon, so it reads
+        // as pinned without hovering.
         let thread_item = ThreadItem::new(id, title.clone())
             .base_bg(sidebar_bg)
-            .icon(icon)
+            .icon(if is_pinned { IconName::Pin } else { icon })
             .when(is_draft, |this| {
                 this.icon_color(Color::Custom(cx.theme().colors().icon_muted.opacity(0.2)))
             })
             .status(thread.status)
             .is_remote(is_remote)
-            .when_some(icon_svg, |this, svg| {
+            .when_some(icon_svg.filter(|_| !is_pinned), |this, svg| {
                 this.custom_icon_from_external_svg(svg)
             })
             .worktrees(worktrees)
@@ -6316,6 +6694,21 @@ impl Sidebar {
                 this.is_truncated(false).title_slot(title_editor)
             })
             .when(is_hovered && !is_renaming, |this| {
+                let pin_button = can_arrange.then(|| {
+                    IconButton::new(
+                        ("pin-thread", ix),
+                        if is_pinned {
+                            IconName::Unpin
+                        } else {
+                            IconName::Pin
+                        },
+                    )
+                    .icon_size(IconSize::Small)
+                    .tooltip(Tooltip::text(if is_pinned { "Unpin Chat" } else { "Pin Chat" }))
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        this.toggle_thread_pin(thread_id_for_actions, cx);
+                    }))
+                });
                 let rename_button = IconButton::new(("rename-thread", ix), IconName::Pencil)
                     .icon_size(IconSize::Small)
                     .tooltip({
@@ -6404,6 +6797,7 @@ impl Sidebar {
                 this.action_slot(
                     h_flex()
                         .gap_0p5()
+                        .children(pin_button)
                         .child(rename_button)
                         .when_some(contextual_action, |this, action| this.child(action)),
                 )
@@ -6468,6 +6862,14 @@ impl Sidebar {
                     let rename_title = rename_title.clone();
                     let folder_paths = folder_paths.clone();
                     ContextMenu::build(_window, cx, move |mut menu, _window, _cx| {
+                        menu = menu.entry(if is_pinned { "Unpin Chat" } else { "Pin Chat" }, None, {
+                            let sidebar = sidebar.clone();
+                            move |_window, cx| {
+                                sidebar
+                                    .update(cx, |sidebar, cx| sidebar.toggle_thread_pin(thread_id, cx))
+                                    .ok();
+                            }
+                        });
                         menu = menu.entry("Rename Title", None, {
                             let sidebar = sidebar.clone();
                             let rename_title = rename_title.clone();
@@ -7305,7 +7707,7 @@ impl Sidebar {
 
     fn render_empty_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
         ProjectEmptyState::new(
-            "Threads Sidebar",
+            "Chat History",
             self.focus_handle(cx),
             KeyBinding::for_action(&workspace::Open::default(), cx),
         )

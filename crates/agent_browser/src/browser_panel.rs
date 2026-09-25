@@ -34,6 +34,14 @@ pub(crate) fn init(cx: &mut App) {
         workspace.register_action(|workspace, _: &ToggleFocus, window, cx| {
             workspace.toggle_panel_focus::<BrowserPanel>(window, cx);
         });
+        workspace.register_action(
+            |workspace, action: &zed_actions::OpenInBrowserRoom, window, cx| {
+                let url = action.url.clone();
+                if let Some(panel) = workspace.focus_panel::<BrowserPanel>(window, cx) {
+                    panel.update(cx, |panel, cx| panel.open_url(url, window, cx));
+                }
+            },
+        );
         workspace.register_action(|workspace, _: &zed_actions::PreviewFileInBrowser, window, cx| {
             let Some(editor) = workspace.active_item_as::<Editor>(cx) else {
                 return;
@@ -212,6 +220,21 @@ impl BrowserPanel {
         self.run(vec!["open".into(), url], window, cx);
     }
 
+    /// The page showing, unless it's noah's own start page or a blank one.
+    fn pinnable_url(&self) -> Option<String> {
+        let url = self.current_url.trim();
+        let is_start_page = crate::start_page_url().is_some_and(|start| start == url);
+        (!url.is_empty() && url != "about:blank" && !is_start_page).then(|| url.to_string())
+    }
+
+    fn open_url(&mut self, url: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.current_url = url.clone();
+        self.address.update(cx, |address, cx| {
+            address.set_text(url.as_str(), window, cx);
+        });
+        self.run(vec!["open".into(), url], window, cx);
+    }
+
     fn run(&mut self, arguments: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(browser) = AgentBrowser::global(cx) else {
             return;
@@ -276,7 +299,7 @@ impl BrowserPanel {
             .context("agent-browser did not report a stream port")?;
         let stream = smol::net::TcpStream::connect(("127.0.0.1", port as u16)).await?;
         let (socket, _) = async_tungstenite::client_async(
-            format!("ws://127.0.0.1:{port}/?pacing=ack&maxFps=20"),
+            format!("ws://127.0.0.1:{port}/?pacing=ack&maxFps=30"),
             stream,
         )
         .await?;
@@ -550,6 +573,35 @@ impl BrowserPanel {
                     )
                     .child(self.address.clone()),
             )
+            .when_some(self.pinnable_url(), |this, url| {
+                let pinned = workspace::rail_apps::is_pinned(&url, cx);
+                this.child(
+                    IconButton::new(
+                        "browser-pin",
+                        if pinned { IconName::Unpin } else { IconName::Pin },
+                    )
+                    .icon_size(IconSize::Small)
+                    .tooltip(Tooltip::text(if pinned {
+                        "unpin from the rail"
+                    } else {
+                        "pin this app to the rail"
+                    }))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        if pinned {
+                            workspace::rail_apps::unpin(&url, cx);
+                        } else {
+                            workspace::rail_apps::pin(
+                                workspace::rail_apps::RailApp {
+                                    name: workspace::rail_apps::name_for_url(&url),
+                                    url: url.clone(),
+                                },
+                                cx,
+                            );
+                        }
+                        cx.notify();
+                    })),
+                )
+            })
             .when(busy, |this| {
                 this.child(
                     Label::new(noah_i18n::t(cx, "shepherd is browsing"))

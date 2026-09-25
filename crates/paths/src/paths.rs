@@ -141,6 +141,17 @@ pub fn config_dir() -> &'static PathBuf {
 }
 
 /// Returns the path to the data directory used by Zed.
+/// asherin.pages' home: documents, books and slideshows shepherd makes.
+pub fn pages_directory() -> PathBuf {
+    home_dir().join(".noah").join("pages")
+}
+
+/// asherin.chat's home: the folder chat threads run in when they aren't tied
+/// to a project, holding the chat's global memory.
+pub fn chat_directory() -> PathBuf {
+    home_dir().join(".noah").join("chat")
+}
+
 /// Where noah keeps the portable Git for Windows (MinGit) it downloads when
 /// the machine has no Git of its own.
 pub fn downloaded_git_directory() -> PathBuf {

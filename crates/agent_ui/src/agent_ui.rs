@@ -20,6 +20,7 @@ mod inline_prompt_editor;
 mod language_model_selector;
 mod mention_set;
 pub mod mission_control;
+mod asherin_chat;
 mod message_editor;
 mod mode_selector;
 mod model_selector;
@@ -592,6 +593,7 @@ pub fn init(
     agent::ThreadStore::init_global(cx);
     prompt_store::init(cx);
     mission_control::init(cx);
+    asherin_chat::init(cx);
 
     cx.set_global(agent_skills::SkillsUpdatedHook(std::rc::Rc::new(|cx| {
         let workspaces: Vec<_> = workspace::AppState::global(cx)

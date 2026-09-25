@@ -54,6 +54,7 @@ members = [
     "crates/debugger_ui",
     "crates/deepseek",
     "crates/dev_container",
+    "crates/device_room",
     "crates/diagnostics",
     "crates/docs_preprocessor",
     "crates/edit_prediction",
@@ -147,6 +148,7 @@ members = [
     "crates/net",
     "crates/node_runtime",
     "crates/noah_capture",
+    "crates/noah_device",
     "crates/noah_i18n",
     "crates/noah_trust",
     "crates/notifications",
@@ -335,6 +337,7 @@ debugger_ui = { path = "crates/debugger_ui" }
 deepseek = { path = "crates/deepseek" }
 derive_refineable = { path = "crates/refineable/derive_refineable" }
 dev_container = { path = "crates/dev_container" }
+device_room = { path = "crates/device_room" }
 diagnostics = { path = "crates/diagnostics" }
 edit_prediction = { path = "crates/edit_prediction" }
 edit_prediction_context = { path = "crates/edit_prediction_context" }
@@ -420,6 +423,7 @@ multi_buffer = { path = "crates/multi_buffer" }
 net = { path = "crates/net" }
 node_runtime = { path = "crates/node_runtime" }
 noah_capture = { path = "crates/noah_capture" }
+noah_device = { path = "crates/noah_device" }
 noah_i18n = { path = "crates/noah_i18n" }
 noah_trust = { path = "crates/noah_trust" }
 notifications = { path = "crates/notifications" }
@@ -819,6 +823,7 @@ resvg = { version = "0.46.0", default-features = false, features = [
     "memmap-fonts",
     "raster-images",
 ] }
+ring = "0.17"
 rsa = "0.9.6"
 runtimelib = { version = "1.4.0", default-features = false, features = [
     "async-dispatcher-runtime", "aws-lc-rs"

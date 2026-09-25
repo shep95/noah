@@ -1,0 +1,25 @@
+[package]
+name = "device_room"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/device_room.rs"
+doctest = false
+
+[dependencies]
+anyhow.workspace = true
+fs.workspace = true
+futures.workspace = true
+gpui.workspace = true
+http_client.workspace = true
+log.workspace = true
+noah_device.workspace = true
+ui.workspace = true
+util.workspace = true
+workspace.workspace = true

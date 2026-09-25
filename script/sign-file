@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Authenticode-sign a Windows program in place and timestamp it, with the
+# code-signing certificate at NOAH_SIGN_PFX (password in NOAH_SIGN_PASSWORD).
+# Without NOAH_SIGN_PFX it does nothing, so unsigned builds still work. Needs
+# osslsigncode. The NSIS installer calls this for itself and its uninstaller.
+#
+# Usage: script/sign-file <program.exe>
+
+set -euo pipefail
+
+file="${1:?program to sign}"
+[ -n "${NOAH_SIGN_PFX:-}" ] || exit 0
+command -v osslsigncode >/dev/null || { echo "NOAH_SIGN_PFX is set but osslsigncode is missing" >&2; exit 1; }
+osslsigncode sign -pkcs12 "$NOAH_SIGN_PFX" -pass "${NOAH_SIGN_PASSWORD:-}" \
+    -n "noah" -i "https://noah.asherin.com" -h sha256 \
+    -ts http://timestamp.digicert.com -in "$file" -out "$file.signed"
+mv "$file.signed" "$file"

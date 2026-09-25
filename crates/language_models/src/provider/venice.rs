@@ -8,8 +8,8 @@ use language_model::{
     ApiKeyConfiguration, ApiKeyState, ApiKeyStatus, AuthenticateError, EnvVar, IconOrSvg, LanguageModel,
     LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId,
     LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
-    LanguageModelProviderState, LanguageModelRequest, LanguageModelToolChoice,
-    ProviderSettingsView, RateLimiter, env_var,
+    LanguageModelEffortLevel, LanguageModelProviderState, LanguageModelRequest,
+    LanguageModelToolChoice, ProviderSettingsView, RateLimiter, ReasoningEffort, env_var,
 };
 use open_ai::ResponseStreamEvent;
 use open_ai::completion::{ChatCompletionMaxTokensParameter, into_open_ai};
@@ -42,6 +42,9 @@ pub struct VeniceModel {
     pub max_output_tokens: Option<u64>,
     pub supports_tools: bool,
     pub supports_images: bool,
+    /// Whether the model thinks before answering, which makes its reasoning
+    /// level selectable.
+    pub supports_reasoning: bool,
     pub traits: Vec<String>,
     /// US dollars per million input and output tokens.
     pub pricing: Option<(f64, f64)>,
@@ -101,6 +104,8 @@ struct ModelCapabilities {
     supports_function_calling: bool,
     #[serde(default)]
     supports_vision: bool,
+    #[serde(default)]
+    supports_reasoning: bool,
 }
 
 /// Venice-only request options, sent alongside the OpenAI-shaped body.
@@ -112,6 +117,9 @@ struct VeniceParameters {
     /// Reasoning models stream their thinking inside the reply text; stripping
     /// it keeps the thread to the answer itself.
     strip_thinking_response: bool,
+    /// Lets a reasoning model answer straight away when thinking is off.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    disable_thinking: bool,
 }
 
 #[derive(Serialize)]
@@ -138,6 +146,7 @@ fn parse_models(body: &str) -> Result<Vec<VeniceModel>> {
                 max_output_tokens: spec.max_completion_tokens,
                 supports_tools: spec.capabilities.supports_function_calling,
                 supports_images: spec.capabilities.supports_vision,
+                supports_reasoning: spec.capabilities.supports_reasoning,
                 traits: spec.traits,
                 pricing: spec.pricing.and_then(|pricing| {
                     Some((pricing.input?.usd?, pricing.output?.usd?))
@@ -527,6 +536,14 @@ impl LanguageModel for VeniceLanguageModel {
         true
     }
 
+    fn supports_thinking(&self) -> bool {
+        self.model.supports_reasoning
+    }
+
+    fn supported_effort_levels(&self) -> Vec<LanguageModelEffortLevel> {
+        reasoning_levels(&self.model)
+    }
+
     fn supports_split_token_display(&self) -> bool {
         true
     }
@@ -562,6 +579,7 @@ impl LanguageModel for VeniceLanguageModel {
         >,
     > {
         request.speed = None;
+        let (reasoning_effort, disable_thinking) = reasoning_for(&self.model, &request);
         let request = match into_open_ai(
             request,
             &self.model.id,
@@ -569,7 +587,7 @@ impl LanguageModel for VeniceLanguageModel {
             false,
             self.max_output_tokens(),
             ChatCompletionMaxTokensParameter::MaxCompletionTokens,
-            None,
+            reasoning_effort,
             false,
         ) {
             Ok(request) => VeniceRequest {
@@ -577,6 +595,7 @@ impl LanguageModel for VeniceLanguageModel {
                 venice_parameters: VeniceParameters {
                     include_venice_system_prompt: false,
                     strip_thinking_response: true,
+                    disable_thinking,
                 },
             },
             Err(error) => return async move { Err(error.into()) }.boxed(),
@@ -592,6 +611,47 @@ impl LanguageModel for VeniceLanguageModel {
         }
         .boxed()
     }
+}
+
+const REASONING_LEVELS: [ReasoningEffort; 3] = [
+    ReasoningEffort::Low,
+    ReasoningEffort::Medium,
+    ReasoningEffort::High,
+];
+
+fn reasoning_levels(model: &VeniceModel) -> Vec<LanguageModelEffortLevel> {
+    if !model.supports_reasoning {
+        return Vec::new();
+    }
+    REASONING_LEVELS
+        .iter()
+        .map(|effort| LanguageModelEffortLevel {
+            name: effort.label().into(),
+            value: effort.value().into(),
+            is_default: *effort == ReasoningEffort::Medium,
+        })
+        .collect()
+}
+
+/// The reasoning effort to ask Venice for, and whether to turn thinking off,
+/// from the level chosen in the thread.
+fn reasoning_for(
+    model: &VeniceModel,
+    request: &LanguageModelRequest,
+) -> (Option<ReasoningEffort>, bool) {
+    if !model.supports_reasoning {
+        return (None, false);
+    }
+    if !request.thinking_allowed {
+        return (None, true);
+    }
+    let effort = request
+        .thinking_effort
+        .as_deref()
+        .and_then(|effort| effort.parse::<ReasoningEffort>().ok())
+        .filter(|effort| REASONING_LEVELS.contains(effort))
+        .unwrap_or(ReasoningEffort::Medium);
+    (Some(effort), false)
 }
 
 #[cfg(test)]
@@ -676,6 +736,7 @@ mod tests {
             venice_parameters: VeniceParameters {
                 include_venice_system_prompt: false,
                 strip_thinking_response: true,
+                disable_thinking: false,
             },
         };
         let json = serde_json::to_value(&request).expect("serializes");
@@ -684,5 +745,59 @@ mod tests {
             json["venice_parameters"]["include_venice_system_prompt"],
             false
         );
+        assert!(json["venice_parameters"].get("disable_thinking").is_none());
+    }
+
+    fn reasoning_model(supports_reasoning: bool) -> VeniceModel {
+        VeniceModel {
+            id: "qwen3-235b".into(),
+            display_name: "Qwen3".into(),
+            context_tokens: 32_768,
+            max_output_tokens: None,
+            supports_tools: true,
+            supports_images: false,
+            supports_reasoning,
+            traits: Vec::new(),
+            pricing: None,
+        }
+    }
+
+    #[test]
+    fn reasoning_models_offer_three_levels() {
+        let levels = reasoning_levels(&reasoning_model(true));
+        let values: Vec<_> = levels.iter().map(|level| level.value.as_ref()).collect();
+        assert_eq!(values, ["low", "medium", "high"]);
+        assert!(levels.iter().any(|level| level.is_default && level.value == "medium"));
+        assert!(reasoning_levels(&reasoning_model(false)).is_empty());
+    }
+
+    #[test]
+    fn chosen_level_reaches_the_request() {
+        let model = reasoning_model(true);
+        let mut request = LanguageModelRequest {
+            thinking_allowed: true,
+            thinking_effort: Some("high".into()),
+            ..Default::default()
+        };
+        assert_eq!(reasoning_for(&model, &request), (Some(ReasoningEffort::High), false));
+
+        request.thinking_effort = Some("xhigh".into());
+        assert_eq!(reasoning_for(&model, &request), (Some(ReasoningEffort::Medium), false));
+
+        request.thinking_allowed = false;
+        assert_eq!(reasoning_for(&model, &request), (None, true));
+
+        assert_eq!(reasoning_for(&reasoning_model(false), &request), (None, false));
+    }
+
+    #[test]
+    fn reasoning_capability_is_read_from_the_model_list() {
+        let models = parse_models(
+            r#"{"data": [{"id": "deepseek-r1", "type": "text", "model_spec": {
+                "capabilities": {"supportsFunctionCalling": true, "supportsReasoning": true}
+            }}]}"#,
+        )
+        .expect("parses");
+        assert!(models[0].supports_reasoning);
     }
 }

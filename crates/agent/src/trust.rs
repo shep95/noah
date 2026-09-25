@@ -7,18 +7,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use collections::HashMap;
-use futures::AsyncReadExt as _;
-use gpui::{App, AppContext as _, EntityId, Global};
+use futures::future::Shared;
+use futures::{AsyncReadExt as _, FutureExt as _};
+use gpui::{App, AppContext as _, EntityId, Global, Task};
 use settings::Settings as _;
 use http_client::{AsyncBody, HttpClient};
 use language_model::LanguageModelToolResultContent;
 use noah_trust::{
-    evidence::Check,
+    evidence::{self, Check, UntrackedFile},
     injection,
     packages::{self, Assessment, Dependency, Verdict},
     project_files, provenance, secrets,
 };
 use serde::{Deserialize, Serialize};
+use util::ResultExt as _;
 
 /// Tools whose results come from outside the project (the web, or servers
 /// the person connected). Instruction-like lines in them are withheld.
@@ -34,6 +36,7 @@ pub const LOCAL_PROVIDERS: &[&str] = &["ollama", "lmstudio", "llama.cpp", "llama
 #[derive(Default)]
 pub struct TrustState {
     checks: HashMap<EntityId, Vec<Check>>,
+    run_trees: HashMap<EntityId, Vec<(String, RunTree)>>,
     quarantine: Vec<QuarantineRecord>,
     secrets: Vec<(String, String)>,
     /// This month's spend, loaded from the spend log on first use.
@@ -50,6 +53,15 @@ pub struct QuarantineRecord {
     /// only flagged to it (project files and command output).
     pub withheld: bool,
     pub findings: Vec<injection::Finding>,
+}
+
+/// The working tree a logged run saw when it finished.
+#[derive(Clone)]
+pub struct RunTree {
+    pub directory: Option<PathBuf>,
+    /// Taken in the background as soon as the run is logged; `None` outside
+    /// a git repository.
+    pub fingerprint: Shared<Task<Option<String>>>,
 }
 
 const QUARANTINE_KEPT: usize = 200;
@@ -94,14 +106,26 @@ pub fn set_brokered_secrets(secrets: Vec<(String, String)>, cx: &mut App) {
 /// Logs a command shepherd ran in a thread and returns its evidence id
 /// (`run-3`), which shepherd cites in its claims.
 pub fn record_check(thread: EntityId, mut check: Check, cx: &mut App) -> String {
-    let checks = cx
-        .default_global::<TrustState>()
-        .checks
-        .entry(thread)
-        .or_default();
+    let directory = check.working_directory.as_ref().map(PathBuf::from);
+    let fingerprint = match directory.clone() {
+        Some(directory) => {
+            cx.background_spawn(async move { working_tree_fingerprint(&directory).await })
+        }
+        None => Task::ready(None),
+    }
+    .shared();
+    let state = cx.default_global::<TrustState>();
+    let checks = state.checks.entry(thread).or_default();
     let id = format!("run-{}", checks.len() + 1);
     check.id = id.clone();
     checks.push(check);
+    state.run_trees.entry(thread).or_default().push((
+        id.clone(),
+        RunTree {
+            directory,
+            fingerprint,
+        },
+    ));
     id
 }
 
@@ -109,6 +133,114 @@ pub fn thread_checks(thread: EntityId, cx: &App) -> Vec<Check> {
     cx.try_global::<TrustState>()
         .and_then(|state| state.checks.get(&thread).cloned())
         .unwrap_or_default()
+}
+
+/// The working tree each of a thread's runs saw, by run id.
+pub fn thread_run_trees(thread: EntityId, cx: &App) -> Vec<(String, RunTree)> {
+    cx.try_global::<TrustState>()
+        .and_then(|state| state.run_trees.get(&thread).cloned())
+        .unwrap_or_default()
+}
+
+/// Untracked files larger than this are fingerprinted by size and
+/// modification time instead of content.
+const FINGERPRINT_CONTENT_LIMIT: u64 = 1024 * 1024;
+/// Once this much untracked content has been read, the remaining files are
+/// fingerprinted by size and modification time, so a tree full of
+/// unignored build output can't stall the check.
+const FINGERPRINT_TOTAL_CONTENT_LIMIT: u64 = 64 * 1024 * 1024;
+/// Leaves noah's own `.noah` folders out of the diff: evidence and provenance
+/// are written there after runs, and that isn't a change to the code.
+const EXCLUDE_NOAH_FOLDERS: &str = ":(exclude,glob)**/.noah/**";
+
+async fn git_output(directory: &Path, arguments: &[&str]) -> Option<Vec<u8>> {
+    let output = util::command::new_command(paths::git_program())
+        .current_dir(directory)
+        .args(arguments)
+        .output()
+        .await
+        .log_err()?;
+    output.status.success().then_some(output.stdout)
+}
+
+/// A fingerprint of the git working tree containing `directory`: the
+/// commit, the uncommitted changes and the untracked files. `None` outside
+/// a git repository or when git can't run.
+pub async fn working_tree_fingerprint(directory: &Path) -> Option<String> {
+    if !directory.is_dir() {
+        return None;
+    }
+    let top_level = git_output(directory, &["rev-parse", "--show-toplevel"]).await?;
+    let top_level = PathBuf::from(String::from_utf8_lossy(&top_level).trim());
+    let head = git_output(&top_level, &["rev-parse", "--verify", "--quiet", "HEAD"])
+        .await
+        .map(|head| String::from_utf8_lossy(&head).trim().to_string())
+        .unwrap_or_default();
+    let diff_options = [
+        "--binary",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--",
+        ".",
+        EXCLUDE_NOAH_FOLDERS,
+    ];
+    let diff = if head.is_empty() {
+        // Nothing is committed yet, so there is no HEAD to diff against:
+        // staged and unstaged changes together describe the tree.
+        let mut staged_arguments = vec!["diff", "--cached"];
+        staged_arguments.extend(diff_options);
+        let mut unstaged_arguments = vec!["diff"];
+        unstaged_arguments.extend(diff_options);
+        let mut diff = git_output(&top_level, &staged_arguments).await?;
+        diff.extend(git_output(&top_level, &unstaged_arguments).await?);
+        diff
+    } else {
+        let mut arguments = vec!["diff", "HEAD"];
+        arguments.extend(diff_options);
+        git_output(&top_level, &arguments).await?
+    };
+    let listing = git_output(
+        &top_level,
+        &["ls-files", "--others", "--exclude-standard", "-z"],
+    )
+    .await?;
+    let mut content_read = 0u64;
+    let untracked: Vec<UntrackedFile> = evidence::untracked_paths(&listing)
+        .into_iter()
+        .map(|path| {
+            let absolute = top_level.join(&path);
+            let Some(metadata) = std::fs::metadata(&absolute).log_err() else {
+                return UntrackedFile {
+                    path,
+                    ..Default::default()
+                };
+            };
+            let size = metadata.len();
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_nanos().to_string());
+            let content_sha256 = if size <= FINGERPRINT_CONTENT_LIMIT
+                && content_read + size <= FINGERPRINT_TOTAL_CONTENT_LIMIT
+            {
+                content_read += size;
+                std::fs::read(&absolute)
+                    .log_err()
+                    .map(|content| provenance::sha256_hex(&content))
+            } else {
+                None
+            };
+            UntrackedFile {
+                path,
+                size,
+                content_sha256,
+                modified,
+            }
+        })
+        .collect();
+    Some(evidence::working_tree_fingerprint(&head, &diff, &untracked))
 }
 
 /// Screens a tool's result on its way to the model.

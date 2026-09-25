@@ -3,6 +3,8 @@
 ;
 ; Build (from Linux or Windows):
 ;   makensis -DVERSION=0.1.0 -DSTAGE=<dir with noah.exe> -DOUTFILE=<out.exe> script/installer/noah.nsi
+; Add -DSIGN_FILE=<script> to have `<script> <file>` sign the uninstaller before
+; it is packed and the installer once it is written (NSIS 3.08+).
 
 Target amd64-unicode
 SetCompressor /SOLID lzma
@@ -15,6 +17,14 @@ SetCompressor /SOLID lzma
 !endif
 !ifndef OUTFILE
   !define OUTFILE "noah-windows-x86_64.exe"
+!endif
+
+!ifdef SIGN_FILE
+  !if ${NSIS_PACKEDVERSION} < 0x03008000
+    !error "signing the uninstaller needs NSIS 3.08 or newer (!uninstfinalize)"
+  !endif
+  !finalize '"${SIGN_FILE}" "%1"' = 0
+  !uninstfinalize '"${SIGN_FILE}" "%1"' = 0
 !endif
 
 !define APPNAME "noah"
@@ -68,6 +78,9 @@ Section "Install"
   updating:
 
   SetOutPath "$INSTDIR"
+  ; Earlier releases named the command-line tool bin\zed.exe, which shadowed a
+  ; real Zed install on PATH.
+  Delete "$INSTDIR\bin\zed.exe"
   File /r "${STAGE}\*.*"
   File "noah.ico"
 

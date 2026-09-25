@@ -29,6 +29,7 @@ pub fn init(cx: &mut App) {
     let browser = cx.new(|_| AgentBrowser::default());
     cx.set_global(GlobalAgentBrowser(browser));
     browser_panel::init(cx);
+    prewarm(cx);
     // agent-browser keeps its browser running in the background between
     // commands, which would otherwise outlive noah.
     cx.on_app_quit(|_| async {
@@ -91,6 +92,11 @@ async fn run_command(arguments: Vec<String>) -> Result<String> {
     )?;
     let mut command = util::command::new_command(&binary);
     command.arg("--session").arg(SESSION).args(&arguments);
+    // A profile that outlives the session keeps the browser's cache, cookies
+    // and sign-ins, so pages open warm instead of from an empty browser.
+    if std::env::var_os("AGENT_BROWSER_PROFILE").is_none() {
+        command.env("AGENT_BROWSER_PROFILE", profile_directory());
+    }
     if std::env::var_os("AGENT_BROWSER_EXECUTABLE_PATH").is_none()
         && let Some(browser) = find_browser()
     {
@@ -121,6 +127,27 @@ async fn run_command(arguments: Vec<String>) -> Result<String> {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let message = if stderr.is_empty() { stdout } else { stderr };
     anyhow::bail!(explain_failure(&message))
+}
+
+fn profile_directory() -> PathBuf {
+    paths::data_dir().join("browser").join("profile")
+}
+
+/// Starts the browser in the background shortly after noah opens, for people
+/// who have used the browser room before, so it's ready when they open it.
+fn prewarm(cx: &mut App) {
+    if !profile_directory().is_dir() || find_binary().is_none() {
+        return;
+    }
+    cx.spawn(async move |cx| {
+        cx.background_executor()
+            .timer(std::time::Duration::from_secs(4))
+            .await;
+        run_command(vec!["--json".into(), "stream".into(), "status".into()])
+            .await
+            .log_err();
+    })
+    .detach();
 }
 
 /// Rewrites the one failure people hit on a fresh machine into something they

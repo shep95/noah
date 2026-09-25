@@ -79,6 +79,64 @@ fn last_hash(log: &Path) -> Result<Option<String>> {
     Ok(Some(entry.hash))
 }
 
+/// The newest entry's hash, which commits to every entry before it. `None`
+/// when the log is missing, empty or its last entry is unreadable.
+pub fn chain_head(log: &Path) -> Option<String> {
+    last_hash(log)
+        .ok()
+        .flatten()
+        .filter(|hash| !hash.is_empty())
+}
+
+const TRAILER_KEY: &str = "Noah-Provenance";
+
+/// `message` with a `Noah-Provenance: <head>` git trailer, so the commit
+/// records where the provenance chain stood. An existing `Noah-Provenance`
+/// trailer is updated in place rather than repeated, and an empty message is
+/// left empty so git still refuses it.
+pub fn with_provenance_trailer(message: &str, head: &str) -> String {
+    let trailer = format!("{TRAILER_KEY}: {head}");
+    let body = message.trim_end();
+    if body.trim().is_empty() {
+        return message.to_string();
+    }
+    let trailing_newline = if message.ends_with('\n') { "\n" } else { "" };
+    let prefix = format!("{TRAILER_KEY}:");
+    if body.lines().any(|line| line.trim_start().starts_with(&prefix)) {
+        let updated: Vec<&str> = body
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with(&prefix) {
+                    trailer.as_str()
+                } else {
+                    line
+                }
+            })
+            .collect();
+        return format!("{}{trailing_newline}", updated.join("\n"));
+    }
+    let last_paragraph = body
+        .rsplit_once("\n\n")
+        .map(|(_, paragraph)| paragraph);
+    let ends_with_trailers = last_paragraph.is_some_and(|paragraph| {
+        paragraph.lines().all(is_trailer_line)
+    });
+    let separator = if ends_with_trailers { "\n" } else { "\n\n" };
+    format!("{body}{separator}{trailer}{trailing_newline}")
+}
+
+/// `Key: value` with a key made of letters, digits and dashes, as git
+/// trailers are.
+fn is_trailer_line(line: &str) -> bool {
+    line.split_once(": ").is_some_and(|(key, value)| {
+        !key.is_empty()
+            && !value.trim().is_empty()
+            && key
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    })
+}
+
 pub fn read(log: &Path) -> Result<Vec<Entry>> {
     let text = match std::fs::read_to_string(log) {
         Ok(text) => text,
@@ -168,6 +226,47 @@ mod tests {
         let entries = read(&log).expect("read");
         assert_eq!(history_of_line(&entries, "src/a.rs", 3).len(), 2);
         assert_eq!(history_of_line(&entries, "src/a.rs", 5).len(), 1);
+    }
+
+    #[test]
+    fn chain_head_is_the_newest_hash() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let log = directory.path().join(".noah/provenance.jsonl");
+        assert_eq!(chain_head(&log), None);
+        append(&log, edit("src/a.rs", (1, 5))).expect("append");
+        let second = append(&log, edit("src/a.rs", (3, 3))).expect("append");
+        assert_eq!(chain_head(&log), Some(second.hash));
+        std::fs::write(&log, "not json\n").expect("write");
+        assert_eq!(chain_head(&log), None);
+    }
+
+    #[test]
+    fn adds_the_provenance_trailer() {
+        assert_eq!(
+            with_provenance_trailer("Fix login", "abc"),
+            "Fix login\n\nNoah-Provenance: abc"
+        );
+        assert_eq!(
+            with_provenance_trailer("Fix login\n\nThe redirect looped.\n", "abc"),
+            "Fix login\n\nThe redirect looped.\n\nNoah-Provenance: abc\n"
+        );
+        assert_eq!(
+            with_provenance_trailer("Fix login\n\nSigned-off-by: A <a@b.c>", "abc"),
+            "Fix login\n\nSigned-off-by: A <a@b.c>\nNoah-Provenance: abc"
+        );
+        assert_eq!(
+            with_provenance_trailer("Fix login\n\nNoah-Provenance: abc", "abc"),
+            "Fix login\n\nNoah-Provenance: abc"
+        );
+        assert_eq!(
+            with_provenance_trailer("Fix login\n\nNoah-Provenance: old", "new"),
+            "Fix login\n\nNoah-Provenance: new"
+        );
+        assert_eq!(
+            with_provenance_trailer("Note: this is a subject", "abc"),
+            "Note: this is a subject\n\nNoah-Provenance: abc"
+        );
+        assert_eq!(with_provenance_trailer("  \n", "abc"), "  \n");
     }
 
     #[test]

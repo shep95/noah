@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Create the ed25519 key that signs noah's release manifest (latest.json).
+# The public half is committed at crates/auto_update/release_public_key.txt,
+# which is what noah's updater checks signatures against; the private half goes
+# to the path given, which must be outside this repository. Keep it offline and
+# backed up: losing it means installed copies can't be sent another update.
+#
+# Usage: script/generate-release-key <private-key-output.pem>
+# Needs OpenSSL 3.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+private_key="${1:?path to write the private key to, outside the repository}"
+repository="$PWD"
+public_key_file="crates/auto_update/release_public_key.txt"
+
+[[ ! -e "$private_key" ]] || { echo "$private_key already exists; not overwriting it" >&2; exit 1; }
+mkdir -p "$(dirname "$private_key")"
+private_key="$(cd "$(dirname "$private_key")" && pwd)/$(basename "$private_key")"
+case "$private_key" in
+    "$repository"/*) echo "the private key must not be written inside the repository" >&2; exit 1 ;;
+esac
+
+(umask 077 && openssl genpkey -algorithm ed25519 -out "$private_key")
+# The DER form of an ed25519 public key ends with the 32 raw key bytes.
+openssl pkey -in "$private_key" -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n' > "$public_key_file"
+echo >> "$public_key_file"
+echo "private key: $private_key"
+echo "public key ($public_key_file): $(cat "$public_key_file")"

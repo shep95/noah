@@ -121,7 +121,7 @@ const SUGGESTIONS_BY_LANGUAGE: &[LanguageSuggestion] = &[LanguageSuggestion {
     ],
     title: "Emmet is available for this file",
     description: "Emmet expands abbreviations such as `ul>li*3` into HTML and `m10` into CSS.",
-    docs_url: "https://zed.dev/docs/languages/emmet",
+    docs_url: "https://noah.asherin.com/faq",
     install_message: "Install Emmet",
 }];
 

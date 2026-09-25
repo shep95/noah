@@ -19,9 +19,13 @@ struct Pattern {
     /// The capture group holding the secret; the rest of the match (such as
     /// `password=`) stays so the output still makes sense.
     group: usize,
+    /// For patterns that only say where a secret could be: the least Shannon
+    /// entropy, in bits per character, a value needs to count as one.
+    min_entropy: Option<f64>,
 }
 
 const CREDENTIAL: &str = "credential";
+const HIGH_ENTROPY: &str = "high-entropy secret";
 
 static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
     [
@@ -40,6 +44,28 @@ static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
         (r"\bAIza[0-9A-Za-z_-]{35}\b", "Google API key", 0),
         (r"\b[rs]k_live_[0-9A-Za-z]{20,}\b", "Stripe key", 0),
         (r"\bnpm_[A-Za-z0-9]{36}\b", "npm token", 0),
+        (r"\bhf_[A-Za-z0-9]{30,}\b", "Hugging Face token", 0),
+        (
+            r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}",
+            "SendGrid key",
+            0,
+        ),
+        (r"\bSK[0-9a-fA-F]{32}\b", "Twilio key", 0),
+        (
+            r"\b[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27,}",
+            "Discord token",
+            0,
+        ),
+        (
+            r"AccountKey=([A-Za-z0-9+/=]{40,})",
+            "Azure storage key",
+            1,
+        ),
+        (
+            r#""private_key_id"\s*:\s*"([0-9a-f]{40})""#,
+            "GCP service account key",
+            1,
+        ),
         (
             r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b",
             "JSON web token",
@@ -57,15 +83,68 @@ static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| {
         ),
     ]
     .into_iter()
-    .filter_map(|(pattern, label, group)| {
+    .map(|(pattern, label, group)| (pattern, label, group, None))
+    .chain([(
+        r#"(?i)\b[A-Z0-9_]*(?:KEY|SECRET|TOKEN)["']?\s*[=:]\s*["']?([A-Za-z0-9+/=_.\-]{32,})"#,
+        HIGH_ENTROPY,
+        1,
+        Some(MIN_SECRET_ENTROPY),
+    )])
+    .filter_map(|(pattern, label, group, min_entropy)| {
         Some(Pattern {
             regex: Regex::new(pattern).ok()?,
             label,
             group,
+            min_entropy,
         })
     })
     .collect()
 });
+
+/// Random keys sit well above this; words, repeated characters and
+/// placeholders sit below it.
+const MIN_SECRET_ENTROPY: f64 = 3.5;
+
+/// Shannon entropy in bits per character.
+fn entropy(value: &str) -> f64 {
+    let mut counts: Vec<(char, usize)> = Vec::new();
+    let mut total = 0usize;
+    for character in value.chars() {
+        total += 1;
+        match counts.iter_mut().find(|(seen, _)| *seen == character) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((character, 1)),
+        }
+    }
+    if total == 0 {
+        return 0.0;
+    }
+    counts
+        .iter()
+        .map(|(_, count)| {
+            let probability = *count as f64 / total as f64;
+            -probability * probability.log2()
+        })
+        .sum()
+}
+
+impl Pattern {
+    /// Whether a match of this pattern is a secret rather than a value that
+    /// only sits where one could. Generated keys mix letters and digits;
+    /// long identifiers such as `derive_key_from_password` don't, and must
+    /// stay readable in code shepherd reads.
+    fn is_secret(&self, value: &str) -> bool {
+        match self.min_entropy {
+            Some(min_entropy) => {
+                entropy(value) >= min_entropy
+                    && value.chars().any(|character| character.is_ascii_digit())
+                    && value.chars().any(|character| character.is_ascii_alphabetic())
+                    && !is_placeholder(value)
+            }
+            None => true,
+        }
+    }
+}
 
 /// Replaces secrets with `[redacted <kind>]`. `known` secrets (name, value)
 /// from noah's secret store are replaced with `$NAME` first, so commands that
@@ -86,7 +165,10 @@ pub fn redact(text: &str, known: &[(String, String)]) -> Redacted {
             let Some(secret) = captures.get(pattern.group) else {
                 continue;
             };
-            if secret.as_str().starts_with('$') || secret.as_str().starts_with("[redacted") {
+            if secret.as_str().starts_with('$')
+                || secret.as_str().starts_with("[redacted")
+                || !pattern.is_secret(secret.as_str())
+            {
                 continue;
             }
             replaced.push_str(&output[last..secret.start()]);
@@ -144,13 +226,15 @@ pub fn find_in_added_lines(diff: &str) -> Vec<&'static str> {
                 let Some(secret) = captures.get(pattern.group) else {
                     return false;
                 };
-                if pattern.label == CREDENTIAL && !file.in_config_file {
+                if (pattern.label == CREDENTIAL || pattern.label == HIGH_ENTROPY)
+                    && !file.in_config_file
+                {
                     let quoted = file.text[..secret.start()].ends_with(['"', '\'']);
                     if !quoted {
                         return false;
                     }
                 }
-                !is_placeholder(secret.as_str())
+                !is_placeholder(secret.as_str()) && pattern.is_secret(secret.as_str())
             })
         });
         if found && !kinds.contains(&pattern.label) {
@@ -321,6 +405,124 @@ mod tests {
 +PORT=3000\n\
 +++ b/src/main.rs\n\
 +token = read_token_from_keychain()\n";
+        assert!(find_in_added_lines(diff).is_empty());
+    }
+
+    #[test]
+    fn more_provider_tokens_are_hidden() {
+        // Split so GitHub push protection doesn't mistake the fixtures for real tokens.
+        for (text, label) in [
+            (
+                concat!("HF=hf", "_abcdefghijklmnopqrstuvwxyzABCDEFGH"),
+                "Hugging Face token",
+            ),
+            (
+                concat!("SG.aBcDeFgHiJkLmNoPqRsT", ".uVwXyZ0123456789_-abcdEFGHijkl"),
+                "SendGrid key",
+            ),
+            (
+                concat!("sid SK", "0123456789abcdef0123456789ABCDEF"),
+                "Twilio key",
+            ),
+            (
+                concat!(
+                    "bot MTk4NjIyNDgzNDcxOTI1MjQ4",
+                    ".Cl2FMQ.ZnCjm1XVW7vRze4b7Cq4se7kKWs"
+                ),
+                "Discord token",
+            ),
+        ] {
+            let redacted = redact(text, &[]);
+            assert!(
+                redacted.text.contains(&format!("[redacted {label}]")),
+                "{text} -> {}",
+                redacted.text
+            );
+            let diff = format!("+++ b/src/config.rs\n+let value = \"{text}\";\n");
+            assert!(find_in_added_lines(&diff).contains(&label), "{text}");
+        }
+    }
+
+    #[test]
+    fn azure_account_keys_are_hidden_but_not_the_connection_string() {
+        let key = "Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0g=";
+        let text = format!(
+            "DefaultEndpointsProtocol=https;AccountName=store;AccountKey={key};EndpointSuffix=core.windows.net"
+        );
+        assert_eq!(
+            redact(&text, &[]).text,
+            "DefaultEndpointsProtocol=https;AccountName=store;AccountKey=[redacted Azure storage key];EndpointSuffix=core.windows.net"
+        );
+        let diff = format!("+++ b/src/storage.ts\n+const connection = \"{text}\";\n");
+        assert_eq!(find_in_added_lines(&diff), vec!["Azure storage key"]);
+    }
+
+    #[test]
+    fn gcp_service_account_files_are_hidden() {
+        let json = r#"{
+  "type": "service_account",
+  "private_key_id": "0123456789abcdef0123456789abcdef01234567",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----\n",
+  "client_email": "bot@project.iam.gserviceaccount.com"
+}"#;
+        let redacted = redact(json, &[]);
+        assert!(redacted
+            .text
+            .contains(r#""private_key_id": "[redacted GCP service account key]""#));
+        assert!(redacted.text.contains(r#""private_key": "[redacted private key]\n""#));
+        assert!(!redacted.text.contains("MIIEvQ"));
+        assert!(redacted.text.contains("bot@project.iam.gserviceaccount.com"));
+
+        let diff = format!(
+            "+++ b/service-account.json\n{}\n",
+            json.lines().map(|line| format!("+{line}")).collect::<Vec<_>>().join("\n")
+        );
+        let kinds = find_in_added_lines(&diff);
+        assert!(kinds.contains(&"private key"));
+        assert!(kinds.contains(&"GCP service account key"));
+    }
+
+    #[test]
+    fn high_entropy_values_under_key_names_are_secrets() {
+        let value = "q8Zr2mTx9LwP4vKs7NbY3cHd6FjG1eUa";
+        assert!(entropy(value) >= MIN_SECRET_ENTROPY);
+        for line in [
+            format!("SIGNING_KEY={value}"),
+            format!("stripe_key: {value}"),
+            format!("WebhookSecretKey = \"{value}\""),
+        ] {
+            let redacted = redact(&line, &[]);
+            assert!(!redacted.text.contains(value), "{line}");
+            assert_eq!(redacted.count, 1, "{line}");
+        }
+        let diff = format!("+++ b/.env\n+SIGNING_KEY={value}\n");
+        assert_eq!(find_in_added_lines(&diff), vec![HIGH_ENTROPY]);
+        let diff = format!("+++ b/src/sign.py\n+SIGNING_KEY = \"{value}\"\n");
+        assert_eq!(find_in_added_lines(&diff), vec![HIGH_ENTROPY]);
+    }
+
+    #[test]
+    fn low_entropy_placeholders_and_ordinary_values_are_not_secrets() {
+        let image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        for line in [
+            "CACHE_KEY=aaaaaaaabbbbbbbbccccccccdddddddd".to_string(),
+            "SIGNING_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            "SIGNING_KEY=your_signing_key_goes_here_Q8zR2mTx9LwP".to_string(),
+            "SIGNING_KEY=example7Zr2mTx9LwP4vKs7NbY3cHd6FjG1eUa".to_string(),
+            "REQUEST_ID=550e8400-e29b-41d4-a716-446655440000".to_string(),
+            format!("IMAGE_DATA={image}"),
+            "let cache_key = compute_cache_key(&request);".to_string(),
+            "let session_key = derive_session_key_from_master_password_and_salt(salt);".to_string(),
+        ] {
+            let redacted = redact(&line, &[]);
+            assert_eq!(redacted.text, line);
+            let diff = format!("+++ b/.env\n+{line}\n");
+            assert!(find_in_added_lines(&diff).is_empty(), "{line}");
+        }
+        let diff = "+++ b/src/main.rs\n\
++let token = read_token();\n\
++let session_key = derive_session_key_from_master_secret_and_salt(salt);\n\
++SIGNING_KEY = q8Zr2mTx9LwP4vKs7NbY3cHd6FjG1eUa\n";
         assert!(find_in_added_lines(diff).is_empty());
     }
 

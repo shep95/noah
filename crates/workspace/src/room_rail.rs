@@ -27,6 +27,8 @@ actions!(
         EnterBrowserRoom,
         /// Opens mission control, where shepherd's work is supervised.
         EnterMissionRoom,
+        /// Opens the device room: this computer's security and health.
+        EnterDeviceRoom,
     ]
 );
 
@@ -46,10 +48,11 @@ pub enum Room {
     Terminal,
     Browser,
     Mission,
+    Device,
 }
 
 impl Room {
-    const ALL: [Room; 7] = [
+    const ALL: [Room; 8] = [
         Room::Write,
         Room::Shepherd,
         Room::Files,
@@ -57,6 +60,7 @@ impl Room {
         Room::Terminal,
         Room::Browser,
         Room::Mission,
+        Room::Device,
     ];
 
     // Must match each panel's `Panel::persistent_name`.
@@ -69,6 +73,7 @@ impl Room {
             Room::Terminal => Some("TerminalPanel"),
             Room::Browser => Some("BrowserPanel"),
             Room::Mission => Some("MissionControlPanel"),
+            Room::Device => Some("DevicePanel"),
         }
     }
 
@@ -81,6 +86,7 @@ impl Room {
             Room::Terminal => "terminal",
             Room::Browser => "browser",
             Room::Mission => "mission control",
+            Room::Device => "device",
         }
     }
 
@@ -93,6 +99,7 @@ impl Room {
             Room::Terminal => IconName::Terminal,
             Room::Browser => IconName::ToolWeb,
             Room::Mission => IconName::ListTodo,
+            Room::Device => IconName::Lock,
         }
     }
 
@@ -105,6 +112,7 @@ impl Room {
             Room::Terminal => Box::new(EnterTerminalRoom),
             Room::Browser => Box::new(EnterBrowserRoom),
             Room::Mission => Box::new(EnterMissionRoom),
+            Room::Device => Box::new(EnterDeviceRoom),
         }
     }
 }
@@ -131,6 +139,9 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     .on_action(cx.listener(|workspace, _: &EnterMissionRoom, window, cx| {
         workspace.enter_room(Room::Mission, window, cx)
     }))
+    .on_action(cx.listener(|workspace, _: &EnterDeviceRoom, window, cx| {
+        workspace.enter_room(Room::Device, window, cx)
+    }))
     .on_action(
         cx.listener(|workspace, _: &zed_actions::ToggleBackgroundColors, _window, cx| {
             let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
@@ -152,6 +163,33 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
 
 struct CaptureNotification;
 
+/// The backgrounds shipped in `assets/images/noah/wallpapers`, as menu label
+/// and file name; any image added there appears here.
+fn bundled_backgrounds(cx: &App) -> Vec<(String, String)> {
+    let directory = "images/noah/wallpapers/";
+    let mut backgrounds: Vec<(String, String)> = cx
+        .asset_source()
+        .list(directory)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|path| {
+            let name = path.strip_prefix(directory)?.to_string();
+            let lowercase = name.to_lowercase();
+            let is_image = [".jpg", ".jpeg", ".png", ".webp"]
+                .iter()
+                .any(|extension| lowercase.ends_with(extension));
+            if !is_image || name.contains('/') {
+                return None;
+            }
+            let stem = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
+            let label = stem.replace(['-', '_'], " ");
+            Some((label, name))
+        })
+        .collect();
+    backgrounds.sort();
+    backgrounds
+}
+
 /// The rail's settings menu: the things people reach for most, one click
 /// away, with everything else behind "all settings".
 fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
@@ -165,7 +203,18 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                 page: "Appearance".into(),
                 target: None,
             }))
-            .action("upload a background image", Box::new(zed_actions::ChooseBackgroundImage))
+            .header("background")
+            .action(
+                "noah default",
+                Box::new(zed_actions::UseBundledBackground {
+                    name: String::new(),
+                }),
+            );
+        let menu = bundled_backgrounds(cx).into_iter().fold(menu, |menu, (label, name)| {
+            menu.action(label, Box::new(zed_actions::UseBundledBackground { name }))
+        });
+        let menu = menu
+            .action("upload your own…", Box::new(zed_actions::ChooseBackgroundImage))
             .toggleable_entry(
                 "colors follow the background",
                 adapts,
@@ -190,6 +239,7 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                 target: None,
             }))
             .action("mission control", Box::new(EnterMissionRoom))
+            .action("device security", Box::new(EnterDeviceRoom))
             .separator()
             .header("tools")
             .action(
@@ -407,6 +457,73 @@ impl Workspace {
                             })),
                     )
             }))
+            .children(crate::rail_apps::apps(cx).into_iter().enumerate().map(|(index, app)| {
+                let initial: SharedString = app
+                    .name
+                    .chars()
+                    .find(|character| character.is_alphanumeric())
+                    .map(|character| character.to_lowercase().to_string())
+                    .unwrap_or_else(|| "·".to_string())
+                    .into();
+                let open_url = app.url.clone();
+                let unpin_url = app.url.clone();
+                let tooltip: SharedString =
+                    format!("{} · right-click to unpin", app.name).into();
+                h_flex().w_full().justify_center().child(
+                    div()
+                        .id(("rail-app", index))
+                        .size(px(22.))
+                        .rounded_md()
+                        .border_1()
+                        .border_color(colors.border_variant)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_xs()
+                        .text_color(colors.text_muted)
+                        .cursor_pointer()
+                        .hover(|style| style.text_color(colors.text).border_color(colors.border))
+                        .child(initial)
+                        .tooltip(Tooltip::text(tooltip))
+                        .on_click(move |_, window, cx| {
+                            window.dispatch_action(
+                                Box::new(zed_actions::OpenInBrowserRoom {
+                                    url: open_url.clone(),
+                                }),
+                                cx,
+                            );
+                        })
+                        .on_mouse_down(gpui::MouseButton::Right, move |_, _, cx| {
+                            crate::rail_apps::unpin(&unpin_url, cx);
+                        }),
+                )
+            }))
+            .child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("asherin-chat", IconName::Chat)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("asherin.chat", &zed_actions::OpenAsherinChat, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenAsherinChat), cx)
+                        }),
+                ),
+            )
+            .child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("asherin-pages", IconName::FileDoc)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("asherin.pages", &zed_actions::OpenAsherinPages, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenAsherinPages), cx)
+                        }),
+                ),
+            )
             .child(div().flex_1())
             .child({
                 let recording = noah_capture::recording_elapsed(cx);

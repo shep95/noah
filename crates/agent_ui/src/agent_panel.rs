@@ -1149,6 +1149,9 @@ pub struct AgentPanel {
     last_context_source: Option<AgentContextSource>,
 
     is_active: bool,
+    /// Set while noah adds its chats folder to a window with no project, so
+    /// shepherd can be talked to without opening one first.
+    opening_chat_folder: Option<Task<()>>,
 }
 
 impl AgentPanel {
@@ -1561,6 +1564,7 @@ impl AgentPanel {
             _thread_metadata_store_subscription,
             last_context_source: None,
             is_active: false,
+            opening_chat_folder: None,
         };
 
         panel.ensure_native_agent_connection(cx);
@@ -2935,6 +2939,69 @@ impl AgentPanel {
 
     fn has_open_project(&self, cx: &App) -> bool {
         self.project.read(cx).visible_worktrees(cx).next().is_some()
+    }
+
+    /// shepherd works inside a project, so a window with none (such as a new
+    /// window with an untitled file) gets noah's own chats folder instead of
+    /// asking the person to open a project before they can talk.
+    fn open_chat_folder_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.opening_chat_folder.is_some()
+            || self.has_open_project(cx)
+            || !self.project.read(cx).is_local()
+        {
+            return;
+        }
+        let folder = paths::chat_directory();
+        let project = self.project.clone();
+        self.opening_chat_folder = Some(cx.spawn_in(window, async move |this, cx| {
+            let result = async {
+                cx.background_spawn({
+                    let folder = folder.clone();
+                    async move { std::fs::create_dir_all(&folder) }
+                })
+                .await?;
+                // The folder is noah's own, so it opens trusted instead of in
+                // Restricted Mode, where shepherd would have no tools.
+                project.update(cx, |project, cx| {
+                    if let Some(trusted_worktrees) =
+                        project::trusted_worktrees::TrustedWorktrees::try_get_global(cx)
+                    {
+                        let worktree_store = project.worktree_store();
+                        trusted_worktrees.update(cx, |trusted_worktrees, cx| {
+                            trusted_worktrees.trust(
+                                &worktree_store,
+                                HashSet::from_iter([
+                                    project::trusted_worktrees::PathTrust::AbsPath(
+                                        folder.clone(),
+                                    ),
+                                ]),
+                                cx,
+                            );
+                        });
+                    }
+                });
+                project
+                    .update(cx, |project, cx| {
+                        project.find_or_create_worktree(&folder, true, cx)
+                    })
+                    .await?;
+                anyhow::Ok(())
+            }
+            .await;
+            this.update_in(cx, |this, window, cx| {
+                this.opening_chat_folder = None;
+                match result {
+                    Ok(()) => {
+                        if this.is_active {
+                            this.ensure_thread_initialized(window, cx);
+                        }
+                    }
+                    Err(error) => log::error!("couldn't open noah's chats folder: {error:#}"),
+                }
+                cx.notify();
+            })
+            .log_err();
+        }));
     }
 
     fn ensure_native_agent_connection(&self, cx: &mut Context<Self>) {
@@ -5068,6 +5135,7 @@ impl Panel for AgentPanel {
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.is_active = active;
         if active {
+            self.open_chat_folder_if_needed(window, cx);
             self.ensure_thread_initialized(window, cx);
         }
     }
@@ -6548,7 +6616,9 @@ impl Render for AgentPanel {
             .child(self.render_toolbar(window, cx))
             .children(self.render_new_user_onboarding(window, cx))
             .map(|parent| match self.visible_surface() {
-                VisibleSurface::Uninitialized if !self.has_open_project(cx) => {
+                VisibleSurface::Uninitialized
+                    if !self.has_open_project(cx) && self.opening_chat_folder.is_none() =>
+                {
                     parent.child(self.render_no_project_state(cx))
                 }
                 VisibleSurface::Uninitialized => parent,

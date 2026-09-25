@@ -468,6 +468,9 @@ pub fn init(cx: &mut App) {
             .register_action(|_, _: &zed_actions::ChooseBackgroundImage, window, cx| {
                 choose_wallpaper(window, cx);
             })
+            .register_action(|_, action: &zed_actions::UseBundledBackground, window, cx| {
+                use_bundled_wallpaper(action.name.clone(), window, cx);
+            })
             .register_action(|_, action: &OpenSettingsAt, window, cx| {
                 let window_handle = window.window_handle().downcast::<MultiWorkspace>();
                 open_settings_editor_at_target(
@@ -4744,6 +4747,38 @@ pub(crate) fn choose_wallpaper(window: &mut Window, cx: &mut App) {
         .detach_and_log_err(cx);
 }
 
+/// The backgrounds that ship with noah, by file name.
+pub const BUNDLED_WALLPAPER_DIRECTORY: &str = "images/noah/wallpapers/";
+
+fn use_bundled_wallpaper(name: String, window: &mut Window, cx: &mut App) {
+    let fs = <dyn fs::Fs>::global(cx);
+    if name.is_empty() {
+        SettingsStore::global(cx).update_settings_file(fs, |content, _| {
+            content.workspace.wallpaper = None;
+        });
+        return;
+    }
+    let bytes = cx
+        .asset_source()
+        .load(&format!("{BUNDLED_WALLPAPER_DIRECTORY}{name}"))
+        .ok()
+        .flatten()
+        .map(|bytes| bytes.into_owned());
+    window
+        .spawn(cx, async move |cx| {
+            let bytes = bytes.with_context(|| format!("noah doesn't include a background named {name}"))?;
+            let stored = cx
+                .background_spawn(async move { store_wallpaper_bytes(&bytes) })
+                .await?;
+            cx.update(|_window, cx| {
+                SettingsStore::global(cx).update_settings_file(fs, move |content, _| {
+                    content.workspace.wallpaper = Some(stored.to_string_lossy().into_owned());
+                });
+            })
+        })
+        .detach_and_log_err(cx);
+}
+
 fn store_wallpaper(source: &std::path::Path) -> Result<PathBuf> {
     let metadata = std::fs::metadata(source)
         .with_context(|| format!("couldn't read {}", source.display()))?;
@@ -4752,7 +4787,11 @@ fn store_wallpaper(source: &std::path::Path) -> Result<PathBuf> {
     }
     let bytes = std::fs::read(source)
         .with_context(|| format!("couldn't read {}", source.display()))?;
-    let sanitized = theme::sanitize_wallpaper_image(&bytes)
+    store_wallpaper_bytes(&bytes)
+}
+
+fn store_wallpaper_bytes(bytes: &[u8]) -> Result<PathBuf> {
+    let sanitized = theme::sanitize_wallpaper_image(bytes)
         .context("that file isn't an image noah can read")?;
 
     let directory = paths::config_dir().join("wallpapers");

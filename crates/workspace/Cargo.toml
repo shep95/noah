@@ -31,6 +31,7 @@ noah_capture.workspace = true
 any_vec.workspace = true
 agent_settings.workspace = true
 anyhow.workspace = true
+paths.workspace = true
 async-recursion.workspace = true
 client.workspace = true
 chrono.workspace = true

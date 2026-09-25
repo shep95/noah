@@ -115,14 +115,13 @@ fi
 arch=$(uname -m)
 case "$arch" in
     x86_64 | amd64) arch="x86_64" ;;
-    aarch64 | arm64) arch="aarch64" ;;
-    *) echo "unsupported WSL architecture for the zed sandbox helper: $arch" >&2; exit 1 ;;
+    *) echo "noah's sandbox needs a 64-bit Intel or AMD WSL distribution; this one is $arch" >&2; exit 1 ;;
 esac
-url="https://cloud.zed.dev/releases/$channel/$version/download?asset=zed&arch=$arch&os=linux&source=zed-wsl-sandbox"
+url="https://noah.asherin.com/downloads/noah-linux-$arch.tar.xz"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/zed-wsl-helper-XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-tarball="$tmp/zed.tar.gz"
+tarball="$tmp/noah.tar.xz"
 if command -v curl >/dev/null 2>&1; then
     curl -fL "$url" -o "$tarball"
 elif command -v wget >/dev/null 2>&1; then
@@ -133,10 +132,10 @@ else
 fi
 
 mkdir -p "$tmp/unpacked"
-tar -xzf "$tarball" -C "$tmp/unpacked"
+tar -xJf "$tarball" -C "$tmp/unpacked"
 helper_src=$(find "$tmp/unpacked" -type f -path '*/libexec/zed-editor' -print 2>/dev/null | head -n 1 || true)
 if [ -z "$helper_src" ]; then
-    echo 'the downloaded zed tarball did not contain a libexec/zed-editor binary' >&2
+    echo 'the downloaded noah archive did not contain a libexec/zed-editor binary' >&2
     exit 1
 fi
 app=$(dirname "$(dirname "$helper_src")")

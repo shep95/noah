@@ -31,12 +31,12 @@
         "text.muted": "#8a9a8eff",
         "text.placeholder": "#6f7d73ff",
         "text.disabled": "#414d45ff",
-        "text.accent": "#eef3ecff",
+        "text.accent": "#9fd4a8ff",
         "icon": "#d6e0d2ff",
         "icon.muted": "#8a9a8eff",
         "icon.disabled": "#414d45ff",
         "icon.placeholder": "#56645bff",
-        "icon.accent": "#eef3ecff",
+        "icon.accent": "#9fd4a8ff",
         "status_bar.background": "#040605ff",
         "title_bar.background": "#040605ff",
         "title_bar.inactive_background": "#040605ff",
@@ -60,8 +60,8 @@
         "editor.subheader.background": "#0b0f0de6",
         "editor.active_line.background": "#10161259",
         "editor.highlighted_line.background": "#141b17ff",
-        "editor.line_number": "#3a4740ff",
-        "editor.active_line_number": "#aab6acff",
+        "editor.line_number": "#56645bff",
+        "editor.active_line_number": "#8a9a8eff",
         "editor.hover_line_number": "#8a9a8eff",
         "editor.invisible": "#2a352eff",
         "editor.wrap_guide": "#d6e0d20a",
@@ -96,7 +96,7 @@
         "terminal.ansi.white": "#c9d6c4ff",
         "terminal.ansi.bright_white": "#eef3ecff",
         "terminal.ansi.dim_white": "#8a9a8eff",
-        "link_text.hover": "#eef3ecff",
+        "link_text.hover": "#9fd4a8ff",
         "version_control.added": "#7fae84ff",
         "version_control.modified": "#c8b070ff",
         "version_control.word_added": "#7fae8433",
@@ -190,12 +190,12 @@
             "font_weight": null
           },
           "comment": {
-            "color": "#818f85ff",
+            "color": "#6f7d73ff",
             "font_style": "italic",
             "font_weight": null
           },
           "comment.doc": {
-            "color": "#8b998eff",
+            "color": "#6f7d73ff",
             "font_style": "italic",
             "font_weight": null
           },
@@ -230,7 +230,7 @@
             "font_weight": null
           },
           "function": {
-            "color": "#c9d6c4ff",
+            "color": "#e2d5b0ff",
             "font_style": null,
             "font_weight": null
           },
@@ -240,7 +240,7 @@
             "font_weight": null
           },
           "keyword": {
-            "color": "#9fb7a5ff",
+            "color": "#88a9b6ff",
             "font_style": null,
             "font_weight": null
           },

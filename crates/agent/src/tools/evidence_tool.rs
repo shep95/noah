@@ -7,7 +7,7 @@ use agent_client_protocol::schema::v1 as acp;
 use futures::FutureExt as _;
 use gpui::{App, AppContext as _, AsyncApp, Entity, Task};
 use noah_trust::{
-    evidence::{self, Bundle, Check, Claim, FileConfidence, RepeatResult},
+    evidence::{self, Bundle, Check, Claim, FileConfidence, RepeatResult, RunFingerprint},
     mutation, project_files, provenance, spec::Spec,
 };
 use project::Project;
@@ -31,12 +31,17 @@ use crate::{AgentTool, ToolCallEventStream, ToolInput};
 ///   List honestly what you did not verify, your confidence per changed file
 ///   (0.0 to 1.0), the spec clauses (AC-1...) the change serves, and the
 ///   behavior that changed (what a user or caller will notice, not which
-///   lines moved). The bundle is saved in `.noah/evidence/`.
+///   lines moved). A claim citing a run the code has changed since is
+///   flagged as stale; re-run that command and cite the new run. The bundle
+///   is saved in `.noah/evidence/`.
 /// - `repeat`: run a test command several times to find flaky tests. The
 ///   result is attached as evidence.
-/// - `mutate`: put small deliberate bugs into lines you changed, one at a
-///   time, and run the tests after each. A bug the tests don't catch shows
-///   behavior no test checks; add a test for it. The file is always restored.
+/// - `mutate`: put small deliberate bugs into lines you changed (flipped
+///   comparisons and booleans, off-by-one boundaries, replaced return
+///   values, deleted calls, swapped arguments, skipped error branches), one
+///   at a time, and run the tests after each. A bug the tests don't catch
+///   shows behavior no test checks; add a test for it. The file is always
+///   restored.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EvidenceToolInput {
     pub action: EvidenceAction,
@@ -79,7 +84,7 @@ pub struct EvidenceToolInput {
     pub start_line: Option<usize>,
     #[serde(default)]
     pub end_line: Option<usize>,
-    /// For `mutate`: most mutants to try (default 8, at most 20).
+    /// For `mutate`: most mutants to try (default 8, at most 30).
     #[serde(default)]
     pub limit: Option<usize>,
 }
@@ -197,13 +202,21 @@ async fn finish(
     event_stream: &ToolCallEventStream,
     cx: &mut AsyncApp,
 ) -> Result<String, String> {
-    let (checks, model) = cx.update(|cx| {
-        let checks = event_stream
-            .thread_entity_id()
+    let (checks, run_trees, model) = cx.update(|cx| {
+        let thread = event_stream.thread_entity_id();
+        let checks = thread
             .map(|thread| crate::trust::thread_checks(thread, cx))
             .unwrap_or_default();
-        (checks, event_stream.thread_model_name(cx))
+        let run_trees = thread
+            .map(|thread| crate::trust::thread_run_trees(thread, cx))
+            .unwrap_or_default();
+        (checks, run_trees, event_stream.thread_model_name(cx))
     });
+    let mut fingerprints_at_run = Vec::with_capacity(run_trees.len());
+    for (run, tree) in run_trees {
+        let at_run = tree.fingerprint.await;
+        fingerprints_at_run.push((run, tree.directory, at_run));
+    }
     let title = input.title.unwrap_or_else(|| "change".to_string());
     let now = chrono::Utc::now();
     let id = format!("{}-{}", now.format("%Y%m%d-%H%M%S"), evidence::slug(&title));
@@ -220,6 +233,7 @@ async fn finish(
             .map(|claim| Claim {
                 text: claim.text,
                 grounds: claim.grounds,
+                stale_grounds: Vec::new(),
             })
             .collect(),
         not_verified: input.not_verified,
@@ -241,6 +255,36 @@ async fn finish(
     let root_for_write = root.clone();
     let result = cx
         .background_spawn(async move {
+            let mut current_fingerprints: Vec<(PathBuf, Option<String>)> = Vec::new();
+            let mut runs = Vec::with_capacity(fingerprints_at_run.len());
+            for (run, directory, at_run) in fingerprints_at_run {
+                let current = match directory {
+                    Some(directory) => {
+                        let known = current_fingerprints
+                            .iter()
+                            .find(|(known_directory, _)| *known_directory == directory)
+                            .map(|(_, fingerprint)| fingerprint.clone());
+                        match known {
+                            Some(fingerprint) => fingerprint,
+                            None => {
+                                let fingerprint =
+                                    crate::trust::working_tree_fingerprint(&directory).await;
+                                current_fingerprints.push((directory, fingerprint.clone()));
+                                fingerprint
+                            }
+                        }
+                    }
+                    None => None,
+                };
+                runs.push(RunFingerprint {
+                    run,
+                    at_run,
+                    now: current,
+                });
+            }
+            bundle.mark_stale(&evidence::stale_runs(&runs));
+            let stale_notes = bundle.stale_claim_notes();
+
             if let Ok(spec_text) = std::fs::read_to_string(&spec_path) {
                 let spec = Spec::parse(&spec_text);
                 for unknown in spec.unknown_ids(&bundle.spec_clauses) {
@@ -289,12 +333,21 @@ async fn finish(
                 },
             );
             let problems = bundle.ungrounded_claims().len() + bundle.warnings.len();
-            anyhow::Ok((markdown, markdown_path, problems))
+            anyhow::Ok((markdown, markdown_path, problems, stale_notes))
         })
         .await
         .map_err(|error| format!("couldn't save the evidence: {error:#}"))?;
-    let (markdown, path, problems) = result;
+    let (markdown, path, problems, stale_notes) = result;
     let mut response = format!("saved {}\n\n{markdown}", path.display());
+    if !stale_notes.is_empty() {
+        response.push('\n');
+        for note in &stale_notes {
+            response.push_str(&format!("\n{note}"));
+        }
+        response.push_str(
+            "\nRe-run those commands in the terminal, then call `finish` again citing the new run ids.",
+        );
+    }
     if problems > 0 {
         response.push_str(
             "\nThe person will see the items under \"needs attention\". Mention them plainly in your reply; don't describe the change as verified where the evidence doesn't show it.",
@@ -535,11 +588,14 @@ async fn mutate(
         .map_err(|error| format!("couldn't read {}: {error}", path.display()))?;
     let first = input.start_line.unwrap_or(1);
     let last = input.end_line.unwrap_or(original.lines().count());
-    let limit = input.limit.unwrap_or(8).clamp(1, 20);
-    let mutants = mutation::mutants(&original, first, last, limit);
+    let limit = input
+        .limit
+        .unwrap_or(mutation::DEFAULT_LIMIT)
+        .clamp(1, mutation::MAX_LIMIT);
+    let mutants = mutation::mutants_for_path(&relative, &original, first, last, limit);
     if mutants.is_empty() {
         return Ok(format!(
-            "no mutable expressions (comparisons, booleans, arithmetic) in lines {first}–{last}"
+            "nothing to mutate in lines {first}–{last} (no comparisons, booleans, arithmetic, returns, plain calls or two-argument calls)"
         ));
     }
     authorize_command(
@@ -596,13 +652,7 @@ async fn mutate(
     if !survived.is_empty() {
         report.push_str("\nNot caught (behavior no test checks):\n");
         for mutant in &survived {
-            report.push_str(&format!(
-                "- line {}: {}: `{}` → `{}`\n",
-                mutant.line,
-                mutant.description,
-                mutant.original.trim(),
-                mutant.mutated.trim()
-            ));
+            report.push_str(&format!("- {}\n", mutation::survivor_line(mutant)));
         }
         report.push_str("\nAdd tests that fail for these, then run the mutation test again.");
     }

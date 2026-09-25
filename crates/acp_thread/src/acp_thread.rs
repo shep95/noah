@@ -4803,7 +4803,13 @@ impl AcpThread {
                 #[cfg(not(target_os = "windows"))]
                 let (task_command, task_args, task_env, sandbox, spawn_cwd) = {
                     let mut builder = ShellBuilder::new(&Shell::Program(shell), is_windows);
-                    if headless {
+                    // Bubblewrap gives the command its own PID namespace, where
+                    // the terminal's process group doesn't exist. An interactive
+                    // shell then can't take the terminal, prints "Cannot set tty
+                    // process group" and exits with 2 even when the command
+                    // succeeded.
+                    let sandboxed_on_linux = cfg!(target_os = "linux") && sandbox_wrap.is_some();
+                    if headless || sandboxed_on_linux {
                         builder = builder.non_interactive();
                     }
                     let (task_command, task_args) = builder

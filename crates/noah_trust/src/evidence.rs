@@ -7,6 +7,7 @@
 //! agent's word for it.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Check {
@@ -53,6 +54,10 @@ pub struct Claim {
     /// on documentation or code that was read.
     #[serde(default)]
     pub grounds: Vec<String>,
+    /// Cited runs whose working tree changed after they ran, so they no
+    /// longer show anything about the code as it is now.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_grounds: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -100,6 +105,8 @@ pub enum Grounding {
     UnknownCheck { id: String },
     /// The claim says something worked, but a cited check failed.
     Contradicted { id: String },
+    /// A cited check ran against code that has changed since.
+    Stale { id: String },
 }
 
 const SUCCESS_WORDS: &[&str] = &[
@@ -141,7 +148,42 @@ impl Bundle {
                 return Grounding::Contradicted { id: ground.clone() };
             }
         }
+        if let Some(stale) = claim
+            .grounds
+            .iter()
+            .find(|ground| claim.stale_grounds.contains(ground))
+        {
+            return Grounding::Stale { id: stale.clone() };
+        }
         Grounding::Grounded
+    }
+
+    /// Records, on each claim, which of its cited runs are in `stale_runs`.
+    pub fn mark_stale(&mut self, stale_runs: &[String]) {
+        for claim in &mut self.claims {
+            claim.stale_grounds = claim
+                .grounds
+                .iter()
+                .filter(|ground| stale_runs.contains(ground))
+                .cloned()
+                .collect();
+        }
+    }
+
+    /// One line per claim that rests on a run the code has since moved past.
+    pub fn stale_claim_notes(&self) -> Vec<String> {
+        self.claims
+            .iter()
+            .filter(|claim| !claim.stale_grounds.is_empty())
+            .map(|claim| {
+                format!(
+                    "claim \"{}\" rests on {}, but the code changed after {} ran; re-run the cited command before sealing",
+                    claim.text,
+                    claim.stale_grounds.join(", "),
+                    if claim.stale_grounds.len() == 1 { "it" } else { "they" }
+                )
+            })
+            .collect()
     }
 
     pub fn ungrounded_claims(&self) -> Vec<(&Claim, Grounding)> {
@@ -189,6 +231,9 @@ impl Bundle {
                     Grounding::Ungrounded => "no check or source backs this".to_string(),
                     Grounding::UnknownCheck { id } => format!("cites `{id}`, which never ran"),
                     Grounding::Contradicted { id } => format!("`{id}` failed"),
+                    Grounding::Stale { id } => {
+                        format!("rests on `{id}`, but the code changed after it ran")
+                    }
                     Grounding::Grounded => String::new(),
                 };
                 out.push_str(&format!("- ⚠ \"{}\": {why}\n", claim.text));
@@ -273,6 +318,95 @@ impl Bundle {
     }
 }
 
+/// A run's working-tree fingerprint when it finished and now. `None` means
+/// it couldn't be taken, such as outside a git repository.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RunFingerprint {
+    pub run: String,
+    pub at_run: Option<String>,
+    pub now: Option<String>,
+}
+
+/// A run is stale only when both fingerprints are known and differ: an
+/// unknown fingerprint says nothing about whether the code moved.
+pub fn is_stale(at_run: Option<&str>, now: Option<&str>) -> bool {
+    matches!((at_run, now), (Some(at_run), Some(now)) if at_run != now)
+}
+
+pub fn stale_runs(runs: &[RunFingerprint]) -> Vec<String> {
+    runs.iter()
+        .filter(|run| is_stale(run.at_run.as_deref(), run.now.as_deref()))
+        .map(|run| run.run.clone())
+        .collect()
+}
+
+/// An untracked file as seen by the fingerprint. Content is hashed when the
+/// file is small enough to read; otherwise its modification time stands in.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UntrackedFile {
+    pub path: String,
+    pub size: u64,
+    pub content_sha256: Option<String>,
+    pub modified: Option<String>,
+}
+
+/// Paths from `git ls-files --others --exclude-standard -z`, without noah's
+/// own `.noah` folder, which changes every time evidence or provenance is
+/// written and says nothing about the code.
+pub fn untracked_paths(ls_files_output: &[u8]) -> Vec<String> {
+    ls_files_output
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(|path| String::from_utf8_lossy(path).into_owned())
+        .filter(|path| !is_noah_path(path))
+        .collect()
+}
+
+fn is_noah_path(path: &str) -> bool {
+    let folder = crate::project_files::FOLDER;
+    path.split('/').any(|component| component == folder)
+}
+
+/// A hash of the working tree from `git rev-parse HEAD`, `git diff HEAD`
+/// and the untracked files. Two fingerprints are equal exactly when the
+/// commit, the uncommitted changes and the untracked files all match.
+pub fn working_tree_fingerprint(head: &str, diff: &[u8], untracked: &[UntrackedFile]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"head\0");
+    hasher.update(head.trim().as_bytes());
+    hasher.update(b"\0diff\0");
+    hasher.update((diff.len() as u64).to_le_bytes());
+    hasher.update(diff);
+    let mut files: Vec<&UntrackedFile> = untracked
+        .iter()
+        .filter(|file| !is_noah_path(&file.path))
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    files.dedup_by(|a, b| a.path == b.path);
+    for file in files {
+        hasher.update(b"\0file\0");
+        hasher.update(file.path.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(file.size.to_le_bytes());
+        match (&file.content_sha256, &file.modified) {
+            (Some(content), _) => {
+                hasher.update(b"content\0");
+                hasher.update(content.as_bytes());
+            }
+            (None, Some(modified)) => {
+                hasher.update(b"modified\0");
+                hasher.update(modified.as_bytes());
+            }
+            (None, None) => hasher.update(b"unknown"),
+        }
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 /// A file-name-safe slug for a bundle title.
 pub fn slug(title: &str) -> String {
     let slug: String = title
@@ -333,11 +467,11 @@ mod tests {
                 },
             ],
             claims: vec![
-                Claim { text: "auth tests pass".into(), grounds: vec!["run-1".into()] },
-                Claim { text: "no lint errors".into(), grounds: vec!["run-2".into()] },
-                Claim { text: "the API exists in v2".into(), grounds: vec!["doc:https://x.dev/api".into()] },
-                Claim { text: "no breaking changes".into(), grounds: vec![] },
-                Claim { text: "e2e passes".into(), grounds: vec!["run-9".into()] },
+                Claim { text: "auth tests pass".into(), grounds: vec!["run-1".into()], ..Default::default() },
+                Claim { text: "no lint errors".into(), grounds: vec!["run-2".into()], ..Default::default() },
+                Claim { text: "the API exists in v2".into(), grounds: vec!["doc:https://x.dev/api".into()], ..Default::default() },
+                Claim { text: "no breaking changes".into(), grounds: vec![], ..Default::default() },
+                Claim { text: "e2e passes".into(), grounds: vec!["run-9".into()], ..Default::default() },
             ],
             files: vec![
                 FileConfidence { path: "src/a.rs".into(), confidence: 0.9, note: String::new() },
@@ -366,6 +500,110 @@ mod tests {
         assert!(markdown.contains("flaky: passed 8 of 10"));
         assert!(markdown.contains("## needs attention"));
         assert!(markdown.contains("## not verified"));
+    }
+
+    #[test]
+    fn claims_on_runs_the_code_moved_past_are_stale() {
+        let mut bundle = bundle();
+        bundle.claims.push(Claim {
+            text: "login redirects to the dashboard".into(),
+            grounds: vec!["run-3".into(), "run-1".into()],
+            ..Default::default()
+        });
+        let runs = vec![
+            RunFingerprint { run: "run-1".into(), at_run: Some("a".into()), now: Some("a".into()) },
+            RunFingerprint { run: "run-2".into(), at_run: Some("a".into()), now: Some("b".into()) },
+            RunFingerprint { run: "run-3".into(), at_run: Some("a".into()), now: Some("b".into()) },
+            RunFingerprint { run: "run-4".into(), at_run: None, now: Some("b".into()) },
+            RunFingerprint { run: "run-5".into(), at_run: Some("a".into()), now: None },
+        ];
+        let stale = stale_runs(&runs);
+        assert_eq!(stale, vec!["run-2".to_string(), "run-3".to_string()]);
+        bundle.mark_stale(&stale);
+
+        assert_eq!(bundle.grounding(&bundle.claims[0]), Grounding::Grounded);
+        // A failed run is the bigger problem, so it wins over staleness.
+        assert_eq!(
+            bundle.grounding(&bundle.claims[1]),
+            Grounding::Contradicted { id: "run-2".into() }
+        );
+        assert_eq!(
+            bundle.grounding(&bundle.claims[5]),
+            Grounding::Stale { id: "run-3".into() }
+        );
+        assert_eq!(
+            bundle.stale_claim_notes(),
+            vec![
+                "claim \"no lint errors\" rests on run-2, but the code changed after it ran; re-run the cited command before sealing".to_string(),
+                "claim \"login redirects to the dashboard\" rests on run-3, but the code changed after it ran; re-run the cited command before sealing".to_string(),
+            ]
+        );
+        assert!(bundle.to_markdown().contains("rests on `run-3`, but the code changed after it ran"));
+
+        bundle.mark_stale(&[]);
+        assert!(bundle.stale_claim_notes().is_empty());
+        assert_eq!(bundle.grounding(&bundle.claims[5]), Grounding::Grounded);
+    }
+
+    #[test]
+    fn bundles_without_stale_grounds_still_load() {
+        let json = r#"{"id":"x","title":"t","summary":"","created":"now","claims":[{"text":"works","grounds":["run-1"]}]}"#;
+        let bundle: Bundle = serde_json::from_str(json).expect("old bundle parses");
+        assert!(bundle.claims[0].stale_grounds.is_empty());
+        let saved = serde_json::to_string(&bundle).expect("serializes");
+        assert!(!saved.contains("stale_grounds"));
+    }
+
+    #[test]
+    fn fingerprint_follows_the_working_tree() {
+        let file = |path: &str, content: &str| UntrackedFile {
+            path: path.into(),
+            size: content.len() as u64,
+            content_sha256: Some(crate::provenance::sha256_hex(content.as_bytes())),
+            modified: Some("1".into()),
+        };
+        let base = working_tree_fingerprint("abc123\n", b"diff --git a/x b/x\n+1\n", &[file("new.rs", "a")]);
+        assert_eq!(
+            base,
+            working_tree_fingerprint("abc123", b"diff --git a/x b/x\n+1\n", &[file("new.rs", "a")])
+        );
+        assert_ne!(base, working_tree_fingerprint("abc124", b"diff --git a/x b/x\n+1\n", &[file("new.rs", "a")]));
+        assert_ne!(base, working_tree_fingerprint("abc123", b"diff --git a/x b/x\n+2\n", &[file("new.rs", "a")]));
+        assert_ne!(base, working_tree_fingerprint("abc123", b"diff --git a/x b/x\n+1\n", &[file("new.rs", "b")]));
+        assert_ne!(base, working_tree_fingerprint("abc123", b"diff --git a/x b/x\n+1\n", &[]));
+
+        let mut touched = file("new.rs", "a");
+        touched.modified = Some("2".into());
+        assert_eq!(
+            base,
+            working_tree_fingerprint("abc123", b"diff --git a/x b/x\n+1\n", &[touched]),
+            "rewriting an untracked file with the same content isn't a change"
+        );
+        assert_eq!(
+            base,
+            working_tree_fingerprint(
+                "abc123",
+                b"diff --git a/x b/x\n+1\n",
+                &[file("new.rs", "a"), file(".noah/evidence/x.md", "b"), file("app/.noah/provenance.jsonl", "c")]
+            ),
+            "noah's own files don't count"
+        );
+
+        let large = UntrackedFile { path: "big.bin".into(), size: 10, content_sha256: None, modified: Some("5".into()) };
+        let mut touched_large = large.clone();
+        touched_large.modified = Some("6".into());
+        assert_ne!(
+            working_tree_fingerprint("h", b"", &[large]),
+            working_tree_fingerprint("h", b"", &[touched_large])
+        );
+    }
+
+    #[test]
+    fn untracked_listing_skips_noah_files() {
+        assert_eq!(
+            untracked_paths(b"src/new.rs\0.noah/evidence/a.json\0sub/.noah/x\0notes .noah.txt\0"),
+            vec!["src/new.rs".to_string(), "notes .noah.txt".to_string()]
+        );
     }
 
     #[test]

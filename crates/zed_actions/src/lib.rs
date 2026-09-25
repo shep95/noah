@@ -46,6 +46,10 @@ actions!(
         OpenSettingsFile,
         /// Picks an image to use as noah's background.
         ChooseBackgroundImage,
+        /// Opens asherin.chat, where you think with shepherd outside any project.
+        OpenAsherinChat,
+        /// Opens asherin.pages, where shepherd makes documents, books and slideshows.
+        OpenAsherinPages,
         /// Turns on or off whether noah's colors follow the background image.
         ToggleBackgroundColors,
         /// Shows the open file (HTML, SVG, PDF or an image) in the browser
@@ -160,6 +164,24 @@ pub struct OpenSettingsAt {
     /// existing settings file selection is preserved.
     #[serde(default)]
     pub target: Option<OpenSettingsAtTarget>,
+}
+
+/// Opens a page or app in the browser room, as the apps pinned to the rail do.
+#[derive(PartialEq, Clone, Debug, Deserialize, JsonSchema, Action)]
+#[action(namespace = zed)]
+#[serde(deny_unknown_fields)]
+pub struct OpenInBrowserRoom {
+    pub url: String,
+}
+
+/// Uses one of the backgrounds that ship with noah, or noah's default one
+/// when `name` is empty.
+#[derive(PartialEq, Clone, Debug, Deserialize, JsonSchema, Action)]
+#[action(namespace = zed)]
+#[serde(deny_unknown_fields)]
+pub struct UseBundledBackground {
+    /// The image's file name in noah's wallpapers folder.
+    pub name: String,
 }
 
 #[derive(PartialEq, Clone, Debug, Deserialize, JsonSchema, Action)]

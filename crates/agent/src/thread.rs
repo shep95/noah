@@ -2257,11 +2257,23 @@ impl Thread {
     ///
     /// Returns the (possibly downgraded) profile and whether a downgrade
     /// happened.
+    /// Whether this thread runs in asherin.chat's own folder rather than a
+    /// project. Chat threads think with the person; they never edit or run.
+    fn is_chat_project(project: &Entity<Project>, cx: &App) -> bool {
+        let chat_directory = paths::chat_directory();
+        let mut worktrees = project.read(cx).visible_worktrees(cx).peekable();
+        worktrees.peek().is_some()
+            && worktrees.all(|worktree| worktree.read(cx).abs_path().as_ref() == chat_directory)
+    }
+
     fn profile_for_restricted_workspace(
         profile_id: AgentProfileId,
         project: &Entity<Project>,
         cx: &App,
     ) -> (AgentProfileId, bool) {
+        if Self::is_chat_project(project, cx) {
+            return (AgentProfileId(builtin_profiles::CHAT.into()), false);
+        }
         let is_write_or_ask = profile_id.as_str() == builtin_profiles::WRITE
             || profile_id.as_str() == builtin_profiles::ASK;
         let minimal = AgentProfileId(builtin_profiles::MINIMAL.into());
@@ -4260,7 +4272,15 @@ impl Thread {
         let Some(model) = self.model() else {
             return BTreeMap::new();
         };
-        let Some(profile) = AgentSettings::get_global(cx).profiles.get(&self.profile_id) else {
+        // In asherin.chat the chat profile's tools apply whatever profile is
+        // selected, so chat can't edit files or run commands.
+        let chat_profile = AgentProfileId(builtin_profiles::CHAT.into());
+        let profile_id = if Self::is_chat_project(&self.project, cx) {
+            &chat_profile
+        } else {
+            &self.profile_id
+        };
+        let Some(profile) = AgentSettings::get_global(cx).profiles.get(profile_id) else {
             return BTreeMap::new();
         };
         // Terminal variants are configured by users under the canonical

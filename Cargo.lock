@@ -1417,6 +1417,7 @@ name = "auto_update"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "client",
  "clock",
  "ctor",
@@ -1429,6 +1430,7 @@ dependencies = [
  "parking_lot",
  "paths",
  "release_channel",
+ "ring",
  "semver",
  "serde",
  "serde_json",
@@ -5098,6 +5100,22 @@ dependencies = [
  "workspace",
  "worktree",
  "yaml-rust2",
+]
+
+[[package]]
+name = "device_room"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs",
+ "futures 0.3.34",
+ "gpui",
+ "http_client",
+ "log",
+ "noah_device",
+ "ui",
+ "util",
+ "workspace",
 ]
 
 [[package]]
@@ -11514,6 +11532,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "noah_device"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "log",
+ "serde_json",
+ "sha2",
+ "sysinfo 0.39.6",
+ "tempfile",
+ "walkdir",
+ "which",
+ "windows-registry 0.6.1",
+]
+
+[[package]]
 name = "noah_i18n"
 version = "0.1.0"
 dependencies = [
@@ -12395,6 +12430,7 @@ dependencies = [
  "component",
  "db",
  "documented",
+ "editor",
  "extension_host",
  "extensions_ui",
  "fs",
@@ -17020,6 +17056,7 @@ dependencies = [
  "menu",
  "node_runtime",
  "notifications",
+ "paths",
  "platform_title_bar",
  "pretty_assertions",
  "project",
@@ -22462,6 +22499,7 @@ dependencies = [
  "noah_i18n",
  "node_runtime",
  "parking_lot",
+ "paths",
  "postage",
  "pretty_assertions",
  "project",
@@ -23004,6 +23042,7 @@ dependencies = [
  "debugger_tools",
  "debugger_ui",
  "dev_container",
+ "device_room",
  "diagnostics",
  "edit_prediction",
  "edit_prediction_ui",

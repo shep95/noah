@@ -1362,6 +1362,22 @@
         "enable_all_context_servers": false,
         "tools": {},
       },
+      // asherin.chat: thinking with shepherd, not working on code. It can
+      // talk, search, read pages and what you attach, never edit or run.
+      "chat": {
+        "name": "Chat",
+        "enable_all_context_servers": false,
+        "tools": {
+          "search_web": true,
+          "fetch": true,
+          "read_file": true,
+          "list_directory": true,
+          "find_path": true,
+          "grep": true,
+          "skill": true,
+          "project_memory": true,
+        },
+      },
     },
     // Where to show notifications when the agent has either completed
     // its response, or else needs confirmation before it can run a

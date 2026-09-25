@@ -30,7 +30,7 @@ use std::{
 use util::command::new_command;
 use workspace::Workspace;
 
-mod noah_release;
+pub mod noah_release;
 
 const SHOULD_SHOW_UPDATE_NOTIFICATION_KEY: &str = "auto-updater-should-show-updated-notification";
 
@@ -660,7 +660,8 @@ impl AutoUpdater {
                 noah_release::DOWNLOAD_PAGE
             );
         };
-        let manifest = Self::fetch_noah_manifest(&client).await?;
+        let release_channel = cx.update(|cx| ReleaseChannel::try_global(cx));
+        let manifest = Self::fetch_noah_manifest(&client, release_channel).await?;
         if !noah_release::is_newer(manifest.build, installed_build, downloaded_build) {
             this.update(cx, |this, cx| {
                 this.status = match previous_status {
@@ -676,6 +677,7 @@ impl AutoUpdater {
             });
             return Ok(());
         }
+        manifest.verify_signature()?;
         let newer_version = manifest.version();
         let asset = manifest.asset_for(OS, ARCH).cloned().ok_or_else(|| {
             ManualUpdateNeeded(format!(
@@ -774,17 +776,11 @@ impl AutoUpdater {
         Ok(())
     }
 
-    async fn fetch_noah_manifest(client: &HttpClientWithUrl) -> Result<noah_release::Manifest> {
-        let url = noah_release::manifest_url();
-        let mut response = client.get(&url, Default::default(), true).await?;
-        let mut body = Vec::new();
-        response.body_mut().read_to_end(&mut body).await?;
-        anyhow::ensure!(
-            response.status().is_success(),
-            "couldn't check for noah updates ({})",
-            response.status()
-        );
-        serde_json::from_slice(&body).context("noah's release information couldn't be read")
+    async fn fetch_noah_manifest(
+        client: &HttpClientWithUrl,
+        release_channel: Option<ReleaseChannel>,
+    ) -> Result<noah_release::Manifest> {
+        noah_release::fetch_manifest(client, release_channel).await
     }
 
     async fn target_path(installer_dir: &InstallerDir) -> Result<PathBuf> {
