@@ -425,6 +425,8 @@ fn main() {
             app.path_for_auxiliary_executable("git")
                 .context("could not find git binary path")
                 .log_err()
+        } else if cfg!(windows) {
+            git_ui::git_installer::installed_git_binary()
         } else {
             None
         };

@@ -1,4 +1,5 @@
-use gpui::{App, Context, WeakEntity, Window};
+use crate::git_installer;
+use gpui::{App, AppContext as _, Context, WeakEntity, Window};
 use notifications::status_toast::StatusToast;
 use std::sync::Arc;
 use ui::{Color, Icon, IconName, IconSize, SharedString};
@@ -36,10 +37,36 @@ pub fn clone_and_open(
             let clone_task = workspace
                 .update(cx, |workspace, cx| {
                     let fs = workspace.app_state().fs.clone();
+                    let http_client = cx.http_client();
                     let destination_dir = destination_dir.clone();
                     let repo_url = repo_url.clone();
-                    cx.spawn(async move |_workspace, _cx| {
-                        fs.git_clone(destination_dir.as_path(), &repo_url).await
+                    cx.spawn(async move |workspace, cx| {
+                        match fs.git_clone(destination_dir.as_path(), &repo_url).await {
+                            Err(error) if cfg!(windows) && error.is::<fs::GitNotInstalled>() => {
+                                workspace
+                                    .update(cx, |workspace, cx| {
+                                        let toast = StatusToast::new(
+                                            "Git isn't installed. Downloading Git for Windows (39 MB)…",
+                                            cx,
+                                            |this, _| {
+                                                this.icon(
+                                                    Icon::new(IconName::ArrowDown)
+                                                        .size(IconSize::Small)
+                                                        .color(Color::Muted),
+                                                )
+                                            },
+                                        );
+                                        workspace.toggle_status_toast(toast, cx);
+                                    })
+                                    .log_err();
+                                let git = cx
+                                    .background_spawn(git_installer::install_git(http_client))
+                                    .await?;
+                                fs.set_git_binary_path(git);
+                                fs.git_clone(destination_dir.as_path(), &repo_url).await
+                            }
+                            result => result,
+                        }
                     })
                 })
                 .ok()?;

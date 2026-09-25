@@ -294,10 +294,13 @@ impl VeniceLanguageModelProvider {
         let state = cx.new(|cx| {
             cx.observe_global::<SettingsStore>({
                 let mut last_settings = Self::settings(cx).clone();
+                let mut last_offline = crate::AllLanguageModelSettings::get_global(cx).offline;
                 move |this: &mut State, cx| {
                     let current_settings = Self::settings(cx);
-                    if current_settings != &last_settings {
+                    let offline = crate::AllLanguageModelSettings::get_global(cx).offline;
+                    if current_settings != &last_settings || offline != last_offline {
                         last_settings = current_settings.clone();
+                        last_offline = offline;
                         this.authenticate(cx).detach();
                         cx.notify();
                     }

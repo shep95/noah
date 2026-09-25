@@ -177,4 +177,50 @@ mod tests {
         assert_eq!(translate("cy", "browser"), "browser", "untranslated → English");
         assert_eq!(translate("es", "not a key"), "not a key");
     }
+
+    #[test]
+    fn locale_forms_are_normalized() {
+        let code = |locale| find_language(locale).map(|language| language.code);
+        assert_eq!(code("pt-BR"), Some("pt-BR"));
+        assert_eq!(code("pt_BR"), Some("pt-BR"));
+        assert_eq!(code("PT-br"), Some("pt-BR"));
+        assert_eq!(code("zh-Hant-TW"), Some("zh-Hant"));
+        assert_eq!(code("zh_hant_hk"), Some("zh-Hant"));
+        assert_eq!(code("zh-HK"), Some("zh-Hant"));
+        assert_eq!(code("zh-MO"), Some("zh-Hant"));
+        assert_eq!(code("zh_CN"), Some("zh"));
+        assert_eq!(code("EN"), Some("en"));
+        assert_eq!(code("en_US.UTF-8"), Some("en"));
+        assert_eq!(code("de_DE@euro"), Some("de"));
+        assert_eq!(code("es-419"), Some("es-419"));
+        assert_eq!(code("es_AR"), Some("es-419"));
+        assert_eq!(code("es"), Some("es"));
+        assert_eq!(code(""), None);
+        assert_eq!(code(".UTF-8"), None);
+    }
+
+    #[test]
+    fn right_to_left_languages_are_recognized() {
+        for code in ["ar", "he", "fa", "ur"] {
+            let language = find_language(code).expect(code);
+            assert!(is_right_to_left(language), "{code}");
+        }
+        for code in ["en", "zh", "ja", "de", "pt-BR"] {
+            let language = find_language(code).expect(code);
+            assert!(!is_right_to_left(language), "{code}");
+        }
+        assert!(!is_right_to_left(ENGLISH));
+    }
+
+    #[test]
+    fn translations_fall_back_to_english() {
+        assert_eq!(translate("en", "browser"), "browser");
+        assert_eq!(translate("xx-YY", "settings"), "settings");
+        assert_eq!(translate("", "settings"), "settings");
+        assert_eq!(translate("de", "no such text"), "no such text");
+        assert_eq!(translate("de", "settings"), "einstellungen");
+        assert_eq!(translate("DE", "settings"), "einstellungen");
+        assert_eq!(translate("de-AT", "settings"), "einstellungen");
+        assert_eq!(translate("yue", "browser"), translate("zh-Hant", "browser"));
+    }
 }

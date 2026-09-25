@@ -161,6 +161,8 @@ impl AgentTool for VerifyTool {
                 (reviewer, same_family)
             });
             let reviewer = reviewer.ok_or_else(|| "no model is available to review with".to_string())?;
+            cx.update(|cx| crate::trust::check_model_allowed(reviewer.as_ref(), cx))
+                .map_err(|error| format!("{error:#}"))?;
             event_stream.update_fields(acp::ToolCallUpdateFields::new().title(format!(
                 "verify: reviewing with {}",
                 reviewer.name().0
@@ -192,7 +194,8 @@ impl AgentTool for VerifyTool {
                 thinking_allowed: false,
                 ..Default::default()
             };
-            let review = review_with(&reviewer, request, cx)
+            let thread = cx.update(|cx| event_stream.thread_session_id(cx));
+            let review = review_with(&reviewer, request, thread, cx)
                 .await
                 .map_err(|error| format!("the reviewer model failed: {error:#}"))?;
             let mut header = format!("reviewed by {} ({})", reviewer.name().0, reviewer.id().0);
@@ -209,14 +212,32 @@ impl AgentTool for VerifyTool {
 async fn review_with(
     model: &Arc<dyn LanguageModel>,
     request: LanguageModelRequest,
+    thread: Option<String>,
     cx: &mut AsyncApp,
 ) -> anyhow::Result<String> {
     let response = model.stream_completion_text(request, cx).await?;
     let mut text = String::new();
     let mut chunks = response.stream;
-    while let Some(chunk) = futures::StreamExt::next(&mut chunks).await {
-        text.push_str(&chunk?);
+    let streamed = async {
+        while let Some(chunk) = futures::StreamExt::next(&mut chunks).await {
+            text.push_str(&chunk?);
+        }
+        anyhow::Ok(())
     }
+    .await;
+    // Tokens a failed stream already used are still billed, so record them
+    // before returning the error.
+    let usage = *response.last_token_usage.lock();
+    cx.update(|cx| {
+        crate::trust::record_spend(
+            model.as_ref(),
+            usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens,
+            usage.output_tokens,
+            thread.unwrap_or_default(),
+            cx,
+        )
+    });
+    streamed?;
     Ok(text)
 }
 
@@ -232,8 +253,9 @@ async fn gather_material(root: PathBuf, cx: &mut AsyncApp) -> Result<String, Str
     if diff.trim().is_empty() {
         return Err("there are no uncommitted changes to review".to_string());
     }
+    let known_secrets = cx.update(|cx| crate::trust::brokered_secrets(cx));
     cx.background_spawn(async move {
-        let mut diff = noah_trust::secrets::redact(&diff, &[]).text;
+        let mut diff = noah_trust::secrets::redact(&diff, &known_secrets).text;
         if diff.len() > MAX_DIFF_CHARS {
             let mut end = MAX_DIFF_CHARS;
             while !diff.is_char_boundary(end) {

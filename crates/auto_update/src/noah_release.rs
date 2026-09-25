@@ -147,10 +147,11 @@ pub fn remove_set_aside_files(directory: &Path) {
         let path = entry.path();
         if path.is_dir() {
             remove_set_aside_files(&path);
-        } else if path
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().ends_with(SET_ASIDE_SUFFIX))
-        {
+        } else if path.file_name().is_some_and(|name| {
+            let name = name.to_string_lossy().to_lowercase();
+            name.ends_with(&format!(".exe{SET_ASIDE_SUFFIX}"))
+                || name.ends_with(&format!(".dll{SET_ASIDE_SUFFIX}"))
+        }) {
             std::fs::remove_file(&path).ok();
         }
     }
@@ -274,6 +275,205 @@ mod tests {
                 .as_deref(),
             Some("new")
         );
+    }
+
+    #[test]
+    fn newer_build_edge_cases() {
+        assert!(is_newer(1, 0, None), "any release beats build zero");
+        assert!(!is_newer(0, 0, None));
+        assert!(!is_newer(0, 0, Some(0)));
+        assert!(!is_newer(u64::MAX, u64::MAX, None));
+        assert!(is_newer(15, 10, Some(5)), "a stale download doesn't block");
+        assert!(!is_newer(15, 10, Some(15)), "equal to the download");
+        assert!(!is_newer(15, 10, Some(16)), "older than the download");
+        assert!(!is_newer(10, 10, Some(5)), "equal to the installed build");
+    }
+
+    #[test]
+    fn manifest_without_this_platform_has_no_asset() {
+        let manifest: Manifest =
+            serde_json::from_str(r#"{ "build": 5, "version": "1.2.3", "assets": {} }"#)
+                .expect("parses");
+        assert!(manifest.asset_for("windows", "x86_64").is_none());
+        assert!(manifest.asset_for("linux", "x86_64").is_none());
+
+        let manifest: Manifest = serde_json::from_str(MANIFEST).expect("parses");
+        assert!(manifest.asset_for("windows", "aarch64").is_none());
+        assert!(manifest.asset_for("linux", "aarch64").is_none());
+        assert!(manifest.asset_for("Linux", "x86_64").is_none(), "keys are exact");
+        assert!(manifest.asset_for("", "").is_none());
+        assert_eq!(
+            manifest
+                .asset_for("windows", "x86_64")
+                .map(|asset| asset.sha256.as_str()),
+            Some("ab")
+        );
+    }
+
+    #[test]
+    fn malformed_manifests_are_rejected() {
+        assert!(
+            serde_json::from_str::<Manifest>(r#"{ "build": 5, "version": "1.2.3" }"#).is_err(),
+            "assets are required"
+        );
+        assert!(
+            serde_json::from_str::<Manifest>(r#"{ "version": "1.2.3", "assets": {} }"#).is_err(),
+            "build is required"
+        );
+        assert!(
+            serde_json::from_str::<Manifest>(
+                r#"{ "build": 5, "version": "1.2.3", "assets": { "linux-x86_64": { "url": "u" } } }"#
+            )
+            .is_err(),
+            "every asset needs a checksum"
+        );
+        assert!(
+            serde_json::from_str::<Manifest>(r#"{ "build": -1, "version": "1", "assets": {} }"#)
+                .is_err(),
+            "builds are unsigned"
+        );
+    }
+
+    #[test]
+    fn unparseable_versions_fall_back_to_the_build() {
+        let manifest: Manifest =
+            serde_json::from_str(r#"{ "build": 42, "version": "nightly", "assets": {} }"#)
+                .expect("parses");
+        assert_eq!(manifest.version(), Version::new(0, 0, 42));
+    }
+
+    #[test]
+    fn set_aside_matches_extensions_in_any_case_and_skips_updates() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::create_dir_all(root.join("Updates")).expect("mkdir");
+        std::fs::create_dir_all(root.join("lib/deeper")).expect("mkdir");
+        for file in [
+            "NOAH.EXE",
+            "Helper.Dll",
+            "readme.txt",
+            "noah.exe.config",
+            "lib/deeper/core.dll",
+            "Updates/noah-setup.exe",
+        ] {
+            std::fs::write(root.join(file), file).expect("write");
+        }
+
+        let moved = set_aside_program_files(root).expect("sets aside");
+        let mut moved_names: Vec<String> = moved
+            .iter()
+            .map(|(original, aside)| {
+                let mut expected_aside = original.clone().into_os_string();
+                expected_aside.push(".old");
+                assert_eq!(aside, &PathBuf::from(expected_aside));
+                original
+                    .strip_prefix(root)
+                    .expect("inside the install directory")
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        moved_names.sort();
+        assert_eq!(
+            moved_names,
+            vec!["Helper.Dll", "NOAH.EXE", "lib/deeper/core.dll"]
+        );
+        assert!(root.join("readme.txt").exists());
+        assert!(root.join("noah.exe.config").exists());
+        assert!(root.join("Updates/noah-setup.exe").exists());
+        assert!(!root.join("Updates/noah-setup.exe.old").exists());
+        assert!(root.join("lib/deeper/core.dll.old").exists());
+
+        restore_set_aside(&moved);
+        for (original, aside) in &moved {
+            assert!(original.exists(), "{}", original.display());
+            assert!(!aside.exists(), "{}", aside.display());
+        }
+        assert_eq!(
+            std::fs::read_to_string(root.join("NOAH.EXE")).ok().as_deref(),
+            Some("NOAH.EXE")
+        );
+    }
+
+    #[test]
+    fn set_aside_replaces_a_stale_copy() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::write(root.join("noah.exe"), "current").expect("write");
+        std::fs::write(root.join("noah.exe.old"), "stale").expect("write");
+
+        let moved = set_aside_program_files(root).expect("sets aside");
+        assert_eq!(moved.len(), 1);
+        assert!(!root.join("noah.exe").exists());
+        assert_eq!(
+            std::fs::read_to_string(root.join("noah.exe.old")).ok().as_deref(),
+            Some("current")
+        );
+    }
+
+    #[test]
+    fn restore_keeps_newly_installed_files() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::write(root.join("noah.exe"), "old").expect("write");
+        std::fs::write(root.join("conpty.dll"), "old").expect("write");
+
+        let moved = set_aside_program_files(root).expect("sets aside");
+        std::fs::write(root.join("noah.exe"), "new").expect("write");
+        restore_set_aside(&moved);
+
+        assert_eq!(
+            std::fs::read_to_string(root.join("noah.exe")).ok().as_deref(),
+            Some("new")
+        );
+        assert!(root.join("noah.exe.old").exists(), "the old copy stays aside");
+        assert_eq!(
+            std::fs::read_to_string(root.join("conpty.dll")).ok().as_deref(),
+            Some("old")
+        );
+        assert!(!root.join("conpty.dll.old").exists());
+    }
+
+    #[test]
+    fn set_aside_of_a_missing_directory_fails() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let error = set_aside_program_files(&directory.path().join("missing"))
+            .expect_err("nothing to read");
+        assert!(error.to_string().contains("couldn't read"), "{error}");
+    }
+
+    #[test]
+    fn removes_only_set_aside_files() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::create_dir_all(root.join("bin/nested")).expect("mkdir");
+        for file in [
+            "noah.exe",
+            "noah.exe.old",
+            "notes.old.txt",
+            "settings.json.old",
+            "bin/zed.dll.old",
+            "bin/nested/tool.exe.old",
+            "bin/nested/tool.exe",
+        ] {
+            std::fs::write(root.join(file), file).expect("write");
+        }
+
+        remove_set_aside_files(root);
+
+        for kept in [
+            "noah.exe",
+            "notes.old.txt",
+            "settings.json.old",
+            "bin/nested/tool.exe",
+        ] {
+            assert!(root.join(kept).exists(), "{kept}");
+        }
+        for removed in ["noah.exe.old", "bin/zed.dll.old", "bin/nested/tool.exe.old"] {
+            assert!(!root.join(removed).exists(), "{removed}");
+        }
+
+        remove_set_aside_files(&root.join("missing"));
     }
 
     #[test]

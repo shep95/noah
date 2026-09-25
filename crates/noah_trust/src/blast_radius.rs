@@ -34,18 +34,17 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
             r"(?i)(^|[;&|]\s*|\bsudo\s+)rm\s+(-[a-z]*r[a-z]*|-[a-z]*\s+-r|--recursive)\b",
             "recursive delete",
             "files and folders are deleted permanently, without going to the trash",
-            |command| {
-                let targets: Vec<&str> = command
-                    .split_whitespace()
-                    .skip_while(|word| *word != "rm")
-                    .skip(1)
-                    .filter(|word| !word.starts_with('-'))
-                    .collect();
-                (!targets.is_empty()).then(|| format!("find {} | head -50", targets.join(" ")))
+            |command| match deletion_targets(command) {
+                Some((DeleteSyntax::Unix, targets)) if !targets.is_empty() => {
+                    Some(format!("find {} | head -50", targets.join(" ")))
+                }
+                _ => None,
             },
         ),
         (
-            r"(?i)\b(Remove-Item\b.*-Recurse|rmdir\s+/s|rd\s+/s|del\s+/[sq])",
+            // PowerShell accepts any unambiguous prefix of `-Recurse`, and cmd's
+            // `/s` may come after other switches such as `/q` or `/f`.
+            r#"(?i)(^\s*|[;&|(]\s*|\b(?:cmd(?:\.exe)?\s+/[ck]|(?:powershell|pwsh)(?:\.exe)?(?:\s+-\w+)*)\s+["']?)(remove-item|ri|rmdir|rd|del|erase)\b[^|;&]*(\s-r(ec(u(r(s(e)?)?)?)?)?\b|\s/s\b)"#,
             "recursive delete",
             "files and folders are deleted permanently",
             none,
@@ -159,23 +158,94 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
 });
 
 pub fn classify(command: &str) -> Option<Irreversible> {
-    RULES.iter().find(|rule| rule.regex.is_match(command)).map(|rule| Irreversible {
-        kind: rule.kind,
-        effect: rule.effect,
-        dry_run: (rule.dry_run)(command),
+    RULES
+        .iter()
+        .find(|rule| rule.regex.is_match(command))
+        .map(|rule| Irreversible {
+            kind: rule.kind,
+            effect: rule.effect,
+            dry_run: (rule.dry_run)(command),
+        })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeleteSyntax {
+    Unix,
+    Windows,
+}
+
+const COMMAND_WRAPPERS: [&str; 9] = [
+    "sudo",
+    "cmd",
+    "cmd.exe",
+    "/c",
+    "/k",
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "pwsh.exe",
+];
+
+const WINDOWS_DELETE_COMMANDS: [&str; 6] = ["remove-item", "ri", "rmdir", "rd", "del", "erase"];
+
+/// The words naming what the first delete command in `command` removes, up to
+/// the next shell separator or redirection, with flags left out.
+fn deletion_targets(command: &str) -> Option<(DeleteSyntax, Vec<&str>)> {
+    command.split([';', '&', '|', '\n']).find_map(|segment| {
+        let mut words = segment.split_whitespace().skip_while(|word| {
+            word.starts_with('-')
+                || COMMAND_WRAPPERS
+                    .iter()
+                    .any(|wrapper| word.eq_ignore_ascii_case(wrapper))
+        });
+        let command_word = words.next()?.trim_start_matches(['"', '\'']);
+        let syntax = if command_word == "rm" {
+            DeleteSyntax::Unix
+        } else if WINDOWS_DELETE_COMMANDS
+            .iter()
+            .any(|delete| command_word.eq_ignore_ascii_case(delete))
+        {
+            DeleteSyntax::Windows
+        } else {
+            return None;
+        };
+        let targets = words
+            .take_while(|word| !word.contains(['>', '<']))
+            .filter(|word| match syntax {
+                DeleteSyntax::Unix => !word.starts_with('-'),
+                DeleteSyntax::Windows => !is_windows_switch(word),
+            })
+            .collect();
+        Some((syntax, targets))
     })
+}
+
+/// Whether a word is a PowerShell parameter or a cmd switch such as `/s` or
+/// `/a:h`. Longer words starting with `/` are absolute paths.
+fn is_windows_switch(word: &str) -> bool {
+    if word.starts_with('-') {
+        return true;
+    }
+    let Some(rest) = word.strip_prefix('/') else {
+        return false;
+    };
+    let mut characters = rest.chars();
+    characters
+        .next()
+        .is_some_and(|character| character.is_ascii_alphabetic())
+        && matches!(characters.next(), None | Some(':'))
 }
 
 /// For a recursive delete, counts what the named paths contain, so the
 /// confirmation can say "412 files, 38 MB" instead of guessing. Paths are
 /// resolved against `working_directory`; globs and variables are left out.
 pub fn deletion_preview(command: &str, working_directory: &Path) -> Option<String> {
-    let targets: Vec<PathBuf> = command
-        .split_whitespace()
-        .skip_while(|word| *word != "rm")
-        .skip(1)
-        .filter(|word| !word.starts_with('-') && !word.contains(['*', '?', '$', '~', '`']))
-        .map(|word| working_directory.join(word.trim_matches(['"', '\''])))
+    let (_, words) = deletion_targets(command)?;
+    let targets: Vec<PathBuf> = words
+        .into_iter()
+        .map(|word| word.trim_matches(['"', '\'']))
+        .filter(|word| !word.is_empty() && !word.contains(['*', '?', '$', '~', '`']))
+        .map(|word| working_directory.join(word))
         .collect();
     if targets.is_empty() {
         return None;
@@ -244,13 +314,20 @@ mod tests {
             ("git reset --hard HEAD~3", "hard reset"),
             ("git clean -fdx", "git clean"),
             ("psql -c 'DROP TABLE users'", "destructive database change"),
-            ("sqlite3 app.db 'delete from sessions;'", "delete without a where clause"),
+            (
+                "sqlite3 app.db 'delete from sessions;'",
+                "delete without a where clause",
+            ),
             ("npx prisma migrate deploy", "database migration"),
             ("terraform apply -auto-approve", "infrastructure change"),
             ("kubectl delete pod web-1", "cluster change"),
             ("cargo publish", "publishing a package"),
         ] {
-            assert_eq!(classify(command).map(|found| found.kind), Some(kind), "{command}");
+            assert_eq!(
+                classify(command).map(|found| found.kind),
+                Some(kind),
+                "{command}"
+            );
         }
     }
 
@@ -273,5 +350,186 @@ mod tests {
         std::fs::write(directory.path().join("build/nested/b.o"), b"x").expect("write");
         let preview = deletion_preview("rm -rf build", directory.path()).expect("preview");
         assert!(preview.starts_with("2 files"), "{preview}");
+    }
+
+    #[test]
+    fn windows_recursive_deletes_are_caught() {
+        for command in [
+            "Remove-Item -Recurse foo",
+            "Remove-Item foo -Recurse -Force",
+            "remove-item -recurse foo",
+            "rmdir /s /q build",
+            "RMDIR /S build",
+            "rd /s /q build",
+            "del /s /q *.tmp",
+            "rmdir /q /s build",
+            "rd /Q /S x",
+            "del /f /s /q x",
+            "erase /s x",
+            "Remove-Item x -r",
+            "Remove-Item x -Rec",
+            "ri -r x",
+            "rmdir x -Recurse",
+            "del x -Recurse",
+            "cd app && rmdir /s /q build",
+            "cmd /c rd /s /q build",
+            "powershell -NoProfile -Command \"Remove-Item -Recurse -Force dist\"",
+        ] {
+            let found = classify(command).expect(command);
+            assert_eq!(found.kind, "recursive delete", "{command}");
+            assert_eq!(found.dry_run, None, "{command}");
+        }
+    }
+
+    #[test]
+    fn windows_single_deletes_are_reversible() {
+        for command in [
+            "Remove-Item foo.txt",
+            "Remove-Item foo.txt -Force",
+            "rmdir build",
+            "del notes.txt",
+            "del /q file.txt",
+            "del /f /q file.txt",
+            "ri notes.txt",
+            "erase old.log",
+        ] {
+            assert_eq!(classify(command), None, "{command}");
+        }
+    }
+
+    #[test]
+    fn every_form_of_force_push_is_caught() {
+        for command in [
+            "git push --force-with-lease",
+            "git push --force-with-lease origin main",
+            "git push origin main --force",
+            "git push origin +main",
+        ] {
+            let found = classify(command).expect(command);
+            assert_eq!(found.kind, "force push", "{command}");
+            assert_eq!(
+                found.dry_run.as_deref(),
+                Some("git fetch && git log --oneline HEAD..@{upstream}"),
+                "{command}"
+            );
+        }
+        assert_eq!(
+            classify("git push origin --delete feature").map(|found| found.kind),
+            Some("remote branch deletion")
+        );
+    }
+
+    #[test]
+    fn recursive_delete_suggests_listing_the_targets() {
+        let found = classify("rm -rf build dist").expect("irreversible");
+        assert_eq!(found.dry_run.as_deref(), Some("find build dist | head -50"));
+        let found = classify("rm -r --verbose").expect("irreversible");
+        assert_eq!(found.dry_run, None, "nothing named, nothing to list");
+    }
+
+    #[test]
+    fn recursive_delete_listing_stops_at_shell_separators() {
+        for (command, dry_run) in [
+            ("rm -rf dist; npm run build", "find dist | head -50"),
+            (
+                "rm -rf node_modules && npm run build",
+                "find node_modules | head -50",
+            ),
+            ("rm -rf build || true", "find build | head -50"),
+            ("rm -rf build | tee log", "find build | head -50"),
+            ("rm -rf build & wait", "find build | head -50"),
+            ("rm -rf build 2>/dev/null", "find build | head -50"),
+            ("cd app && rm -rf build", "find build | head -50"),
+        ] {
+            let found = classify(command).expect(command);
+            assert_eq!(found.dry_run.as_deref(), Some(dry_run), "{command}");
+        }
+    }
+
+    #[test]
+    fn deletion_preview_stops_at_shell_separators() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::create_dir_all(root.join("dist")).expect("mkdir");
+        std::fs::write(root.join("dist/app.js"), b"x").expect("write");
+        std::fs::create_dir_all(root.join("npm")).expect("mkdir");
+        std::fs::write(root.join("npm/other.js"), b"x").expect("write");
+
+        let expected = format!("1 file (0.0 KB) under {}", root.join("dist").display());
+        for command in [
+            "rm -rf dist; npm run build",
+            "rm -rf dist && npm run build",
+            "rm -rf 'dist'&&npm run build",
+            "rm -rf dist || npm run build",
+            "rm -rf dist | npm run build",
+            "rm -rf dist & npm run build",
+        ] {
+            assert_eq!(
+                deletion_preview(command, root),
+                Some(expected.clone()),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn deletion_preview_understands_windows_deletes() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::create_dir_all(root.join("build/nested")).expect("mkdir");
+        std::fs::write(root.join("build/a.o"), b"x").expect("write");
+        std::fs::write(root.join("build/nested/b.o"), b"x").expect("write");
+
+        let expected = format!("2 files (0.0 KB) under {}", root.join("build").display());
+        for command in [
+            "rmdir /s /q build",
+            "RD /S build",
+            "Remove-Item build -Recurse",
+            "Remove-Item -Recurse -Force build",
+            "Remove-Item -Recurse -Force \"build\"; echo done",
+            "del /s build",
+            "cmd /c rd /s /q build",
+        ] {
+            assert_eq!(
+                deletion_preview(command, root),
+                Some(expected.clone()),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn deletion_preview_needs_concrete_targets() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        assert_eq!(deletion_preview("rm -rf", root), None);
+        assert_eq!(deletion_preview("rm -rf *.tmp", root), None);
+        assert_eq!(deletion_preview("rm -rf build/* src/?.o", root), None);
+        assert_eq!(deletion_preview("rm -rf $HOME ~/cache `pwd`", root), None);
+        assert_eq!(deletion_preview("ls -la build", root), None, "no rm");
+    }
+
+    #[test]
+    fn deletion_preview_counts_a_single_file() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let root = directory.path();
+        std::fs::write(root.join("big.bin"), vec![0u8; 2 * 1_048_576]).expect("write");
+        std::fs::write(root.join("small.txt"), vec![0u8; 1024]).expect("write");
+
+        let preview = deletion_preview("rm -rf 'small.txt' *.log", root).expect("preview");
+        assert_eq!(
+            preview,
+            format!("1 file (1.0 KB) under {}", root.join("small.txt").display())
+        );
+
+        let preview = deletion_preview("sudo rm -r \"big.bin\"", root).expect("preview");
+        assert!(preview.starts_with("1 file (2.0 MB) under "), "{preview}");
+    }
+
+    #[test]
+    fn deletion_preview_of_missing_paths_is_empty() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let preview = deletion_preview("rm -rf does-not-exist", directory.path()).expect("preview");
+        assert!(preview.starts_with("0 files (0.0 KB) under "), "{preview}");
     }
 }

@@ -5690,6 +5690,11 @@ impl ToolCallEventStream {
         self.thread.as_ref().map(|thread| thread.entity_id())
     }
 
+    pub fn thread_session_id(&self, cx: &App) -> Option<String> {
+        let thread = self.thread.as_ref()?.upgrade()?;
+        Some(thread.read(cx).id().to_string())
+    }
+
     /// The model the thread is using, such as `venice/qwen3-coder-480b`.
     pub fn thread_model_name(&self, cx: &App) -> Option<String> {
         let model = self.thread_model(cx)?;

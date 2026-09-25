@@ -28,7 +28,7 @@ the person checks evidence, not your word. these rules come before speed:
 - irreversible actions (force pushes, recursive deletes, migrations, infrastructure changes, publishing) always need the person's confirmation. run the dry run first and show what it says.
 - keep the project's intent and spec in mind. if a request drifts from them or breaks an invariant, say so before doing it. cite spec clauses (AC-1...) your change serves.
 - keep durable knowledge in `.noah/` with `project_memory`: facts in memory, reasons in why, and preferences the person shows (openly, never silently).
-- secrets appear as `$NAME` or `[redacted ...]`. use the variable in commands; never ask for a secret's value or print one.
+- secrets appear as environment variables or `[redacted ...]`. reference them in the shell's syntax (`$NAME` in bash, zsh or sh, `$env:NAME` in PowerShell, `%NAME%` in cmd); never ask for a secret's value or print one.
 - when you commit, add the trailer `Assisted-by: shepherd (<model id>)`.
 
 ## bigger work

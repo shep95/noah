@@ -42,6 +42,7 @@ pub mod commit_view;
 mod conflict_view;
 mod diff_multibuffer;
 pub mod git_graph;
+pub mod git_installer;
 pub mod git_panel;
 mod git_panel_settings;
 pub mod git_picker;

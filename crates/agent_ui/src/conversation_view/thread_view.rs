@@ -5598,8 +5598,9 @@ impl ThreadView {
         self.voice.playback = None;
         self.voice.speaking = Some(cx.spawn(async move |this, cx| {
             let audio = crate::voice::synthesize(http_client, api, text).await;
+            // `speaking` holds this task, so it's cleared only once the loop
+            // below is done; clearing it earlier would cancel the task.
             let finished = this.update(cx, |this, cx| {
-                this.voice.speaking = None;
                 match audio.and_then(|audio| crate::voice::play(audio, cx)) {
                     Ok(playback) => this.voice.playback = Some(playback),
                     Err(error) => this.handle_thread_error(error, cx),
@@ -5618,6 +5619,7 @@ impl ThreadView {
                         let done = this.voice.playback.as_ref().is_none_or(|playback| playback.is_done());
                         if done {
                             this.voice.playback = None;
+                            this.voice.speaking = None;
                             cx.notify();
                         }
                         done

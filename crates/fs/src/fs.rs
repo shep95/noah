@@ -186,6 +186,9 @@ pub trait Fs: Send + Sync {
     -> Result<()>;
     async fn git_clone(&self, abs_work_directory: &Path, repo_url: &str) -> Result<()>;
     async fn git_config(&self, abs_work_directory: &Path, args: Vec<String>) -> Result<String>;
+    /// Git to use when none is installed on the system, such as one noah
+    /// downloaded after starting.
+    fn set_git_binary_path(&self, _git_binary_path: PathBuf) {}
     fn is_fake(&self) -> bool;
     async fn is_case_sensitive(&self) -> bool;
     fn subscribe_to_jobs(&self) -> JobEventReceiver;
@@ -451,7 +454,7 @@ impl TrashId {
 
 pub struct RealFs {
     this: std::sync::Weak<Self>,
-    bundled_git_binary_path: Option<PathBuf>,
+    bundled_git_binary_path: Mutex<Option<PathBuf>>,
     executor: BackgroundExecutor,
     native_watcher: Arc<fs_watcher::OsWatcher>,
     poll_watcher: Arc<fs_watcher::OsWatcher>,
@@ -559,11 +562,61 @@ impl FileHandle for std::fs::File {
 
 pub struct RealWatcher {}
 
+/// No git on the PATH and none bundled with or downloaded by noah.
+#[derive(Debug)]
+pub struct GitNotInstalled;
+
+impl std::fmt::Display for GitNotInstalled {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(
+            "Git isn't installed. Install it from https://git-scm.com/downloads, then try again.",
+        )
+    }
+}
+
+impl std::error::Error for GitNotInstalled {}
+
+#[cfg(test)]
+mod git_not_installed_tests {
+    use super::GitNotInstalled;
+
+    #[test]
+    fn explains_where_to_get_git() {
+        let message = GitNotInstalled.to_string();
+        assert!(message.contains("https://git-scm.com/downloads"), "{message}");
+        assert!(message.starts_with("Git isn't installed."), "{message}");
+    }
+
+    #[test]
+    fn can_be_recognized_through_anyhow() {
+        let error = anyhow::Error::new(GitNotInstalled);
+        assert!(error.is::<GitNotInstalled>());
+        assert!(error.to_string().contains("git-scm.com"));
+
+        let with_context = error.context("couldn't clone the repository");
+        assert!(with_context.is::<GitNotInstalled>());
+        assert!(with_context.downcast_ref::<GitNotInstalled>().is_some());
+
+        let other = anyhow::anyhow!("Git isn't installed");
+        assert!(!other.is::<GitNotInstalled>());
+    }
+}
+
 impl RealFs {
+    fn git_binary(&self) -> Result<PathBuf> {
+        if let Ok(system_git) = which::which("git") {
+            return Ok(system_git);
+        }
+        self.bundled_git_binary_path
+            .lock()
+            .clone()
+            .ok_or_else(|| anyhow::Error::new(GitNotInstalled))
+    }
+
     pub fn new(git_binary_path: Option<PathBuf>, executor: BackgroundExecutor) -> Arc<Self> {
         Arc::new_cyclic(|this| Self {
             this: this.clone(),
-            bundled_git_binary_path: git_binary_path,
+            bundled_git_binary_path: Mutex::new(git_binary_path),
             native_watcher: fs_watcher::OsWatcher::new(
                 fs_watcher::OsWatcherKind::Native,
                 executor.clone(),
@@ -1229,10 +1282,22 @@ impl Fs for RealFs {
         dotgit_path: &Path,
         system_git_binary_path: Option<&Path>,
     ) -> Result<Arc<dyn GitRepository>> {
+        let bundled_git_binary_path = self.bundled_git_binary_path.lock().clone();
+        // Push, pull and fetch only use a system git. On Windows the git noah
+        // downloaded is the person's only git, so it stands in for one.
+        let system_git_binary_path = system_git_binary_path
+            .map(|path| path.to_path_buf())
+            .or_else(|| {
+                if cfg!(windows) {
+                    bundled_git_binary_path.clone()
+                } else {
+                    None
+                }
+            });
         Ok(Arc::new(RealGitRepository::new(
             dotgit_path,
-            self.bundled_git_binary_path.clone(),
-            system_git_binary_path.map(|path| path.to_path_buf()),
+            bundled_git_binary_path,
+            system_git_binary_path,
             self.executor.clone(),
         )?))
     }
@@ -1242,7 +1307,8 @@ impl Fs for RealFs {
         abs_work_directory_path: &Path,
         fallback_branch_name: String,
     ) -> Result<()> {
-        let result = new_command("git")
+        let git = self.git_binary()?;
+        let result = new_command(&git)
             .current_dir(abs_work_directory_path)
             .args(&["config", "--global", "--get", "init.defaultBranch"])
             .output()
@@ -1256,7 +1322,7 @@ impl Fs for RealFs {
             _ => fallback_branch_name,
         };
 
-        new_command("git")
+        new_command(&git)
             .current_dir(abs_work_directory_path)
             .args(&["init", "-b"])
             .arg(branch_name.trim())
@@ -1275,7 +1341,7 @@ impl Fs for RealFs {
         };
 
         let job_tracker = JobTracker::new(job_info, self.job_event_subscribers.clone());
-        let mut child = new_command("git")
+        let mut child = new_command(self.git_binary()?)
             .current_dir(abs_work_directory)
             .args(["clone", "--progress", repo_url])
             .stdout(Stdio::null())
@@ -1306,7 +1372,7 @@ impl Fs for RealFs {
     /// Will return `Ok` if the commands exit status is `0`, with the stdout
     /// contents. Otherwise returns `Err` with the stderr contents.
     async fn git_config(&self, abs_work_directory: &Path, args: Vec<String>) -> Result<String> {
-        let output = new_command("git")
+        let output = new_command(self.git_binary()?)
             .current_dir(abs_work_directory)
             .args([String::from("config")].into_iter().chain(args))
             .output()
@@ -1318,6 +1384,10 @@ impl Fs for RealFs {
         }
 
         String::from_utf8(output.stdout).map_err(Into::into)
+    }
+
+    fn set_git_binary_path(&self, git_binary_path: PathBuf) {
+        *self.bundled_git_binary_path.lock() = Some(git_binary_path);
     }
 
     fn is_fake(&self) -> bool {

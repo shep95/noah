@@ -24,6 +24,13 @@ It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and exte
 - Mission control (ctrl-alt-7): every conversation, the decisions waiting on you, evidence,
   spend against your budget, and how shepherd's past work held up.
 - Voice: speak to shepherd and hear its replies, through your own provider's API key.
+- Preview: "preview this file in the browser" (in the settings menu on the left rail) shows an
+  HTML, SVG, PDF or image file in the browser room and reloads it on every save; type
+  `localhost:3000` there to see your dev server.
+- Keys stay yours: API keys live in your system keychain, never in settings or your project, and
+  committing from noah warns you before a key or password in your changes reaches GitHub.
+- No Git on Windows? Cloning a repository downloads the official portable Git for Windows
+  (checksum-verified) the first time it's needed.
 
 Community: [Discord](https://discord.gg/M9hnebRwvk) · [asherin.com](https://asherin.com)
 

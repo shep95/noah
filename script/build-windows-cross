@@ -3,8 +3,8 @@
 #
 # Produces dist/noah-windows-x86_64.exe: a per-user, one-click installer.
 #
-# Requirements (Ubuntu/Debian): mingw-w64 nsis, plus Rust (rustup).
-#   sudo apt-get install -y mingw-w64 nsis
+# Requirements: llvm-mingw (https://github.com/mstorsjo/llvm-mingw) on PATH,
+# nsis, and Rust (rustup).
 #
 # Usage: script/build-windows-cross [VERSION]
 
@@ -12,16 +12,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${1:-$(script/get-crate-version zed)}"
-TARGET=x86_64-pc-windows-gnu
+# gnullvm rather than gnu: the gnu target keeps Rust thread-locals in OS TLS
+# slots instead of native TLS, and the release built that way failed HTTP
+# requests on Windows with Tokio's "there is no reactor running". gnullvm uses
+# native thread-locals, like the official MSVC build.
+TARGET=x86_64-pc-windows-gnullvm
 
-command -v x86_64-w64-mingw32-gcc >/dev/null || { echo "missing mingw-w64" >&2; exit 1; }
+command -v x86_64-w64-mingw32-clang >/dev/null || { echo "missing llvm-mingw" >&2; exit 1; }
 command -v makensis >/dev/null || { echo "missing nsis (makensis)" >&2; exit 1; }
-
-# Rust's windows-gnu target expects the posix threading model.
-if command -v update-alternatives >/dev/null && [ -e /usr/bin/x86_64-w64-mingw32-gcc-posix ]; then
-    update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix >/dev/null 2>&1 || true
-    update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix >/dev/null 2>&1 || true
-fi
 
 rustup target add "$TARGET"
 
@@ -32,7 +30,8 @@ export ZED_RELEASE_CHANNEL=stable
 export RELEASE_CHANNEL=stable
 # The release's build number, which noah's updater compares: the commit time.
 export NOAH_BUILD="${NOAH_BUILD:-$(git log -1 --format=%ct)}"
-export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--stack,8388608"
+# Setting this replaces the rustflags in .cargo/config.toml, so repeat them.
+export CARGO_TARGET_X86_64_PC_WINDOWS_GNULLVM_RUSTFLAGS="-C symbol-mangling-version=v0 --cfg tokio_unstable --cfg windows_slim_errors -C target-feature=+crt-static -C link-arg=-Wl,--stack,8388608"
 export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 export CARGO_PROFILE_RELEASE_DEBUG=false
@@ -45,7 +44,7 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/bin" "$stage/x64"
 cp "target/$TARGET/release/zed.exe" "$stage/noah.exe"
 cp "target/$TARGET/release/cli.exe" "$stage/bin/zed.exe"
-x86_64-w64-mingw32-strip "$stage/noah.exe" "$stage/bin/zed.exe" || true
+llvm-strip "$stage/noah.exe" "$stage/bin/zed.exe"
 # shepherd's browser: noah looks for agent-browser.exe beside noah.exe.
 script/fetch-agent-browser win32-x64 "$stage/agent-browser.exe"
 
@@ -59,12 +58,10 @@ cp "$conpty_dir/runtimes/win-x64/native/conpty.dll" "$stage/conpty.dll"
 cp "$conpty_dir/build/native/runtimes/x64/OpenConsole.exe" "$stage/x64/OpenConsole.exe"
 rm -rf "$conpty_dir"
 
-# Ship any MinGW runtime DLLs the executable links against.
-sysroot_bin="$(dirname "$(x86_64-w64-mingw32-gcc -print-libgcc-file-name)")"
-for dll in $(x86_64-w64-mingw32-objdump -p "$stage/noah.exe" | awk '/DLL Name/ {print $3}'); do
-    for dir in "$sysroot_bin" /usr/x86_64-w64-mingw32/lib /usr/lib/gcc/x86_64-w64-mingw32/*-posix; do
-        if [ -f "$dir/$dll" ]; then cp "$dir/$dll" "$stage/"; break; fi
-    done
+# Ship any llvm-mingw runtime DLLs (libc++, libunwind) the executable links against.
+runtime_bin="$(dirname "$(command -v x86_64-w64-mingw32-clang)")/../x86_64-w64-mingw32/bin"
+for dll in $(llvm-objdump -p "$stage/noah.exe" "$stage/bin/zed.exe" | awk '/DLL Name/ {print $3}' | sort -u); do
+    if [ -f "$runtime_bin/$dll" ]; then cp "$runtime_bin/$dll" "$stage/"; fi
 done
 
 mkdir -p dist

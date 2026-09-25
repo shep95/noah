@@ -306,6 +306,7 @@ dependencies = [
  "settings",
  "shell_command_parser",
  "smallvec",
+ "smol",
  "sqlez",
  "streaming_diff",
  "strsim",
@@ -404,6 +405,7 @@ dependencies = [
  "util",
  "which",
  "workspace",
+ "zed_actions",
 ]
 
 [[package]]
@@ -6757,6 +6759,7 @@ dependencies = [
  "trash",
  "unicode-normalization",
  "util",
+ "which",
  "windows 0.62.2",
 ]
 
@@ -7241,6 +7244,7 @@ dependencies = [
  "git",
  "git_ui_core",
  "gpui",
+ "http_client",
  "indoc",
  "itertools 0.14.0",
  "language",
@@ -7249,7 +7253,9 @@ dependencies = [
  "markdown",
  "menu",
  "multi_buffer",
+ "noah_trust",
  "notifications",
+ "paths",
  "picker",
  "pretty_assertions",
  "project",
@@ -7262,6 +7268,7 @@ dependencies = [
  "serde",
  "serde_json",
  "settings",
+ "sha2",
  "smallvec",
  "strum 0.28.0",
  "sysinfo 0.39.6",
@@ -11494,6 +11501,7 @@ dependencies = [
  "dirs",
  "futures 0.3.34",
  "gpui",
+ "gpui_util",
  "image",
  "log",
  "paths",
@@ -12919,6 +12927,7 @@ dependencies = [
  "dirs",
  "ignore",
  "util",
+ "which",
 ]
 
 [[package]]

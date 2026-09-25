@@ -130,7 +130,7 @@ pub fn screen_tool_output(
             let mut text = redacted.text;
             if redacted.count > 0 {
                 text.push_str(&format!(
-                    "\n\n[noah redacted {} secret{} from this output. Secrets the person stored in noah are available to commands as environment variables such as $NAME; never ask for a secret's value.]",
+                    "\n\n[noah redacted {} secret{} from this output. Secrets the person stored in noah are available to commands as environment variables: `$NAME` in bash, zsh or sh, `$env:NAME` in PowerShell, `%NAME%` in cmd; never ask for a secret's value.]",
                     redacted.count,
                     if redacted.count == 1 { "" } else { "s" }
                 ));
@@ -461,6 +461,22 @@ pub async fn after_file_change(
         &change.old_text,
         &change.new_text,
     );
+    let added: Vec<Dependency> = cx.update(|cx| {
+        let cx: &App = cx;
+        added
+            .into_iter()
+            .filter(|dependency| {
+                let url = dependency.ecosystem.registry_url(&dependency.name);
+                match check_host_allowed(&url, cx) {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        log::info!("not checking {} in its registry: {reason}", dependency.name);
+                        false
+                    }
+                }
+            })
+            .collect()
+    });
     if added.is_empty() {
         return None;
     }

@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use async_tungstenite::tungstenite::Message;
 use base64::Engine as _;
-use editor::Editor;
+use editor::{Editor, EditorEvent};
 use futures::{StreamExt as _, channel::mpsc};
 use gpui::{
     Action, App, AsyncWindowContext, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable,
@@ -10,7 +10,7 @@ use gpui::{
     actions, canvas, img, px,
 };
 use serde_json::{Value, json};
-use std::{cell::Cell, rc::Rc, sync::Arc};
+use std::{cell::Cell, path::PathBuf, rc::Rc, sync::Arc};
 use ui::{IconButton, IconName, IconSize, Tooltip, prelude::*};
 use util::ResultExt as _;
 use workspace::{
@@ -33,6 +33,19 @@ pub(crate) fn init(cx: &mut App) {
     cx.observe_new(|workspace: &mut Workspace, _, _| {
         workspace.register_action(|workspace, _: &ToggleFocus, window, cx| {
             workspace.toggle_panel_focus::<BrowserPanel>(window, cx);
+        });
+        workspace.register_action(|workspace, _: &zed_actions::PreviewFileInBrowser, window, cx| {
+            let Some(editor) = workspace.active_item_as::<Editor>(cx) else {
+                return;
+            };
+            let Some(path) = editor.update(cx, |editor, cx| editor.target_file_abs_path(cx))
+            else {
+                return;
+            };
+            let Some(panel) = workspace.focus_panel::<BrowserPanel>(window, cx) else {
+                return;
+            };
+            panel.update(cx, |panel, cx| panel.preview(path, &editor, window, cx));
         });
     })
     .detach();
@@ -71,6 +84,8 @@ pub struct BrowserPanel {
     /// What the page is showing, so a restyle knows whether to reload noah's
     /// own start page.
     current_url: String,
+    /// Reloads the previewed file when its editor saves it.
+    preview_subscription: Option<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -121,6 +136,7 @@ impl BrowserPanel {
             zoomed: false,
             page_style,
             current_url: String::new(),
+            preview_subscription: None,
             _subscriptions: subscriptions,
         }
     }
@@ -163,6 +179,37 @@ impl BrowserPanel {
             })
         })
         .detach_and_log_err(cx);
+    }
+
+    fn preview(
+        &mut self,
+        path: PathBuf,
+        editor: &Entity<Editor>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Ok(url) = url::Url::from_file_path(&path) else {
+            self.error = Some(format!("{} can't be previewed", path.display()).into());
+            cx.notify();
+            return;
+        };
+        let url = url.to_string();
+        self.preview_subscription = Some(cx.subscribe(editor, {
+            let url = url.clone();
+            move |this, _, event: &EditorEvent, cx| {
+                if matches!(event, EditorEvent::Saved) && this.current_url == url {
+                    cx.background_spawn(crate::run_command(vec!["reload".into()]))
+                        .detach_and_log_err(cx);
+                }
+            }
+        }));
+        // The live stream doesn't always report the address, so remember it
+        // here for the reload check above and show it in the address bar.
+        self.current_url = url.clone();
+        self.address.update(cx, |address, cx| {
+            address.set_text(url.as_str(), window, cx);
+        });
+        self.run(vec!["open".into(), url], window, cx);
     }
 
     fn run(&mut self, arguments: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {

@@ -48,6 +48,9 @@ actions!(
         ChooseBackgroundImage,
         /// Turns on or off whether noah's colors follow the background image.
         ToggleBackgroundColors,
+        /// Shows the open file (HTML, SVG, PDF or an image) in the browser
+        /// room and reloads it each time the file is saved.
+        PreviewFileInBrowser,
         /// Opens project-specific settings.
         #[action(deprecated_aliases = ["zed_actions::OpenProjectSettings"])]
         OpenProjectSettings,

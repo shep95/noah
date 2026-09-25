@@ -3676,12 +3676,8 @@ impl GitPanel {
             self.fill_co_authors(&mut message, cx);
         }
 
-        let task = if self.has_staged_changes() {
-            // Repository serializes all git operations, so we can just send a commit immediately
-            let commit_task = active_repository.update(cx, |repo, cx| {
-                repo.commit(message.into(), None, options, askpass, cx)
-            });
-            cx.background_spawn(async move { commit_task.await? })
+        let (stage_task, staged_for_commit) = if self.has_staged_changes() {
+            (None, Vec::new())
         } else {
             let changed_files = self
                 .change_entries_by_path()
@@ -3694,23 +3690,69 @@ impl GitPanel {
                 return;
             }
 
-            let stage_task =
-                active_repository.update(cx, |repo, cx| repo.stage_entries(changed_files, cx));
-            cx.spawn(async move |_, cx| {
-                stage_task.await?;
+            let stage_task = active_repository
+                .update(cx, |repo, cx| repo.stage_entries(changed_files.clone(), cx));
+            (Some(stage_task), changed_files)
+        };
+        let task = cx.spawn_in(window, async move |this, cx| {
+            let result = async {
+                if let Some(stage_task) = stage_task {
+                    stage_task.await?;
+                }
+                // Keys committed here usually end up pushed to GitHub, where
+                // they can be read by anyone with access and are hard to purge.
+                let staged_diff = active_repository
+                    .update(cx, |repo, cx| repo.diff(DiffType::HeadToIndex, cx))
+                    .await
+                    .map_err(anyhow::Error::from)
+                    .and_then(|diff| diff)
+                    .log_err()
+                    .unwrap_or_default();
+                let secrets = noah_trust::secrets::find_in_added_lines(&staged_diff);
+                if !secrets.is_empty() {
+                    let detail = format!(
+                        "The staged changes contain what looks like: {}. Once pushed, anyone \
+                         who can see the repository can use it, and it stays in the history. \
+                         Move it to an environment variable or noah's secret store instead.",
+                        secrets.join(", ")
+                    );
+                    let answer = cx
+                        .update(|window, cx| {
+                            window.prompt(
+                                PromptLevel::Warning,
+                                "This commit contains a secret",
+                                Some(&detail),
+                                &["Don't Commit", "Commit Anyway"],
+                                cx,
+                            )
+                        })?
+                        .await?;
+                    if answer != 1 {
+                        // Put the files back the way they were before this commit
+                        // staged them.
+                        if !staged_for_commit.is_empty() {
+                            active_repository
+                                .update(cx, |repo, cx| {
+                                    repo.unstage_entries(staged_for_commit, cx)
+                                })
+                                .await?;
+                        }
+                        return anyhow::Ok(false);
+                    }
+                }
+                // Repository serializes all git operations, so we can just send a commit immediately
                 let commit_task = active_repository.update(cx, |repo, cx| {
                     repo.commit(message.into(), None, options, askpass, cx)
                 });
-                commit_task.await?
-            })
-        };
-        let task = cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
+                commit_task.await??;
+                anyhow::Ok(true)
+            }
+            .await;
             this.update_in(cx, |this, window, cx| {
                 this.pending_commit.take();
 
                 match result {
-                    Ok(()) => {
+                    Ok(true) => {
                         this.set_skip_hooks_enabled(false, cx);
                         if options.amend {
                             this.set_amend_pending(false, cx);
@@ -3721,6 +3763,7 @@ impl GitPanel {
                             this.serialize(cx);
                         }
                     }
+                    Ok(false) => {}
                     Err(e) => this.show_error_toast("commit", e, cx),
                 }
             })

@@ -54,6 +54,9 @@ impl CropRect {
 #[derive(Default)]
 struct CaptureState {
     recording: Option<Recording>,
+    /// Starting a recording is asynchronous; a second toggle meanwhile must
+    /// not start another one.
+    starting: bool,
 }
 
 impl Global for CaptureState {}
@@ -115,6 +118,18 @@ fn window_rect(window: &Window, cx: &App) -> CropRect {
     }
 }
 
+/// The window's screen, as the capture backend identifies it. On Windows both
+/// are the monitor handle; elsewhere the ids don't correspond.
+#[cfg(not(target_os = "macos"))]
+fn window_display(window: &Window, cx: &App) -> Option<u32> {
+    if !cfg!(windows) {
+        return None;
+    }
+    window
+        .display(cx)
+        .map(|display| u64::from(display.id()) as u32)
+}
+
 /// Saves a PNG of the window and copies it to the clipboard. Returns the
 /// file's path.
 pub fn take_screenshot(window: &Window, cx: &mut App) -> Task<Result<PathBuf>> {
@@ -131,10 +146,20 @@ pub fn take_screenshot(window: &Window, cx: &mut App) -> Task<Result<PathBuf>> {
     #[cfg(target_os = "linux")]
     let capture = match x11::window_id(window) {
         Some(window_id) => x11::screenshot(path.clone(), window_id, cx),
-        None => platform::screenshot(path.clone(), window_rect(window, cx), cx),
+        None => platform::screenshot(
+            path.clone(),
+            window_rect(window, cx),
+            window_display(window, cx),
+            cx,
+        ),
     };
     #[cfg(target_os = "windows")]
-    let capture = platform::screenshot(path.clone(), window_rect(window, cx), cx);
+    let capture = platform::screenshot(
+            path.clone(),
+            window_rect(window, cx),
+            window_display(window, cx),
+            cx,
+        );
     cx.spawn(async move |cx| {
         capture.await?;
         let bytes = std::fs::read(&path).with_context(|| format!("couldn't read {}", path.display()))?;
@@ -153,6 +178,9 @@ pub fn take_screenshot(window: &Window, cx: &mut App) -> Task<Result<PathBuf>> {
 pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<PathBuf>>> {
     if cx.default_global::<CaptureState>().recording.is_some() {
         return stop_recording(cx);
+    }
+    if cx.default_global::<CaptureState>().starting {
+        return Task::ready(Ok(None));
     }
     let directory = match output_directory(true) {
         Ok(directory) => directory,
@@ -181,17 +209,30 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
         let start = match x11::window_id(window) {
             Some(window_id) => Task::ready(x11::start_recording(path.clone(), window_id)),
             None => {
-                let start = platform::start_recording(path.clone(), window_rect(window, cx), cx);
+                let start = platform::start_recording(
+                    path.clone(),
+                    window_rect(window, cx),
+                    window_display(window, cx),
+                    cx,
+                );
                 cx.spawn(async move |_| start.await.map(Session::Scap))
             }
         };
         #[cfg(target_os = "windows")]
         let start = {
-            let start = platform::start_recording(path.clone(), window_rect(window, cx), cx);
+            let start = platform::start_recording(
+                    path.clone(),
+                    window_rect(window, cx),
+                    window_display(window, cx),
+                    cx,
+                );
             cx.spawn(async move |_| start.await.map(Session::Scap))
         };
+        cx.default_global::<CaptureState>().starting = true;
         cx.spawn(async move |cx| {
-            let session = start.await?;
+            let session = start.await;
+            cx.update(|cx| cx.default_global::<CaptureState>().starting = false);
+            let session = session?;
             cx.update(|cx| {
                 cx.default_global::<CaptureState>().recording = Some(Recording {
                     started: Instant::now(),
@@ -265,7 +306,7 @@ fn convert_to_mp4(path: &Path) -> Option<PathBuf> {
     }
     let ffmpeg = which::which("ffmpeg").ok()?;
     let output = path.with_extension("mp4");
-    let status = std::process::Command::new(ffmpeg)
+    let status = gpui_util::new_std_command(ffmpeg)
         .args(["-y", "-loglevel", "error", "-i"])
         .arg(path)
         .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"])
@@ -338,8 +379,12 @@ mod platform {
         )
     }
 
-    /// The screen to capture: the main one, else the first.
-    async fn pick_source(cx: &mut gpui::AsyncApp) -> Result<Rc<dyn ScreenCaptureSource>> {
+    /// The screen to capture: the window's own when it can be identified, else
+    /// the main one, else the first.
+    async fn pick_source(
+        display: Option<u32>,
+        cx: &mut gpui::AsyncApp,
+    ) -> Result<Rc<dyn ScreenCaptureSource>> {
         let supported = cx.update(|cx| cx.is_screen_capture_supported());
         if !supported {
             bail!("screen capture isn't available on this system");
@@ -348,19 +393,32 @@ mod platform {
             .update(|cx| cx.screen_capture_sources())
             .await
             .context("screen capture stopped unexpectedly")??;
+        let own = display.and_then(|display| {
+            sources.iter().find(|source| {
+                source
+                    .metadata()
+                    .is_ok_and(|metadata| metadata.id as u32 == display)
+            })
+        });
         let main = sources.iter().find(|source| {
             source
                 .metadata()
                 .is_ok_and(|metadata| metadata.is_main == Some(true))
         });
-        main.or(sources.first())
+        own.or(main)
+            .or(sources.first())
             .cloned()
             .ok_or_else(|| anyhow!("no screen is available to capture"))
     }
 
-    pub(super) fn screenshot(path: PathBuf, rect: CropRect, cx: &mut App) -> Task<Result<()>> {
+    pub(super) fn screenshot(
+        path: PathBuf,
+        rect: CropRect,
+        display: Option<u32>,
+        cx: &mut App,
+    ) -> Task<Result<()>> {
         cx.spawn(async move |cx| {
-            let source = pick_source(cx).await?;
+            let source = pick_source(display, cx).await?;
             let (sender, receiver) = oneshot::channel::<Result<image::RgbImage>>();
             let sender = Mutex::new(Some(sender));
             let stream = cx
@@ -429,10 +487,11 @@ mod platform {
     pub(super) fn start_recording(
         path: PathBuf,
         rect: CropRect,
+        display: Option<u32>,
         cx: &mut App,
     ) -> Task<Result<RecordingSession>> {
         cx.spawn(async move |cx| {
-            let source = pick_source(cx).await?;
+            let source = pick_source(display, cx).await?;
             let stopped = Arc::new(AtomicBool::new(false));
             let encoder = Arc::new(Mutex::new(Encoder {
                 writer: None,

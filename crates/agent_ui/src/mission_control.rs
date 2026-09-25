@@ -80,7 +80,11 @@ pub(crate) fn record_review_outcome(
             let relative = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
             let latest = latest_bundles(root, 5).into_iter().find_map(|(_, bundle)| {
                 let file = bundle.files.iter().find(|file| {
-                    relative.ends_with(file.path.trim_start_matches("./")) || file.path.ends_with(&relative)
+                    let claimed = file.path.replace('\\', "/");
+                    let claimed = claimed.trim_start_matches("./");
+                    !claimed.is_empty()
+                        && (Path::new(&relative).ends_with(claimed)
+                            || Path::new(claimed).ends_with(&relative))
                 })?;
                 Some((file.confidence, bundle.model.clone()))
             });
@@ -906,7 +910,7 @@ async fn load_snapshot(root: Option<PathBuf>, cx: &mut AsyncApp) -> Snapshot {
     let git_log = {
         let root = root.clone();
         cx.background_spawn(async move {
-            let output = util::command::new_command("git")
+            let output = util::command::new_command(paths::git_program())
                 .current_dir(&root)
                 .args(["log", "-n", "2000", "--name-only", outcomes::GIT_LOG_FORMAT])
                 .output()

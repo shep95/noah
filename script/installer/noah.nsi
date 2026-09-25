@@ -64,6 +64,7 @@ Section "Install"
   ${GetOptions} $R0 "/UPDATE" $R1
   IfErrors 0 updating
     nsExec::Exec 'taskkill /F /IM noah.exe'
+    nsExec::Exec 'taskkill /F /IM agent-browser.exe'
   updating:
 
   SetOutPath "$INSTDIR"
@@ -92,6 +93,7 @@ SectionEnd
 
 Section "Uninstall"
   nsExec::Exec 'taskkill /F /IM noah.exe'
+  nsExec::Exec 'taskkill /F /IM agent-browser.exe'
   Delete "$SMPROGRAMS\${APPNAME}.lnk"
   Delete "$DESKTOP\${APPNAME}.lnk"
   RMDir /r "$INSTDIR"

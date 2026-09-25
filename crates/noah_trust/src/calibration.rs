@@ -22,7 +22,10 @@ pub fn record(log: &Path, outcome: &Outcome) -> Result<()> {
     if let Some(directory) = log.parent() {
         std::fs::create_dir_all(directory)?;
     }
-    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(log)?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log)?;
     writeln!(file, "{}", serde_json::to_string(outcome)?)?;
     Ok(())
 }
@@ -64,10 +67,7 @@ impl Calibration {
     /// Whether a stated confidence has held up here: `Some(false)` when
     /// changes given this confidence were kept noticeably less often.
     pub fn trustworthy_at(&self, confidence: f32) -> Option<bool> {
-        let bucket = self
-            .buckets
-            .iter()
-            .find(|bucket| confidence >= bucket.low && confidence < bucket.high + f32::EPSILON)?;
+        let bucket = self.buckets.get(bucket_index(&self.buckets, confidence)?)?;
         if bucket.count < 5 {
             return None;
         }
@@ -98,6 +98,16 @@ impl Calibration {
     }
 }
 
+/// Buckets include their low edge and exclude their high one, except the last,
+/// which also holds 1.0.
+fn bucket_index(buckets: &[Bucket], confidence: f32) -> Option<usize> {
+    let confidence = confidence.clamp(0.0, 1.0);
+    buckets
+        .iter()
+        .position(|bucket| confidence < bucket.high)
+        .or_else(|| buckets.len().checked_sub(1))
+}
+
 pub fn calibrate(outcomes: &[Outcome]) -> Calibration {
     let edges = [0.0, 0.5, 0.7, 0.9, 1.0];
     let mut buckets: Vec<Bucket> = edges
@@ -112,11 +122,9 @@ pub fn calibrate(outcomes: &[Outcome]) -> Calibration {
     let mut squared_error = 0.0;
     for outcome in outcomes {
         let confidence = outcome.confidence.clamp(0.0, 1.0);
-        let index = buckets
-            .iter()
-            .position(|bucket| confidence < bucket.high)
-            .unwrap_or(buckets.len() - 1);
-        if let Some(bucket) = buckets.get_mut(index) {
+        if let Some(bucket) =
+            bucket_index(&buckets, confidence).and_then(|index| buckets.get_mut(index))
+        {
             bucket.count += 1;
             bucket.kept += usize::from(outcome.kept);
         }
@@ -154,6 +162,28 @@ mod tests {
         assert_eq!(calibration.trustworthy_at(0.3), Some(true));
         assert_eq!(calibration.trustworthy_at(0.6), None);
         assert!(calibration.summary().contains("kept 33% of 6"));
+    }
+
+    #[test]
+    fn edge_confidences_are_judged_by_the_bucket_they_were_counted_in() {
+        for edge in [0.5, 0.7, 0.9] {
+            let outcomes: Vec<Outcome> = (0..5).map(|_| outcome(edge, false)).collect();
+            let calibration = calibrate(&outcomes);
+            let bucket = calibration
+                .buckets
+                .iter()
+                .find(|bucket| bucket.count > 0)
+                .expect("counted");
+            assert_eq!(bucket.low, edge);
+            assert_eq!(calibration.trustworthy_at(edge), Some(false), "{edge}");
+        }
+        let outcomes: Vec<Outcome> = (0..5).map(|_| outcome(1.0, true)).collect();
+        let calibration = calibrate(&outcomes);
+        assert_eq!(
+            calibration.buckets.last().map(|bucket| bucket.count),
+            Some(5)
+        );
+        assert_eq!(calibration.trustworthy_at(1.0), Some(true));
     }
 
     #[test]

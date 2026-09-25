@@ -141,6 +141,25 @@ pub fn config_dir() -> &'static PathBuf {
 }
 
 /// Returns the path to the data directory used by Zed.
+/// Where noah keeps the portable Git for Windows (MinGit) it downloads when
+/// the machine has no Git of its own.
+pub fn downloaded_git_directory() -> PathBuf {
+    data_dir().join("git")
+}
+
+/// The Git to run: the one on the PATH, else the one noah downloaded on
+/// Windows, else plain `git` so the error names the missing program.
+pub fn git_program() -> PathBuf {
+    if let Ok(system_git) = which::which("git") {
+        return system_git;
+    }
+    let downloaded = downloaded_git_directory().join("cmd").join("git.exe");
+    if cfg!(windows) && downloaded.is_file() {
+        return downloaded;
+    }
+    PathBuf::from("git")
+}
+
 pub fn data_dir() -> &'static PathBuf {
     CURRENT_DATA_DIR.get_or_init(|| {
         if let Some(custom_dir) = CUSTOM_DATA_DIR.get() {

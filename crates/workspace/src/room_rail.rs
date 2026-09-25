@@ -192,6 +192,10 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
             .action("mission control", Box::new(EnterMissionRoom))
             .separator()
             .header("tools")
+            .action(
+                "preview this file in the browser",
+                Box::new(zed_actions::PreviewFileInBrowser),
+            )
             .action("screenshot", Box::new(noah_capture::TakeScreenshot))
             .action(
                 if recording { "stop recording" } else { "record the screen" },

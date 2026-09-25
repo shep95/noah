@@ -1,4 +1,5 @@
-use std::path::{Path, PathBuf};
+use std::ffi::OsString;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -13,6 +14,7 @@ use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ui::SharedString;
+use util::ResultExt as _;
 use util::markdown::MarkdownInlineCode;
 
 use crate::{AgentTool, ToolCallEventStream, ToolInput};
@@ -68,7 +70,8 @@ pub struct EvidenceToolInput {
     /// For `repeat`: how many times (default 5, at most 50).
     #[serde(default)]
     pub times: Option<u32>,
-    /// For `mutate`: the file whose lines you changed.
+    /// For `mutate`: the file whose lines you changed, relative to the project
+    /// root.
     #[serde(default)]
     pub path: Option<String>,
     /// For `mutate`: first and last changed line (1-based).
@@ -330,17 +333,37 @@ pub(crate) async fn run_shell(
     cx: &mut AsyncApp,
 ) -> (Option<i32>, String, Duration) {
     let started = Instant::now();
-    let mut process = if cfg!(windows) {
-        let mut process = util::command::new_command("cmd");
-        process.arg("/C").arg(command);
-        process
-    } else {
-        let mut process = util::command::new_command("sh");
-        process.arg("-c").arg(command);
-        process
+    let path_with_git = path_with_git_for(command);
+    #[cfg(windows)]
+    let output = {
+        use std::os::windows::process::CommandExt as _;
+        let mut std_command = util::command::new_std_command("cmd");
+        // Rust would quote the command as one argument and escape inner quotes
+        // as `\"`, which cmd doesn't understand. With `/S`, cmd strips only the
+        // outermost quotes and runs the rest verbatim.
+        std_command.raw_arg(format!("/S /C \"{command}\""));
+        std_command.current_dir(directory);
+        if let Some(path) = &path_with_git {
+            std_command.env("PATH", path);
+        }
+        let mut process = smol::process::Command::from(std_command);
+        process.kill_on_drop(true);
+        async move { process.output().await }
     };
-    process.current_dir(directory);
-    let output = process.output().fuse();
+    #[cfg(not(windows))]
+    let output = {
+        let mut process = util::command::new_command("sh");
+        process
+            .arg("-c")
+            .arg(command)
+            .current_dir(directory)
+            .kill_on_drop(true);
+        if let Some(path) = &path_with_git {
+            process.env("PATH", path);
+        }
+        async move { process.output().await }
+    };
+    let output = output.fuse();
     let timeout = cx.background_executor().timer(COMMAND_TIMEOUT).fuse();
     futures::pin_mut!(output, timeout);
     futures::select! {
@@ -360,6 +383,26 @@ pub(crate) async fn run_shell(
             (None, format!("timed out after {} seconds", COMMAND_TIMEOUT.as_secs()), started.elapsed())
         }
     }
+}
+
+/// The `PATH` for a `git` command when the git noah uses isn't on the
+/// person's `PATH`, such as the MinGit noah downloads on Windows.
+fn path_with_git_for(command: &str) -> Option<OsString> {
+    if !command.trim_start().starts_with("git ") {
+        return None;
+    }
+    let git = paths::git_program();
+    if !git.is_absolute() {
+        return None;
+    }
+    let git_directory = git.parent()?;
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    if std::env::split_paths(&current_path).any(|entry| entry.as_path() == git_directory) {
+        return None;
+    }
+    let entries =
+        std::iter::once(git_directory.to_path_buf()).chain(std::env::split_paths(&current_path));
+    std::env::join_paths(entries).log_err()
 }
 
 async fn repeat(
@@ -474,14 +517,20 @@ async fn mutate(
     let relative = input
         .path
         .ok_or_else(|| "give the `path` of the file you changed".to_string())?;
-    let path = if Path::new(&relative).is_absolute() {
-        PathBuf::from(&relative)
-    } else {
-        root.join(&relative)
-    };
-    if !path.starts_with(&root) {
-        return Err("mutation testing only works on files inside the project".to_string());
+    let relative_path = Path::new(&relative);
+    if relative_path.is_absolute()
+        || relative_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(format!(
+            "`{relative}` must be a path inside the project, relative to its root, without `..`"
+        ));
     }
+    let path = root.join(relative_path);
     let original = std::fs::read_to_string(&path)
         .map_err(|error| format!("couldn't read {}: {error}", path.display()))?;
     let first = input.start_line.unwrap_or(1);

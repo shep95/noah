@@ -46,6 +46,14 @@ pub struct Recording {
     captured: Arc<Mutex<Captured>>,
 }
 
+// A recording dropped without `finish` (the view closed, or voice became
+// unavailable mid-recording) must still release the microphone.
+impl Drop for Recording {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+}
+
 #[derive(Default)]
 struct Captured {
     samples: Vec<f32>,
@@ -58,7 +66,7 @@ impl Recording {
     /// captured rather than waiting for the thread to end.
     pub fn finish(self, cx: &App) -> Task<Result<Vec<u8>>> {
         self.stop.store(true, Ordering::Relaxed);
-        let captured = self.captured;
+        let captured = self.captured.clone();
         cx.background_spawn(async move {
             let (samples, sample_rate) = {
                 let mut captured = captured
