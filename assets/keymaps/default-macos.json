@@ -705,6 +705,8 @@
       "cmd-alt-5": "workspace::EnterTerminalRoom",
       "cmd-alt-6": "workspace::EnterBrowserRoom",
       "cmd-alt-7": "workspace::EnterMissionRoom",
+      "cmd-alt-8": "capture::TakeScreenshot",
+      "cmd-alt-9": "capture::ToggleScreenRecording",
       // Move focus between the major regions of the window (editor, open
       // panels, status bar). Accessibility navigation; mirrors VS Code's
       // "Focus Next/Previous Part". `cmd-f6` mirrors `f6` so region navigation

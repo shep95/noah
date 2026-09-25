@@ -80,7 +80,15 @@ fn choose_reviewer(author: Option<&Arc<dyn LanguageModel>>, cx: &App) -> Option<
     let configured = agent_settings::AgentSettings::get_global(cx)
         .verifier_model
         .clone();
-    let available: Vec<Arc<dyn LanguageModel>> = registry.available_models(cx).collect();
+    let offline = agent_settings::AgentSettings::get_global(cx).offline;
+    let available: Vec<Arc<dyn LanguageModel>> = registry
+        .available_models(cx)
+        .filter(|model| {
+            !offline
+                || crate::trust::LOCAL_PROVIDERS
+                    .contains(&model.provider_id().0.to_lowercase().as_str())
+        })
+        .collect();
     if let Some(configured) = configured
         && let Some(model) = available.iter().find(|model| {
             model.provider_id().0.as_ref() == configured.provider.0.as_str()
@@ -104,7 +112,7 @@ fn choose_reviewer(author: Option<&Arc<dyn LanguageModel>>, cx: &App) -> Option<
     candidates
         .first()
         .map(|model| (*model).clone())
-        .or_else(|| author.cloned())
+        .or_else(|| author.filter(|author| available.iter().any(|model| model.id() == author.id())).cloned())
 }
 
 impl AgentTool for VerifyTool {

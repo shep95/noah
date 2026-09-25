@@ -5,8 +5,8 @@
 //! the person presses the microphone or turns on read-aloud.
 
 use std::io::Cursor;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context as _, Result, bail};
 use futures::AsyncReadExt as _;
@@ -24,6 +24,10 @@ const MAX_SPOKEN_CHARS: usize = 4_000;
 /// The provider to talk through: the one behind the default model when it
 /// offers speech, otherwise any connected provider that does.
 pub fn speech_api(cx: &App) -> Option<SpeechApi> {
+    // Speech goes to a cloud provider, which offline mode rules out.
+    if agent_settings::AgentSettings::get_global(cx).offline {
+        return None;
+    }
     let registry = LanguageModelRegistry::read_global(cx);
     let providers = registry.providers();
     let preferred = registry
@@ -35,68 +39,111 @@ pub fn speech_api(cx: &App) -> Option<SpeechApi> {
 }
 
 pub const NO_SPEECH_PROVIDER: &str =
-    "voice needs a provider with speech: add a Venice or OpenAI API key in Settings > AI";
+    "voice needs a provider with speech: add a Venice or OpenAI API key in Settings > AI (and turn offline mode off)";
 
 pub struct Recording {
     stop: Arc<AtomicBool>,
-    audio: Task<Result<Vec<u8>>>,
+    captured: Arc<Mutex<Captured>>,
+}
+
+#[derive(Default)]
+struct Captured {
+    samples: Vec<f32>,
+    sample_rate: u32,
 }
 
 impl Recording {
-    /// Stops listening and returns the recording as WAV.
-    pub fn finish(self) -> Task<Result<Vec<u8>>> {
+    /// Stops listening and returns the recording as WAV. The microphone
+    /// thread may be blocked waiting for audio, so this takes what has been
+    /// captured rather than waiting for the thread to end.
+    pub fn finish(self, cx: &App) -> Task<Result<Vec<u8>>> {
         self.stop.store(true, Ordering::Relaxed);
-        self.audio
+        let captured = self.captured;
+        cx.background_spawn(async move {
+            let (samples, sample_rate) = {
+                let mut captured = captured
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("the recording was interrupted"))?;
+                (std::mem::take(&mut captured.samples), captured.sample_rate)
+            };
+            if sample_rate == 0 || samples.len() < sample_rate as usize / 4 {
+                bail!("noah didn't hear anything; check that your microphone is on and allowed");
+            }
+            Ok(wav_bytes(&samples, sample_rate))
+        })
     }
 }
 
-pub fn start_recording(cx: &mut App) -> Result<Recording> {
+/// Opens the microphone and starts listening. Resolves once the microphone is
+/// open, so a missing or blocked microphone is reported right away.
+pub fn start_recording(cx: &mut App) -> Task<Result<Recording>> {
     let device = audio::AudioSettings::get_global(cx).input_audio_device.clone();
     let stop = Arc::new(AtomicBool::new(false));
-    let (sender, receiver) = futures::channel::oneshot::channel();
-    std::thread::Builder::new()
+    let captured = Arc::new(Mutex::new(Captured::default()));
+    let (opened_sender, opened) = futures::channel::oneshot::channel::<Result<()>>();
+    let spawned = std::thread::Builder::new()
         .name("noah-voice-input".into())
         .spawn({
             let stop = stop.clone();
-            move || {
-                sender.send(record(device, &stop)).ok();
-            }
-        })
-        .context("couldn't start recording")?;
-    let audio = cx.background_spawn(async move {
-        receiver
+            let captured = captured.clone();
+            move || record(device, &stop, &captured, opened_sender)
+        });
+    if let Err(error) = spawned {
+        return Task::ready(Err(anyhow::anyhow!("couldn't start recording: {error}")));
+    }
+    cx.background_spawn(async move {
+        opened
             .await
-            .context("the recording ended unexpectedly")?
-    });
-    Ok(Recording { stop, audio })
+            .context("the microphone stopped before it opened")??;
+        Ok(Recording { stop, captured })
+    })
 }
 
 // The microphone source blocks until samples arrive, so recording runs on
 // its own thread rather than on the async executor.
-fn record(device: Option<rodio::cpal::DeviceId>, stop: &AtomicBool) -> Result<Vec<u8>> {
-    let microphone = audio::open_input_stream(device).context("couldn't open the microphone")?;
+fn record(
+    device: Option<rodio::cpal::DeviceId>,
+    stop: &AtomicBool,
+    captured: &Mutex<Captured>,
+    opened: futures::channel::oneshot::Sender<Result<()>>,
+) {
+    let microphone = match audio::open_input_stream(device) {
+        Ok(microphone) => microphone,
+        Err(error) => {
+            opened
+                .send(Err(anyhow::anyhow!("couldn't open the microphone: {error:#}")))
+                .ok();
+            return;
+        }
+    };
     let channels = microphone.channels().get() as usize;
     let sample_rate = microphone.sample_rate().get();
+    if let Ok(mut captured) = captured.lock() {
+        captured.sample_rate = sample_rate;
+    }
+    opened.send(Ok(())).ok();
     let limit = sample_rate as usize * MAX_RECORDING_SECONDS;
-    let mut mono: Vec<f32> = Vec::with_capacity(sample_rate as usize * 10);
     let mut frame_sum = 0.0;
     let mut frame_len = 0;
+    let mut chunk = Vec::with_capacity(4096);
     for sample in microphone {
         frame_sum += sample;
         frame_len += 1;
         if frame_len == channels {
-            mono.push(frame_sum / channels as f32);
+            chunk.push(frame_sum / channels as f32);
             frame_sum = 0.0;
             frame_len = 0;
-            if stop.load(Ordering::Relaxed) || mono.len() >= limit {
-                break;
+        }
+        if chunk.len() >= 1024 || stop.load(Ordering::Relaxed) {
+            let Ok(mut captured) = captured.lock() else {
+                return;
+            };
+            captured.samples.append(&mut chunk);
+            if stop.load(Ordering::Relaxed) || captured.samples.len() >= limit {
+                return;
             }
         }
     }
-    if mono.len() < sample_rate as usize / 4 {
-        bail!("the recording was too short to hear anything");
-    }
-    Ok(wav_bytes(&mono, sample_rate))
 }
 
 /// 16-bit mono PCM WAV, the format every transcription API accepts.

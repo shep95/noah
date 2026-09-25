@@ -5498,7 +5498,7 @@ impl ThreadView {
                 .next()
                 .map(str::to_string)
                 .filter(|code| code.len() == 2);
-            let audio = recording.finish();
+            let audio = recording.finish(cx);
             let message_editor = self.message_editor.clone();
             self.voice.transcribing = Some(cx.spawn_in(window, async move |this, cx| {
                 let text = async {
@@ -5534,10 +5534,19 @@ impl ThreadView {
             self.handle_thread_error(anyhow::anyhow!(crate::voice::NO_SPEECH_PROVIDER), cx);
             return;
         }
-        match crate::voice::start_recording(cx) {
-            Ok(recording) => self.voice.recording = Some(recording),
-            Err(error) => self.handle_thread_error(error, cx),
-        }
+        let start = crate::voice::start_recording(cx);
+        self.voice.transcribing = Some(cx.spawn(async move |this, cx| {
+            let recording = start.await;
+            this.update(cx, |this, cx| {
+                this.voice.transcribing = None;
+                match recording {
+                    Ok(recording) => this.voice.recording = Some(recording),
+                    Err(error) => this.handle_thread_error(error, cx),
+                }
+                cx.notify();
+            })
+            .ok();
+        }));
         cx.notify();
     }
 
@@ -5656,6 +5665,10 @@ impl ThreadView {
             );
             return;
         };
+        if let Err(error) = agent::trust::check_model_allowed(model.as_ref(), cx) {
+            self.handle_thread_error(error, cx);
+            return;
+        }
         let request = LanguageModelRequest {
             intent: Some(CompletionIntent::UserPrompt),
             messages: vec![

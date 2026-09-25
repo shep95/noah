@@ -579,9 +579,10 @@ async fn plan(input: CodebaseToolInput, root: PathBuf, cx: &mut AsyncApp) -> Res
     let mut out = String::from("# parallel plan\n\n");
     for (index, wave) in plan.waves.iter().enumerate() {
         out.push_str(&format!(
-            "wave {}: {} (can run at the same time)\n",
+            "wave {}: {}{}\n",
             index + 1,
-            wave.join(", ")
+            wave.join(", "),
+            if wave.len() > 1 { " (can run at the same time)" } else { "" }
         ));
     }
     if plan.conflicts.is_empty() {

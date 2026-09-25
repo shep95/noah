@@ -242,6 +242,13 @@ impl State {
     fn restart_fetch_models_task(&mut self, cx: &mut Context<Self>) {
         let api_url = VeniceLanguageModelProvider::api_url(cx);
         self.models_error = None;
+        if crate::AllLanguageModelSettings::get_global(cx).offline {
+            self.available_models.clear();
+            self.fetch_models_task = None;
+            self.models_error = Some("offline mode is on, so noah doesn't contact Venice".into());
+            cx.notify();
+            return;
+        }
         let Some(api_key) = self.api_key_state.key(&api_url) else {
             self.available_models.clear();
             self.fetch_models_task = None;

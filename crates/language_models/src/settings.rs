@@ -29,6 +29,8 @@ pub struct AllLanguageModelSettings {
     pub openai: OpenAiSettings,
     pub openai_compatible: HashMap<Arc<str>, OpenAiCompatibleSettings>,
     pub venice: VeniceSettings,
+    /// noah's offline mode: providers that live on the network stay quiet.
+    pub offline: bool,
     pub vercel_ai_gateway: VercelAiGatewaySettings,
     pub x_ai: XAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
@@ -67,6 +69,11 @@ impl settings::Settings for AllLanguageModelSettings {
         let x_ai = language_models.x_ai.unwrap();
         let zed_dot_dev = language_models.zed_dot_dev.unwrap();
         Self {
+            offline: content
+                .agent
+                .as_ref()
+                .and_then(|agent| agent.offline)
+                .unwrap_or(false),
             anthropic: AnthropicSettings {
                 api_url: anthropic.api_url.unwrap(),
                 available_models: anthropic.available_models.unwrap_or_default(),

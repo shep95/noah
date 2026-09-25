@@ -1,0 +1,36 @@
+[package]
+name = "noah_capture"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/noah_capture.rs"
+doctest = false
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+futures.workspace = true
+gpui = { workspace = true, features = ["screen-capture"] }
+image.workspace = true
+log.workspace = true
+paths.workspace = true
+util.workspace = true
+which.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+scap.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+scap = { workspace = true, features = ["x11"] }
+raw-window-handle.workspace = true
+x11rb = "0.13.1"
+
+[dev-dependencies]
+tempfile.workspace = true

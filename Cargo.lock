@@ -11486,6 +11486,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "noah_capture"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "futures 0.3.34",
+ "gpui",
+ "image",
+ "log",
+ "paths",
+ "raw-window-handle",
+ "tempfile",
+ "util",
+ "which",
+ "x11rb",
+ "zed-scap",
+]
+
+[[package]]
 name = "noah_i18n"
 version = "0.1.0"
 dependencies = [
@@ -22429,6 +22449,7 @@ dependencies = [
  "log",
  "markdown",
  "menu",
+ "noah_capture",
  "noah_i18n",
  "node_runtime",
  "parking_lot",

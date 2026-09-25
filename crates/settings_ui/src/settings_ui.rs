@@ -465,6 +465,9 @@ pub fn init(cx: &mut App) {
 
     cx.observe_new(|workspace: &mut workspace::Workspace, _, _| {
         workspace
+            .register_action(|_, _: &zed_actions::ChooseBackgroundImage, window, cx| {
+                choose_wallpaper(window, cx);
+            })
             .register_action(|_, action: &OpenSettingsAt, window, cx| {
                 let window_handle = window.window_handle().downcast::<MultiWorkspace>();
                 open_settings_editor_at_target(

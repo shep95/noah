@@ -1263,6 +1263,19 @@
     // Follow shepherd while it works: each file it edits opens in the editor,
     // and new and removed text fades in and out as it lands.
     "follow_live_edits": true,
+    // Offline mode: shepherd only uses local models (Ollama, LM Studio) and its
+    // web, browser and package-registry tools are off, so nothing leaves this
+    // machine.
+    "offline": false,
+    // Teaching mode: shepherd explains, asks you questions and leaves the
+    // critical part of each change for you to write.
+    "teaching_mode": false,
+    // A monthly spending limit in US dollars for paid models, such as 20.
+    // noah asks before going over it. null means no limit.
+    "monthly_budget_usd": null,
+    // Hosts shepherd's fetch and browser tools may reach, such as "docs.rs" or
+    // "*.github.com". Empty allows every host.
+    "allowed_hosts": [],
     // Settings for automatic agent context compaction, which summarizes earlier
     // messages to free up room in the model's context window once it grows too
     // large.

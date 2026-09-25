@@ -14,6 +14,16 @@ It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and exte
 - Custom editor wallpaper: the UI palette adapts to the image you choose.
 - A real browser inside noah: shepherd can open pages, read them, click and fill forms, and you
   watch it live in the browser room (ctrl-alt-6) and can take over at any time.
+- Every language: pick yours in Settings > General > Language; noah's interface and shepherd
+  switch to it.
+- Proof over claims: shepherd hands in evidence with each change (the commands that really ran,
+  each claim tied to them, what it didn't verify), and a model from another family reviews it.
+- Guard rails: prompt injection in web pages is withheld, secrets are redacted, irreversible
+  commands always ask, new dependencies are checked against their registries, and every change
+  is recorded in a tamper-evident provenance log.
+- Mission control (ctrl-alt-7): every conversation, the decisions waiting on you, evidence,
+  spend against your budget, and how shepherd's past work held up.
+- Voice: speak to shepherd and hear its replies, through your own provider's API key.
 
 Community: [Discord](https://discord.gg/M9hnebRwvk) · [asherin.com](https://asherin.com)
 

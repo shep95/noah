@@ -2,7 +2,11 @@ use gpui::{
     Action, App, Context, Div, InteractiveElement, IntoElement, ParentElement, Styled, Window,
     actions, div, px,
 };
-use ui::{IconButton, IconName, IconSize, Tooltip, prelude::*};
+use gpui::Entity;
+use settings::Settings as _;
+use ui::{
+    ContextMenu, IconButton, IconName, IconPosition, IconSize, PopoverMenu, Tooltip, prelude::*,
+};
 
 use crate::Workspace;
 
@@ -127,9 +131,142 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     .on_action(cx.listener(|workspace, _: &EnterMissionRoom, window, cx| {
         workspace.enter_room(Room::Mission, window, cx)
     }))
+    .on_action(
+        cx.listener(|workspace, _: &zed_actions::ToggleBackgroundColors, _window, cx| {
+            let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
+            let fs = workspace.app_state().fs.clone();
+            settings::update_settings_file(fs, cx, move |settings, _| {
+                settings.workspace.wallpaper_adapts_theme = Some(!adapts);
+            });
+        }),
+    )
+    .on_action(cx.listener(|workspace, _: &noah_capture::TakeScreenshot, window, cx| {
+        workspace.take_screenshot(window, cx)
+    }))
+    .on_action(
+        cx.listener(|workspace, _: &noah_capture::ToggleScreenRecording, window, cx| {
+            workspace.toggle_screen_recording(window, cx)
+        }),
+    )
+}
+
+struct CaptureNotification;
+
+/// The rail's settings menu: the things people reach for most, one click
+/// away, with everything else behind "all settings".
+fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
+    let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
+    let recording = noah_capture::is_recording(cx);
+    ContextMenu::build(window, cx, move |menu, _window, cx| {
+        let check_for_updates = cx.build_action("auto_update::Check", None).ok();
+        let menu = menu
+            .header("look")
+            .action("appearance, theme and fonts", Box::new(zed_actions::OpenSettingsPage {
+                page: "Appearance".into(),
+                target: None,
+            }))
+            .action("upload a background image", Box::new(zed_actions::ChooseBackgroundImage))
+            .toggleable_entry(
+                "colors follow the background",
+                adapts,
+                IconPosition::Start,
+                Some(Box::new(zed_actions::ToggleBackgroundColors)),
+                |window, cx| {
+                    window.dispatch_action(Box::new(zed_actions::ToggleBackgroundColors), cx)
+                },
+            )
+            .action("language", Box::new(zed_actions::OpenSettingsAt {
+                path: "language".into(),
+                target: None,
+            }))
+            .separator()
+            .header("shepherd")
+            .action("API keys and models", Box::new(zed_actions::OpenSettingsAt {
+                path: "llm_providers".into(),
+                target: None,
+            }))
+            .action("shepherd settings", Box::new(zed_actions::OpenSettingsPage {
+                page: "AI".into(),
+                target: None,
+            }))
+            .action("mission control", Box::new(EnterMissionRoom))
+            .separator()
+            .header("tools")
+            .action("screenshot", Box::new(noah_capture::TakeScreenshot))
+            .action(
+                if recording { "stop recording" } else { "record the screen" },
+                Box::new(noah_capture::ToggleScreenRecording),
+            )
+            .action("keyboard shortcuts", Box::new(zed_actions::OpenKeymap))
+            .action("view logs", Box::new(crate::OpenLog))
+            .separator()
+            .action("all settings", Box::new(zed_actions::OpenSettings))
+            .action("settings file (JSON)", Box::new(zed_actions::OpenSettingsFile));
+        let menu = match check_for_updates {
+            Some(action) => menu.action("check for updates", action),
+            None => menu,
+        };
+        menu.action("about noah", Box::new(zed_actions::About))
+    })
 }
 
 impl Workspace {
+    fn take_screenshot(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let task = noah_capture::take_screenshot(window, cx);
+        cx.spawn(async move |workspace, cx| {
+            let result = task.await;
+            workspace.update(cx, |workspace, cx| match result {
+                Ok(path) => workspace.show_capture_toast(
+                    format!("screenshot saved to {} and copied", path.display()),
+                    Some(path),
+                    cx,
+                ),
+                Err(error) => workspace.show_capture_toast(
+                    format!("couldn't take a screenshot: {error:#}"),
+                    None,
+                    cx,
+                ),
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn toggle_screen_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let task = noah_capture::toggle_recording(window, cx);
+        cx.notify();
+        cx.spawn(async move |workspace, cx| {
+            let result = task.await;
+            workspace.update(cx, |workspace, cx| {
+                match result {
+                    Ok(Some(path)) => workspace.show_capture_toast(
+                        format!("recording saved to {}", path.display()),
+                        Some(path),
+                        cx,
+                    ),
+                    Ok(None) => {}
+                    Err(error) => workspace.show_capture_toast(
+                        format!("the recording didn't work: {error:#}"),
+                        None,
+                        cx,
+                    ),
+                }
+                cx.notify();
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn show_capture_toast(&mut self, message: String, path: Option<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let mut toast = crate::Toast::new(
+            crate::notifications::NotificationId::unique::<CaptureNotification>(),
+            message,
+        );
+        if let Some(path) = path {
+            toast = toast.on_click("show in folder", move |_, cx| cx.reveal_path(&path));
+        }
+        self.show_toast(toast.autohide(), cx);
+    }
+
     /// The room whose panel is showing, or the writing room when none is.
     pub fn active_room(&self, cx: &App) -> Room {
         for dock in self.all_docks() {
@@ -267,21 +404,72 @@ impl Workspace {
                     )
             }))
             .child(div().flex_1())
+            .child({
+                let recording = noah_capture::recording_elapsed(cx);
+                v_flex()
+                    .w_full()
+                    .items_center()
+                    .gap_2()
+                    .pb_2()
+                    .child(
+                        IconButton::new("screenshot", IconName::Image)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(|_window, cx| {
+                                Tooltip::for_action(
+                                    "screenshot (saved and copied)",
+                                    &noah_capture::TakeScreenshot,
+                                    cx,
+                                )
+                            })
+                            .on_click(cx.listener(|workspace, _, window, cx| {
+                                workspace.take_screenshot(window, cx)
+                            })),
+                    )
+                    .child(
+                        IconButton::new(
+                            "screen-recording",
+                            if recording.is_some() {
+                                IconName::Stop
+                            } else {
+                                IconName::Circle
+                            },
+                        )
+                        .icon_size(IconSize::Small)
+                        .icon_color(if recording.is_some() {
+                            Color::Error
+                        } else {
+                            Color::Muted
+                        })
+                        .toggle_state(recording.is_some())
+                        .tooltip(move |_window, cx| {
+                            let label: SharedString = match recording {
+                                Some(elapsed) => format!(
+                                    "recording {}:{:02}: click to stop and save",
+                                    elapsed.as_secs() / 60,
+                                    elapsed.as_secs() % 60
+                                )
+                                .into(),
+                                None => "record the screen".into(),
+                            };
+                            Tooltip::for_action(label, &noah_capture::ToggleScreenRecording, cx)
+                        })
+                        .on_click(cx.listener(|workspace, _, window, cx| {
+                            workspace.toggle_screen_recording(window, cx)
+                        })),
+                    )
+            })
             .child(
                 div().pb_3().child(
-                    IconButton::new("settings", IconName::Settings)
-                        .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
-                        .tooltip(|_window, cx| {
-                            Tooltip::for_action(
-                                noah_i18n::t(cx, "settings"),
-                                &zed_actions::OpenSettings,
-                                cx,
-                            )
-                        })
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(zed_actions::OpenSettings.boxed_clone(), cx);
-                        }),
+                    PopoverMenu::new("settings-menu")
+                        .trigger_with_tooltip(
+                            IconButton::new("settings", IconName::Settings)
+                                .icon_size(IconSize::Small)
+                                .icon_color(Color::Muted),
+                            Tooltip::text(noah_i18n::t(cx, "settings")),
+                        )
+                        .anchor(gpui::Anchor::BottomLeft)
+                        .menu(|window, cx| Some(settings_menu(window, cx))),
                 ),
             )
     }

@@ -44,6 +44,10 @@ actions!(
         /// Opens the settings JSON file.
         #[action(deprecated_aliases = ["zed_actions::OpenSettings"])]
         OpenSettingsFile,
+        /// Picks an image to use as noah's background.
+        ChooseBackgroundImage,
+        /// Turns on or off whether noah's colors follow the background image.
+        ToggleBackgroundColors,
         /// Opens project-specific settings.
         #[action(deprecated_aliases = ["zed_actions::OpenProjectSettings"])]
         OpenProjectSettings,

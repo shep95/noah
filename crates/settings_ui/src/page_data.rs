@@ -8911,6 +8911,36 @@ fn ai_page(cx: &App) -> SettingsPage {
 
         items.extend([
             SettingsPageItem::SettingItem(SettingItem {
+                title: "Offline Mode",
+                description: "Nothing leaves this machine: shepherd only uses local models (Ollama, LM Studio), and its web, browser and package-registry tools are switched off.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.offline"),
+                    pick: |settings_content| settings_content.agent.as_ref()?.offline.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().offline = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Teaching Mode",
+                description: "shepherd explains its reasoning, asks you questions and leaves the critical part of each change for you to write, so your own skills stay sharp.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.teaching_mode"),
+                    pick: |settings_content| {
+                        settings_content.agent.as_ref()?.teaching_mode.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().teaching_mode = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
                 title: "Follow Live Edits",
                 description: "Open each file shepherd edits while it works, so its changes can be watched as they land. New and removed text fades in and out in your theme's colors.",
                 field: Box::new(SettingField {
