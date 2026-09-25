@@ -642,6 +642,7 @@
       "ctrl-alt-4": "workspace::EnterChangesRoom",
       "ctrl-alt-5": "workspace::EnterTerminalRoom",
       "ctrl-alt-6": "workspace::EnterBrowserRoom",
+      "ctrl-alt-7": "workspace::EnterMissionRoom",
       // Move focus between the major regions of the window (editor, open
       // panels, status bar). Accessibility navigation; mirrors VS Code's
       // "Focus Next/Previous Part". `ctrl-f6` mirrors `f6` so region navigation
@@ -673,7 +674,7 @@
       "shift-new": "workspace::NewWindow",
       "ctrl-shift-n": "workspace::NewWindow",
       "ctrl-`": "terminal_panel::Toggle",
-      "f10": ["app_menu::OpenApplicationMenu", "Zed"],
+      "f10": ["app_menu::OpenApplicationMenu", "noah"],
       "alt-1": ["workspace::ActivatePane", 0],
       "alt-2": ["workspace::ActivatePane", 1],
       "alt-3": ["workspace::ActivatePane", 2],

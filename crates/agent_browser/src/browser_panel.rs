@@ -18,7 +18,8 @@ use workspace::{
     dock::{DockPosition, Panel, PanelEvent},
 };
 
-use crate::{AgentBrowser, BrowserEvent, address_to_url};
+use crate::{AgentBrowser, BrowserEvent, PageStyle, address_to_url};
+use settings::SettingsStore;
 
 actions!(
     browser_panel,
@@ -66,6 +67,10 @@ pub struct BrowserPanel {
     attached_on_open: bool,
     position: DockPosition,
     zoomed: bool,
+    page_style: PageStyle,
+    /// What the page is showing, so a restyle knows whether to reload noah's
+    /// own start page.
+    current_url: String,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -82,10 +87,13 @@ impl BrowserPanel {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let address = cx.new(|cx| {
             let mut editor = Editor::single_line(window, cx);
-            editor.set_placeholder_text("search or enter an address", window, cx);
+            editor.set_placeholder_text(noah_i18n::t(cx, "search or enter an address"), window, cx);
             editor
         });
         let mut subscriptions = Vec::new();
+        subscriptions.push(cx.observe_global::<SettingsStore>(|this, cx| this.restyle(cx)));
+        let page_style = PageStyle::from_app(cx);
+        Self::write_start_page(page_style.clone(), cx).detach_and_log_err(cx);
         if let Some(browser) = AgentBrowser::global(cx) {
             subscriptions.push(cx.observe(&browser, |_, _, cx| cx.notify()));
             subscriptions.push(cx.subscribe_in(
@@ -111,8 +119,50 @@ impl BrowserPanel {
             attached_on_open: false,
             position: DockPosition::Right,
             zoomed: false,
+            page_style,
+            current_url: String::new(),
             _subscriptions: subscriptions,
         }
+    }
+
+    fn write_start_page(style: PageStyle, cx: &mut Context<Self>) -> Task<Result<String>> {
+        cx.background_spawn(async move { crate::write_start_page(&style) })
+    }
+
+    /// Keeps noah's pages in step with the theme, wallpaper and font: pages
+    /// get the matching light or dark look, and the start page is redrawn.
+    fn restyle(&mut self, cx: &mut Context<Self>) {
+        let style = PageStyle::from_app(cx);
+        if style == self.page_style {
+            return;
+        }
+        let scheme_changed = style.dark != self.page_style.dark;
+        self.page_style = style.clone();
+        let connected = matches!(self.connection, Connection::Connected { .. });
+        let showing_start_page = crate::start_page_url().is_some_and(|url| url == self.current_url);
+        let written = Self::write_start_page(style.clone(), cx);
+        cx.background_spawn(async move {
+            written.await?;
+            if connected && scheme_changed {
+                crate::apply_color_scheme(&style).await?;
+            }
+            if connected && showing_start_page {
+                crate::run_command(vec!["reload".into()]).await?;
+            }
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn open_start_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let written = Self::write_start_page(self.page_style.clone(), cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let url = written.await?;
+            this.update_in(cx, |this, window, cx| {
+                this.run(vec!["open".into(), url], window, cx)
+            })
+        })
+        .detach_and_log_err(cx);
     }
 
     fn run(&mut self, arguments: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {
@@ -139,7 +189,7 @@ impl BrowserPanel {
         if typed.trim().is_empty() {
             return;
         }
-        let url = address_to_url(&typed);
+        let url = address_to_url(&typed, &self.page_style);
         self.address.update(cx, |address, cx| {
             address.set_text(url.as_ref(), window, cx);
         });
@@ -225,10 +275,14 @@ impl BrowserPanel {
                         Some("url") => {
                             let url = value["url"].as_str().unwrap_or_default().to_string();
                             this.update_in(cx, |this, window, cx| {
+                                this.current_url = url.clone();
+                                let on_start_page =
+                                    crate::start_page_url().is_some_and(|start| start == url);
+                                let shown = if on_start_page { String::new() } else { url };
                                 let editing = this.address.focus_handle(cx).is_focused(window);
                                 if !editing {
                                     this.address.update(cx, |address, cx| {
-                                        address.set_text(url, window, cx);
+                                        address.set_text(shown, window, cx);
                                     });
                                 }
                             })
@@ -249,10 +303,23 @@ impl BrowserPanel {
                 .ok();
             }
         });
-        this.update(cx, |this, cx| {
+        let style = this.update(cx, |this, cx| {
             this.connection = Connection::Connected { input, _task: task };
             cx.notify();
+            this.page_style.clone()
         })?;
+        crate::apply_color_scheme(&style).await.log_err();
+        // A browser the stream just started sits on a blank white page; show
+        // noah's own start page instead.
+        let current = crate::run_command(vec!["get".into(), "url".into()])
+            .await
+            .unwrap_or_default();
+        if current.trim().is_empty() || current.trim() == "about:blank" {
+            let start_page = cx
+                .background_spawn(async move { crate::write_start_page(&style) })
+                .await?;
+            crate::run_command(vec!["open".into(), start_page]).await?;
+        }
         Ok(())
     }
 
@@ -398,7 +465,7 @@ impl BrowserPanel {
             .child(
                 IconButton::new("browser-back", IconName::ArrowLeft)
                     .icon_size(IconSize::Small)
-                    .tooltip(Tooltip::text("back"))
+                    .tooltip(Tooltip::text(noah_i18n::t(cx, "back")))
                     .on_click(
                         cx.listener(|this, _, window, cx| {
                             this.run(vec!["back".into()], window, cx)
@@ -408,7 +475,7 @@ impl BrowserPanel {
             .child(
                 IconButton::new("browser-forward", IconName::ArrowRight)
                     .icon_size(IconSize::Small)
-                    .tooltip(Tooltip::text("forward"))
+                    .tooltip(Tooltip::text(noah_i18n::t(cx, "forward")))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.run(vec!["forward".into()], window, cx)
                     })),
@@ -416,7 +483,7 @@ impl BrowserPanel {
             .child(
                 IconButton::new("browser-reload", IconName::RotateCw)
                     .icon_size(IconSize::Small)
-                    .tooltip(Tooltip::text("reload"))
+                    .tooltip(Tooltip::text(noah_i18n::t(cx, "reload")))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.run(vec!["reload".into()], window, cx)
                     })),
@@ -438,7 +505,7 @@ impl BrowserPanel {
             )
             .when(busy, |this| {
                 this.child(
-                    Label::new("shepherd is browsing")
+                    Label::new(noah_i18n::t(cx, "shepherd is browsing"))
                         .size(LabelSize::XSmall)
                         .color(Color::Muted),
                 )
@@ -454,24 +521,27 @@ impl BrowserPanel {
             .justify_center()
             .gap_2()
             .p_6()
-            .child(Label::new("browser").color(Color::Muted))
+            .child(Label::new(noah_i18n::t(cx, "browser")).color(Color::Muted))
             .child(
                 Label::new(if missing_binary {
                     "agent-browser isn't installed with this copy of noah."
                 } else if connecting {
-                    "starting the browser…"
+                    noah_i18n::t(cx, "starting the browser…")
                 } else {
-                    "Type an address above, or ask shepherd to look something up. The page is live: click, scroll and type in it."
+                    noah_i18n::t(
+                        cx,
+                        "Type an address above, or ask shepherd to look something up. The page is live: click, scroll and type in it.",
+                    )
                 })
                 .size(LabelSize::Small)
                 .color(Color::Muted),
             )
             .when(!connecting && !missing_binary, |this| {
                 this.child(
-                    Button::new("browser-start", "start the browser")
+                    Button::new("browser-start", noah_i18n::t(cx, "start the browser"))
                         .style(ButtonStyle::Outlined)
                         .on_click(cx.listener(|this, _, window, cx| {
-                            this.run(vec!["open".into(), "about:blank".into()], window, cx)
+                            this.open_start_page(window, cx)
                         })),
                 )
             })
@@ -481,7 +551,7 @@ impl BrowserPanel {
                     .filter(|error| error.contains("No Chrome, Edge or Chromium")),
                 |this, _| {
                     this.child(
-                        Button::new("browser-install", "download a browser")
+                        Button::new("browser-install", noah_i18n::t(cx, "download a browser"))
                             .style(ButtonStyle::Outlined)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.run(vec!["install".into()], window, cx)

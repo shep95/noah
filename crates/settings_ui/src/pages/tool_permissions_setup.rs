@@ -75,6 +75,18 @@ const TOOLS: &[ToolInfo] = &[
         regex_explanation: "Patterns are matched against the browser command and its arguments, for example `open https://example.com` or `click @e3`.",
     },
     ToolInfo {
+        id: "evidence",
+        name: "Evidence",
+        description: "Repeating test commands to find flaky tests, and mutation testing (temporary edits, always restored)",
+        regex_explanation: "Patterns are matched against the command and what it's for, for example `run 5 times: cargo test`.",
+    },
+    ToolInfo {
+        id: "project_memory",
+        name: "Project Memory",
+        description: "Writing to the project's .noah memory, intent, spec, why log and preferences",
+        regex_explanation: "Patterns are matched against a description of the change, for example `remember in .noah/memory.md: tests run with script/test`.",
+    },
+    ToolInfo {
         id: "model_file",
         name: "Model File",
         description: "Editing AI model files' metadata and importing them into Ollama or LM Studio",

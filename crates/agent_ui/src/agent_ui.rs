@@ -19,6 +19,7 @@ mod inline_assistant;
 mod inline_prompt_editor;
 mod language_model_selector;
 mod mention_set;
+pub mod mission_control;
 mod message_editor;
 mod mode_selector;
 mod model_selector;
@@ -36,6 +37,8 @@ pub mod thread_worktree_archive;
 pub mod threads_archive_view;
 mod ui;
 mod unicode_confusables;
+#[cfg(feature = "audio")]
+mod voice;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -588,6 +591,7 @@ pub fn init(
 ) {
     agent::ThreadStore::init_global(cx);
     prompt_store::init(cx);
+    mission_control::init(cx);
 
     cx.set_global(agent_skills::SkillsUpdatedHook(std::rc::Rc::new(|cx| {
         let workspaces: Vec<_> = workspace::AppState::global(cx)
@@ -994,6 +998,12 @@ mod tests {
             play_sound_when_agent_done: PlaySoundWhenAgentDone::Never,
             prevent_idle_sleep: true,
             single_file_review: false,
+            follow_live_edits: true,
+            verifier_model: None,
+            teaching_mode: false,
+            offline: false,
+            monthly_budget_usd: None,
+            allowed_hosts: Vec::new(),
             model_parameters: vec![],
             auto_compact: agent_settings::AutoCompactSettings {
                 enabled: false,

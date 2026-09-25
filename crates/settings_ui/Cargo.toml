@@ -20,6 +20,7 @@ test-support = []
 agent.workspace = true
 agent_settings.workspace = true
 agent_skills.workspace = true
+noah_i18n.workspace = true
 anyhow.workspace = true
 audio.workspace = true
 client.workspace = true

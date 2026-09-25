@@ -149,6 +149,19 @@ impl LanguageModelProvider for OpenAiLanguageModelProvider {
         PROVIDER_ID
     }
 
+    fn speech_api(&self, cx: &App) -> Option<language_model::SpeechApi> {
+        let api_url = Self::api_url(cx);
+        let api_key = self.state.read(cx).api_key_state.key(&api_url)?;
+        Some(language_model::SpeechApi {
+            provider: "OpenAI".into(),
+            api_url: api_url.trim_end_matches('/').to_string(),
+            api_key,
+            transcription_model: "whisper-1".into(),
+            speech_model: "tts-1".into(),
+            voice: "alloy".into(),
+        })
+    }
+
     fn name(&self) -> LanguageModelProviderName {
         PROVIDER_NAME
     }

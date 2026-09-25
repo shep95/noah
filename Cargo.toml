@@ -146,6 +146,8 @@ members = [
     "crates/multi_buffer",
     "crates/net",
     "crates/node_runtime",
+    "crates/noah_i18n",
+    "crates/noah_trust",
     "crates/notifications",
     "crates/oauth_callback_server",
     "crates/ollama",
@@ -416,6 +418,8 @@ mistral = { path = "crates/mistral" }
 multi_buffer = { path = "crates/multi_buffer" }
 net = { path = "crates/net" }
 node_runtime = { path = "crates/node_runtime" }
+noah_i18n = { path = "crates/noah_i18n" }
+noah_trust = { path = "crates/noah_trust" }
 notifications = { path = "crates/notifications" }
 oauth_callback_server = { path = "crates/oauth_callback_server" }
 ollama = { path = "crates/ollama" }

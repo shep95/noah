@@ -113,7 +113,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "file".into(),
+            name: noah_i18n::t(cx, "file").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::action("new", workspace::NewFile),
@@ -150,7 +150,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "edit".into(),
+            name: noah_i18n::t(cx, "edit").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::os_action("undo", editor::actions::Undo, OsAction::Undo),
@@ -171,7 +171,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "selection".into(),
+            name: noah_i18n::t(cx, "selection").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::os_action(
@@ -219,12 +219,12 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "view".into(),
+            name: noah_i18n::t(cx, "view").to_string().into(),
             disabled: false,
             items: view_items,
         },
         Menu {
-            name: "go".into(),
+            name: noah_i18n::t(cx, "go").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::action("back", workspace::GoBack),
@@ -267,7 +267,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "run".into(),
+            name: noah_i18n::t(cx, "run").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::action(
@@ -292,7 +292,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "window".into(),
+            name: noah_i18n::t(cx, "window").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::action("minimize", super::Minimize),
@@ -301,7 +301,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         },
         Menu {
-            name: "help".into(),
+            name: noah_i18n::t(cx, "help").to_string().into(),
             disabled: false,
             items: vec![
                 MenuItem::action("view dependency licenses", zed_actions::OpenLicenses),

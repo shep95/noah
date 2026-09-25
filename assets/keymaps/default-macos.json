@@ -704,6 +704,7 @@
       "cmd-alt-4": "workspace::EnterChangesRoom",
       "cmd-alt-5": "workspace::EnterTerminalRoom",
       "cmd-alt-6": "workspace::EnterBrowserRoom",
+      "cmd-alt-7": "workspace::EnterMissionRoom",
       // Move focus between the major regions of the window (editor, open
       // panels, status bar). Accessibility navigation; mirrors VS Code's
       // "Focus Next/Previous Part". `cmd-f6` mirrors `f6` so region navigation

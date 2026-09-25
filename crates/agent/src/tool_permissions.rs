@@ -592,6 +592,12 @@ mod tests {
             play_sound_when_agent_done: PlaySoundWhenAgentDone::default(),
             prevent_idle_sleep: true,
             single_file_review: false,
+            follow_live_edits: true,
+            verifier_model: None,
+            teaching_mode: false,
+            offline: false,
+            monthly_budget_usd: None,
+            allowed_hosts: Vec::new(),
             model_parameters: vec![],
             auto_compact: agent_settings::AutoCompactSettings {
                 enabled: false,

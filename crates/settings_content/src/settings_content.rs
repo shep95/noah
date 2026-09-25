@@ -217,6 +217,13 @@ pub struct SettingsContent {
     /// Default: true
     pub auto_update: Option<bool>,
 
+    /// The language noah's interface and shepherd use, as a language code
+    /// such as "es", "pt-BR" or "ja", or "system" to follow the operating
+    /// system.
+    ///
+    /// Default: "system"
+    pub language: Option<LanguageCode>,
+
     /// This base keymap settings adjusts the default keybindings in Zed to be similar
     /// to other common code editors. By default, Zed's keymap closely follows VSCode's
     /// keymap, with minor adjustments, this corresponds to the "VSCode" setting.
@@ -403,7 +410,7 @@ fallible_options::flattened_deserialize!(SettingsContent {
     sections: { project, theme, extension, workspace, editor, remote },
     options: {
         call_hierarchy, command_palette, file_finder, git_panel, tabs, tab_bar, status_bar, preview_tabs, agent,
-        agent_servers, audio, auto_update, base_keymap, collaboration_panel, debugger, diagnostics,
+        agent_servers, audio, auto_update, language, base_keymap, collaboration_panel, debugger, diagnostics,
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
         journal, log, line_indicator_format, language_models, outline_panel, project_panel,
@@ -1634,5 +1641,17 @@ impl std::str::FromStr for DelayMs {
             .parse::<u64>()
             .map(DelayMs)
             .with_context(|| format!("failed to parse delay duration: {s}"))
+    }
+}
+
+/// A language code for the `language` setting.
+#[with_fallible_options]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, MergeFrom, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct LanguageCode(pub Arc<str>);
+
+impl From<String> for LanguageCode {
+    fn from(value: String) -> Self {
+        Self(Arc::from(value))
     }
 }

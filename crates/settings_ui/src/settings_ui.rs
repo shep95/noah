@@ -54,7 +54,7 @@ use zed_actions::{
 
 use crate::components::{
     EnumVariantDropdown, NumberField, NumberFieldMode, NumberFieldType, SettingsInputField,
-    SettingsSectionHeader, font_picker, icon_theme_picker, render_ollama_model_picker,
+    SettingsSectionHeader, font_picker, icon_theme_picker, language_picker, language_picker_label, render_ollama_model_picker,
     text_field_a11y_state, theme_picker,
 };
 use crate::pages::{
@@ -562,6 +562,7 @@ fn init_renderers(cx: &mut App) {
         .add_basic_renderer::<settings::CloseWindowWhenNoItems>(render_dropdown)
         .add_basic_renderer::<settings::TextRenderingMode>(render_dropdown)
         .add_basic_renderer::<settings::FontFamilyName>(render_font_picker)
+        .add_basic_renderer::<settings::LanguageCode>(render_language_picker)
         .add_basic_renderer::<settings::BaseKeymapContent>(render_dropdown)
         .add_basic_renderer::<settings::MultiCursorModifier>(render_dropdown)
         .add_basic_renderer::<settings::HideMouseMode>(render_dropdown)
@@ -5265,6 +5266,67 @@ fn render_font_picker(
                             },
                         )
                         .log_err(); // todo(settings_ui) don't log err
+                    },
+                    window,
+                    cx,
+                )
+            }))
+        })
+        .anchor(gpui::Anchor::TopLeft)
+        .offset(gpui::Point {
+            x: px(0.0),
+            y: px(2.0),
+        })
+        .with_handle(handle)
+        .into_any_element()
+}
+
+fn render_language_picker(
+    field: SettingField<settings::LanguageCode>,
+    file: SettingsUiFile,
+    _metadata: Option<&SettingsFieldMetadata>,
+    title: &'static str,
+    description: &'static str,
+    _window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let current_code: SharedString = SettingsStore::global(cx)
+        .get_value_from_file(file.to_settings(), field.pick)
+        .1
+        .map_or_else(
+            || noah_i18n::SYSTEM.into(),
+            |value| value.0.to_string().into(),
+        );
+    let current_label = language_picker_label(&current_code);
+
+    let handle = ui::PopoverMenuHandle::default();
+    PopoverMenu::new("language-picker")
+        .trigger(wire_picker_trigger_a11y(
+            render_picker_trigger_button("language_picker_trigger".into(), current_label)
+                .aria_label(title)
+                .when(!description.is_empty(), |this| {
+                    this.aria_description(description)
+                }),
+            handle.clone(),
+        ))
+        .menu(move |window, cx| {
+            let file = file.clone();
+            let current_code = current_code.clone();
+
+            Some(cx.new(move |cx| {
+                language_picker(
+                    current_code,
+                    move |code, window, cx| {
+                        update_settings_file(
+                            file.clone(),
+                            field.json_path,
+                            window,
+                            cx,
+                            move |settings, app| {
+                                (field.write)(settings, Some(code.to_string().into()), app);
+                            },
+                        )
+                        .log_err();
                     },
                     window,
                     cx,

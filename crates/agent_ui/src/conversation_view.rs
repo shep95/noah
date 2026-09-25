@@ -1860,7 +1860,7 @@ impl ConversationView {
                         .unwrap_or_else(|| self.agent.agent_id().0.to_string().into());
 
                     let new_placeholder =
-                        placeholder_text(agent_display_name.as_ref(), has_slash_completions);
+                        placeholder_text(agent_display_name.as_ref(), has_slash_completions, cx);
 
                     thread_view.update(cx, |thread_view, cx| {
                         let mut session_capabilities = thread_view.session_capabilities.write();
@@ -3338,9 +3338,9 @@ fn native_available_skills(
         .collect()
 }
 
-fn placeholder_text(agent_name: &str, has_commands: bool) -> String {
+fn placeholder_text(agent_name: &str, has_commands: bool, cx: &App) -> String {
     if agent_name == agent::ZED_AGENT_ID.as_ref() {
-        "message shepherd · @ to add context · / for commands".to_string()
+        noah_i18n::t(cx, "message shepherd · @ to add context · / for commands").to_string()
     } else if has_commands {
         format!(
             "Message {} — @ to include context, / for commands",

@@ -588,6 +588,8 @@ pub struct ThreadView {
     pub(super) thread_error: Option<ThreadError>,
     /// shepherd rewriting the draft into a clearer prompt, while it runs.
     sharpening: Option<Task<()>>,
+    #[cfg(feature = "audio")]
+    voice: VoiceState,
     pub thread_error_markdown: Option<Entity<Markdown>>,
     pub token_limit_callout_dismissed: bool,
     pub last_token_limit_telemetry: Option<acp_thread::TokenUsageRatio>,
@@ -806,7 +808,8 @@ impl ThreadView {
         let parent_session_id = thread.read(cx).parent_session_id().cloned();
 
         let has_slash_completions = session_capabilities.read().has_slash_completions();
-        let placeholder = placeholder_text(agent_display_name.as_ref(), has_slash_completions);
+        let placeholder =
+            placeholder_text(agent_display_name.as_ref(), has_slash_completions, cx);
 
         let mut should_auto_submit = false;
         let mut show_external_source_prompt_warning = false;
@@ -1009,6 +1012,8 @@ impl ThreadView {
             thread_retry_status: None,
             thread_error: None,
             sharpening: None,
+            #[cfg(feature = "audio")]
+            voice: VoiceState::default(),
             thread_error_markdown: None,
             token_limit_callout_dismissed: false,
             last_token_limit_telemetry: None,
@@ -1022,7 +1027,7 @@ impl ThreadView {
             plan_expanded: false,
             queue_expanded: true,
             editor_expanded: false,
-            should_be_following: false,
+            should_be_following: AgentSettings::get_global(cx).follow_live_edits,
             editing_message: None,
             message_queue: MessageQueue::default(),
             turn_fields: TurnFields::default(),
@@ -2906,6 +2911,8 @@ impl ThreadView {
         let thread = &self.thread;
         let telemetry = ActionLogTelemetry::from(thread.read(cx));
         let action_log = thread.read(cx).action_log().clone();
+        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        crate::mission_control::record_review_outcome(changed, true, cx);
         action_log.update(cx, |action_log, cx| {
             action_log.keep_all_edits(Some(telemetry), cx)
         });
@@ -2916,6 +2923,8 @@ impl ThreadView {
         let telemetry = ActionLogTelemetry::from(thread.read(cx));
         let action_log = thread.read(cx).action_log().clone();
         let has_changes = action_log.read(cx).changed_buffers(cx).next().is_some();
+        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        crate::mission_control::record_review_outcome(changed, false, cx);
 
         action_log
             .update(cx, |action_log, cx| {
@@ -4475,6 +4484,7 @@ impl ThreadView {
                                             .children(self.mode_selector.clone())
                                             .children(self.model_selector.clone()),
                                     })
+                                    .children(self.render_voice_buttons(cx))
                                     .child(self.render_sharpen_button(cx))
                                     .child(self.render_send_button(cx)),
                             ),
@@ -5426,6 +5436,192 @@ impl ThreadView {
             .anchor(gpui::Anchor::BottomLeft)
     }
 
+    #[cfg(not(feature = "audio"))]
+    fn render_voice_buttons(&self, _cx: &mut Context<Self>) -> Vec<AnyElement> {
+        Vec::new()
+    }
+
+    #[cfg(feature = "audio")]
+    fn render_voice_buttons(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let listening = self.voice.recording.is_some();
+        let transcribing = self.voice.transcribing.is_some();
+        let reading_aloud = self.voice.read_aloud.is_some();
+        let speaking = self.voice.speaking.is_some() || self.voice.playback.is_some();
+        vec![
+            IconButton::new("voice-input", if listening { IconName::MicMute } else { IconName::Mic })
+                .icon_size(IconSize::Small)
+                .icon_color(if listening { Color::Error } else { Color::Muted })
+                .toggle_state(listening)
+                .disabled(transcribing)
+                .tooltip(Tooltip::text(if listening {
+                    "listening: click to stop and write down what you said"
+                } else if transcribing {
+                    "writing down what you said…"
+                } else {
+                    "speak to shepherd (your provider turns speech into text)"
+                }))
+                .on_click(cx.listener(|this, _, window, cx| this.toggle_listening(window, cx)))
+                .into_any_element(),
+            IconButton::new(
+                "voice-output",
+                if reading_aloud { IconName::AudioOn } else { IconName::AudioOff },
+            )
+            .icon_size(IconSize::Small)
+            .icon_color(if speaking { Color::Accent } else { Color::Muted })
+            .toggle_state(reading_aloud)
+            .tooltip(Tooltip::text(if speaking {
+                "reading the reply aloud: click to stop"
+            } else if reading_aloud {
+                "shepherd's replies are read aloud: click to turn off"
+            } else {
+                "read shepherd's replies aloud"
+            }))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_read_aloud(cx)))
+            .into_any_element(),
+        ]
+    }
+
+    #[cfg(feature = "audio")]
+    fn toggle_listening(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(recording) = self.voice.recording.take() {
+            let Some(api) = crate::voice::speech_api(cx) else {
+                self.handle_thread_error(anyhow::anyhow!(crate::voice::NO_SPEECH_PROVIDER), cx);
+                return;
+            };
+            let Some(project) = self.project.upgrade() else {
+                return;
+            };
+            let http_client = project.read(cx).client().http_client();
+            let language = noah_i18n::current_language(cx)
+                .code
+                .split('-')
+                .next()
+                .map(str::to_string)
+                .filter(|code| code.len() == 2);
+            let audio = recording.finish();
+            let message_editor = self.message_editor.clone();
+            self.voice.transcribing = Some(cx.spawn_in(window, async move |this, cx| {
+                let text = async {
+                    let audio = audio.await?;
+                    crate::voice::transcribe(http_client, api, audio, language).await
+                }
+                .await;
+                this.update_in(cx, |this, window, cx| {
+                    this.voice.transcribing = None;
+                    match text {
+                        Ok(text) if !text.is_empty() => {
+                            message_editor.update(cx, |editor, cx| {
+                                let draft = editor.text(cx);
+                                let combined = if draft.trim().is_empty() {
+                                    text
+                                } else {
+                                    format!("{} {text}", draft.trim_end())
+                                };
+                                editor.set_text(&combined, window, cx);
+                            });
+                        }
+                        Ok(_) => {}
+                        Err(error) => this.handle_thread_error(error, cx),
+                    }
+                    cx.notify();
+                })
+                .ok();
+            }));
+            cx.notify();
+            return;
+        }
+        if crate::voice::speech_api(cx).is_none() {
+            self.handle_thread_error(anyhow::anyhow!(crate::voice::NO_SPEECH_PROVIDER), cx);
+            return;
+        }
+        match crate::voice::start_recording(cx) {
+            Ok(recording) => self.voice.recording = Some(recording),
+            Err(error) => self.handle_thread_error(error, cx),
+        }
+        cx.notify();
+    }
+
+    #[cfg(feature = "audio")]
+    fn toggle_read_aloud(&mut self, cx: &mut Context<Self>) {
+        if self.voice.speaking.is_some() || self.voice.playback.is_some() {
+            self.voice.speaking = None;
+            self.voice.playback = None;
+            cx.notify();
+            return;
+        }
+        if self.voice.read_aloud.take().is_some() {
+            cx.notify();
+            return;
+        }
+        if crate::voice::speech_api(cx).is_none() {
+            self.handle_thread_error(anyhow::anyhow!(crate::voice::NO_SPEECH_PROVIDER), cx);
+            return;
+        }
+        self.voice.read_aloud = Some(cx.subscribe(&self.thread, |this, thread, event, cx| {
+            if matches!(event, acp_thread::AcpThreadEvent::Stopped(_)) {
+                let reply = thread.read(cx).entries().iter().rev().find_map(|entry| match entry {
+                    AgentThreadEntry::AssistantMessage(message) if !message.is_subagent_output => {
+                        Some(message.to_markdown(cx))
+                    }
+                    _ => None,
+                });
+                if let Some(reply) = reply {
+                    this.speak(reply, cx);
+                }
+            }
+        }));
+        cx.notify();
+    }
+
+    #[cfg(feature = "audio")]
+    fn speak(&mut self, reply: String, cx: &mut Context<Self>) {
+        let text = crate::voice::speakable(reply.trim_start().trim_start_matches("## Assistant"));
+        if text.is_empty() {
+            return;
+        }
+        let Some(api) = crate::voice::speech_api(cx) else {
+            return;
+        };
+        let Some(project) = self.project.upgrade() else {
+            return;
+        };
+        let http_client = project.read(cx).client().http_client();
+        self.voice.playback = None;
+        self.voice.speaking = Some(cx.spawn(async move |this, cx| {
+            let audio = crate::voice::synthesize(http_client, api, text).await;
+            let finished = this.update(cx, |this, cx| {
+                this.voice.speaking = None;
+                match audio.and_then(|audio| crate::voice::play(audio, cx)) {
+                    Ok(playback) => this.voice.playback = Some(playback),
+                    Err(error) => this.handle_thread_error(error, cx),
+                }
+                cx.notify();
+            });
+            if finished.is_err() {
+                return;
+            }
+            // Clear the playing state once the reply has been read, so the
+            // button stops showing it as speaking.
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                let done = this
+                    .update(cx, |this, cx| {
+                        let done = this.voice.playback.as_ref().is_none_or(|playback| playback.is_done());
+                        if done {
+                            this.voice.playback = None;
+                            cx.notify();
+                        }
+                        done
+                    })
+                    .unwrap_or(true);
+                if done {
+                    break;
+                }
+            }
+        }));
+        cx.notify();
+    }
+
     fn render_sharpen_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let is_editor_empty = self.message_editor.read(cx).is_empty(cx);
         let sharpening = self.sharpening.is_some();
@@ -5433,11 +5629,14 @@ impl ThreadView {
             .icon_size(IconSize::Small)
             .icon_color(Color::Muted)
             .disabled(is_editor_empty || sharpening)
-            .tooltip(Tooltip::text(if sharpening {
-                "sharpening your prompt…"
-            } else {
-                "sharpen: shepherd rewrites your draft into a clearer prompt for you to review (undo restores yours)"
-            }))
+            .tooltip(Tooltip::text(noah_i18n::t(
+                cx,
+                if sharpening {
+                    "sharpening your prompt…"
+                } else {
+                    "sharpen: shepherd rewrites your draft into a clearer prompt for you to review (undo restores yours)"
+                },
+            )))
             .on_click(cx.listener(|this, _, window, cx| this.sharpen_prompt(window, cx)))
     }
 
@@ -13169,3 +13368,14 @@ pub(crate) fn reset_fast_mode_warnings(cx: &mut App) {
 }
 
 const SHARPEN_PROMPT_INSTRUCTIONS: &str = "You rewrite a person's draft message to shepherd, the coding agent in the noah editor, into a clearer prompt. Keep their intent, their voice and every concrete detail exactly: file names, @ mentions, links, code, numbers. Add what shepherd would otherwise have to ask about, only as far as the draft supports it: the goal, the part of the project involved, constraints, and what finished looks like. Never invent facts, requirements or file names; where something essential is missing, leave a short bracketed placeholder such as [which file?] for the person to fill in. Write it as the person speaking to shepherd. Reply with the rewritten prompt only, with no preamble and no quotation marks.";
+
+#[cfg(feature = "audio")]
+#[derive(Default)]
+struct VoiceState {
+    recording: Option<crate::voice::Recording>,
+    transcribing: Option<Task<()>>,
+    /// Subscribed to the thread while read-aloud is on.
+    read_aloud: Option<Subscription>,
+    speaking: Option<Task<()>>,
+    playback: Option<crate::voice::Playback>,
+}

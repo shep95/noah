@@ -11,6 +11,7 @@ mod thread;
 mod thread_store;
 mod tool_permissions;
 mod tools;
+pub mod trust;
 
 use context_server::ContextServerId;
 pub use db::*;

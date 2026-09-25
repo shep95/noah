@@ -218,6 +218,12 @@ pub trait LanguageModel: Send + Sync {
     /// Returns the model's context-window capacity.
     fn max_token_count(&self) -> u64;
 
+    /// US dollars per million input and output tokens, when the provider
+    /// publishes prices. Used for spend estimates and budgets.
+    fn price_per_million_tokens(&self) -> Option<(f64, f64)> {
+        None
+    }
+
     /// Returns the input ceiling before reserving output from any shared window.
     ///
     /// Models with a separate prompt limit override the context-window default.
@@ -399,6 +405,18 @@ impl Default for IconOrSvg {
     }
 }
 
+/// How to reach a provider's speech endpoints: `{api_url}/audio/transcriptions`
+/// and `{api_url}/audio/speech`, authorized with its API key.
+#[derive(Clone, Debug)]
+pub struct SpeechApi {
+    pub provider: SharedString,
+    pub api_url: String,
+    pub api_key: Arc<str>,
+    pub transcription_model: String,
+    pub speech_model: String,
+    pub voice: String,
+}
+
 pub trait LanguageModelProvider: 'static {
     fn id(&self) -> LanguageModelProviderId;
     fn name(&self) -> LanguageModelProviderName;
@@ -417,6 +435,12 @@ pub trait LanguageModelProvider: 'static {
 
     fn set_api_key(&self, _key: Option<String>, _cx: &mut App) -> Task<Result<()>> {
         Task::ready(Ok(()))
+    }
+
+    /// Speech-to-text and text-to-speech through this provider's API key,
+    /// when the provider offers them (OpenAI-compatible `/audio/...`).
+    fn speech_api(&self, _cx: &App) -> Option<SpeechApi> {
+        None
     }
 
     /// Copy shown when this provider rejects a request as unauthenticated

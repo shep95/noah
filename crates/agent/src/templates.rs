@@ -62,6 +62,20 @@ pub struct SystemPromptTemplate<'a> {
     pub is_linux: bool,
     /// Whether sandboxed terminal commands run through WSL on Windows.
     pub is_windows: bool,
+    /// The English name of the language the person chose for noah, when it
+    /// isn't English, so shepherd answers in it.
+    pub language: Option<String>,
+    /// The project's `.noah` knowledge files (intent, spec, memory,
+    /// preferences, why log) that exist, in the order shown to the model.
+    pub project_knowledge: Vec<KnowledgeFile>,
+    /// Whether the person turned on teaching mode.
+    pub teaching_mode: bool,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct KnowledgeFile {
+    pub label: String,
+    pub content: String,
 }
 
 impl Template for SystemPromptTemplate<'_> {
@@ -126,6 +140,9 @@ mod tests {
             sandboxing: false,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -133,6 +150,31 @@ mod tests {
         assert!(rendered.contains("Today's Date: 2026-01-01"));
         assert!(rendered.contains("you are running inside noah"));
         assert!(rendered.contains("test-model"));
+    }
+
+    #[test]
+    fn test_system_prompt_asks_for_the_chosen_language() {
+        let project = prompt_store::ProjectContext::default();
+        let render = |language: Option<String>| {
+            SystemPromptTemplate {
+                project: &project,
+                available_tools: Vec::new(),
+                model_name: None,
+                date: "2026-01-01".to_string(),
+                user_agents_md: None,
+                sandboxing: false,
+                is_linux: false,
+                is_windows: false,
+                language,
+                project_knowledge: Vec::new(),
+                teaching_mode: false,
+            }
+            .render(&Templates::new())
+            .unwrap()
+        };
+        assert!(!render(None).contains("the person's language"));
+        let japanese = render(Some("Japanese (日本語)".to_string()));
+        assert!(japanese.contains("the person chose Japanese (日本語) as noah's language"));
     }
 
     #[test]
@@ -159,6 +201,9 @@ mod tests {
             sandboxing: false,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -188,6 +233,9 @@ mod tests {
             sandboxing: false,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -221,6 +269,9 @@ mod tests {
             sandboxing: true,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -264,6 +315,9 @@ mod tests {
             sandboxing: true,
             is_linux: true,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -297,6 +351,9 @@ mod tests {
             sandboxing: true,
             is_linux: false,
             is_windows: true,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -327,6 +384,9 @@ mod tests {
             sandboxing: true,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -349,6 +409,9 @@ mod tests {
             sandboxing: true,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -369,6 +432,9 @@ mod tests {
             sandboxing: false,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -387,6 +453,9 @@ mod tests {
             sandboxing: false,
             is_linux: false,
             is_windows: false,
+            language: None,
+            project_knowledge: Vec::new(),
+            teaching_mode: false,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();

@@ -856,6 +856,16 @@ fn main() {
 
         let menus = app_menus(cx);
         cx.set_menus(menus);
+        let mut menu_language = noah_i18n::current_language(cx).code;
+        cx.observe_global::<SettingsStore>(move |cx| {
+            let language = noah_i18n::current_language(cx).code;
+            if language != menu_language {
+                menu_language = language;
+                let menus = app_menus(cx);
+                cx.set_menus(menus);
+            }
+        })
+        .detach();
 
         if let Some(mut crash_handler) = crash_handler {
             let crash_handler2 = block_on(poll_once(&mut crash_handler));

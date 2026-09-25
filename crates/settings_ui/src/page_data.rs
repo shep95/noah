@@ -140,6 +140,20 @@ fn general_page(cx: &App) -> SettingsPage {
         vec![
             SettingsPageItem::SectionHeader("General Settings"),
             SettingsPageItem::SettingItem(SettingItem {
+                title: "Language",
+                description: "The language noah's interface and shepherd use. Every language is listed; \"system\" follows your operating system. Text noah hasn't translated yet stays in English, and shepherd still writes code, commands and file names as they are.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("language"),
+                    pick: |settings_content| settings_content.language.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.language = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
                 title: "Accessible Mode",
                 description: "Optimize noah's interface for assistive technology such as screen readers. When enabled, otherwise-collapsed controls stay expanded and keyboard-reachable.",
                 field: Box::new(SettingField {
@@ -8896,6 +8910,25 @@ fn ai_page(cx: &App) -> SettingsPage {
         ]);
 
         items.extend([
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Follow Live Edits",
+                description: "Open each file shepherd edits while it works, so its changes can be watched as they land. New and removed text fades in and out in your theme's colors.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.follow_live_edits"),
+                    pick: |settings_content| {
+                        settings_content.agent.as_ref()?.follow_live_edits.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .agent
+                            .get_or_insert_default()
+                            .follow_live_edits = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Single File Review",
                 description: "When enabled, agent edits will also be displayed in single-file buffers for review.",

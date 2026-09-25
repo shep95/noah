@@ -1,7 +1,7 @@
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::Result;
 use futures::FutureExt as _;
-use gpui::{App, AsyncApp, Entity, SharedString, Task};
+use gpui::{App, AppContext as _, AsyncApp, Entity, SharedString, Task};
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -422,6 +422,21 @@ async fn run_terminal_tool(
 ) -> Result<String, String> {
     let selection = input.selection;
     let sandbox_input = input.sandbox.clone().unwrap_or_default();
+    let started = std::time::Instant::now();
+
+    // Irreversible commands always ask, even when the terminal is allowed,
+    // and say what they would destroy.
+    let irreversible = noah_trust::blast_radius::classify(&input.command);
+    let deletion_preview = match (&irreversible, cx.update(|cx| working_dir(&input.cd, &project, cx))) {
+        (Some(found), Ok(Some(directory))) if found.kind == "recursive delete" => {
+            let command = input.command.clone();
+            cx.background_spawn(async move {
+                noah_trust::blast_radius::deletion_preview(&command, &directory)
+            })
+            .await
+        }
+        _ => None,
+    };
 
     let (working_dir, authorize, sandboxing, is_local_project, wsl_zed_release) =
         cx.update(|cx| {
@@ -429,8 +444,34 @@ async fn run_terminal_tool(
                 working_dir(&input.cd, &project, cx).map_err(|err| err.to_string())?;
             let context =
                 crate::ToolPermissionContext::new(TerminalTool::NAME, vec![input.command.clone()]);
-            let authorize =
-                event_stream.authorize(SharedString::new(input.command.clone()), context, cx);
+            let authorize = match &irreversible {
+                Some(found) => {
+                    let decision = crate::decide_permission_from_settings(
+                        TerminalTool::NAME,
+                        std::slice::from_ref(&input.command),
+                        agent_settings::AgentSettings::get_global(cx),
+                    );
+                    if let crate::ToolPermissionDecision::Deny(reason) = decision {
+                        Task::ready(Err(anyhow::anyhow!(reason)))
+                    } else {
+                        let mut title = format!(
+                            "irreversible {}: {}",
+                            found.kind, found.effect
+                        );
+                        if let Some(preview) = &deletion_preview {
+                            title.push_str(&format!(". this deletes {preview}"));
+                        }
+                        if let Some(dry_run) = &found.dry_run {
+                            title.push_str(&format!(". to check first: `{dry_run}`"));
+                        }
+                        title.push_str(&format!("\n\n{}", input.command));
+                        event_stream.authorize_always_prompt(title, context, cx)
+                    }
+                }
+                None => {
+                    event_stream.authorize(SharedString::new(input.command.clone()), context, cx)
+                }
+            };
             let sandboxing =
                 input.sandbox.is_some() && sandboxing_enabled_for_project(project.read(cx), cx);
             let is_local_project = project.read(cx).is_local();
@@ -701,7 +742,14 @@ async fn run_terminal_tool(
         }
     }
 
-    let extra_env = Vec::new();
+    // Secrets the person keeps in noah reach commands as environment
+    // variables; shepherd only ever sees their names.
+    let extra_env: Vec<acp::EnvVariable> = cx.update(|cx| {
+        crate::trust::brokered_secrets(cx)
+            .into_iter()
+            .map(|(name, value)| acp::EnvVariable::new(name, value))
+            .collect()
+    });
 
     // Build the sandbox request, then decide whether we can actually sandbox.
     // The sandbox itself never silently runs a command unsandboxed: if it can't
@@ -1035,7 +1083,31 @@ async fn run_terminal_tool(
 
     let output = terminal.current_output(cx).map_err(|e| e.to_string())?;
 
+    let exit_code = output.exit_status.as_ref().and_then(|status| status.exit_code);
+    let check_output = output.output.clone();
+    let check_id = cx.update(|cx| {
+        let thread = event_stream.thread_entity_id()?;
+        let known_secrets = crate::trust::brokered_secrets(cx);
+        let redacted = noah_trust::secrets::redact(&check_output, &known_secrets);
+        Some(crate::trust::record_check(
+            thread,
+            noah_trust::evidence::Check {
+                id: String::new(),
+                command: noah_trust::secrets::redact(&input.command, &known_secrets).text,
+                exit_code: exit_code.map(|code| code as i32),
+                duration_ms: started.elapsed().as_millis() as u64,
+                output_tail: noah_trust::evidence::tail(&redacted.text, 40),
+                working_directory: working_dir.as_ref().map(|path| path.display().to_string()),
+                repeat: None,
+            },
+            cx,
+        ))
+    });
     let result = process_content(output, &input.command, timed_out, user_stopped, selection);
+    let result = match check_id {
+        Some(id) => format!("{result}\n\n[evidence {id}]"),
+        None => result,
+    };
     let notes = sandbox_note.into_iter().collect::<Vec<_>>();
     Ok(if notes.is_empty() {
         result

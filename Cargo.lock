@@ -286,6 +286,8 @@ dependencies = [
  "log",
  "lsp",
  "model_files",
+ "noah_i18n",
+ "noah_trust",
  "parking_lot",
  "paths",
  "pretty_assertions",
@@ -389,10 +391,16 @@ dependencies = [
  "image",
  "log",
  "menu",
+ "noah_i18n",
+ "paths",
  "serde",
  "serde_json",
+ "settings",
  "smol",
+ "theme",
+ "theme_settings",
  "ui",
+ "url",
  "util",
  "which",
  "workspace",
@@ -499,6 +507,7 @@ dependencies = [
  "buffer_diff",
  "chrono",
  "client",
+ "clock",
  "cloud_api_types",
  "collections",
  "command_palette_hooks",
@@ -536,6 +545,8 @@ dependencies = [
  "markdown",
  "menu",
  "multi_buffer",
+ "noah_i18n",
+ "noah_trust",
  "notifications",
  "ordered-float 5.5.0",
  "parking_lot",
@@ -552,6 +563,7 @@ dependencies = [
  "remote",
  "remote_connection",
  "reqwest_client",
+ "rodio",
  "rope",
  "sandbox",
  "schemars 1.0.4",
@@ -581,6 +593,7 @@ dependencies = [
  "watch",
  "workspace",
  "zed_actions",
+ "zed_credentials_provider",
 ]
 
 [[package]]
@@ -11473,6 +11486,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "noah_i18n"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "settings",
+ "sys-locale",
+]
+
+[[package]]
+name = "noah_trust"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "node_runtime"
 version = "0.1.0"
 dependencies = [
@@ -16798,6 +16833,7 @@ dependencies = [
  "language_models",
  "log",
  "menu",
+ "noah_i18n",
  "paths",
  "picker",
  "platform_title_bar",
@@ -18729,6 +18765,7 @@ dependencies = [
  "gpui",
  "icons",
  "livekit_client",
+ "noah_i18n",
  "platform_title_bar",
  "project",
  "recent_projects",
@@ -22392,6 +22429,7 @@ dependencies = [
  "log",
  "markdown",
  "menu",
+ "noah_i18n",
  "node_runtime",
  "parking_lot",
  "postage",
@@ -22988,6 +23026,7 @@ dependencies = [
  "migrator",
  "mimalloc",
  "miniprofiler_ui",
+ "noah_i18n",
  "node_runtime",
  "notifications",
  "onboarding",

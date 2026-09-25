@@ -1,6 +1,7 @@
 mod apply_code_action_tool;
 mod ask_user_tool;
 mod browser_tool;
+mod codebase_tool;
 mod context_server_registry;
 mod copy_path_tool;
 mod create_directory_tool;
@@ -9,6 +10,7 @@ mod delete_path_tool;
 mod diagnostics_tool;
 mod edit_file_tool;
 mod edit_session;
+mod evidence_tool;
 #[cfg(all(test, feature = "unit-eval"))]
 mod evals;
 mod fetch_tool;
@@ -21,12 +23,14 @@ mod list_agents_and_models_tool;
 mod list_directory_tool;
 mod model_file_tool;
 mod move_path_tool;
+mod project_memory_tool;
 mod read_file_tool;
 mod rename_tool;
 mod skill_tool;
 mod spawn_agent_tool;
 mod symbol_locator;
 mod terminal_tool;
+mod verify_tool;
 mod tool_permissions;
 mod web_search_tool;
 mod write_file_tool;
@@ -75,6 +79,7 @@ where
 pub use apply_code_action_tool::*;
 pub use ask_user_tool::*;
 pub use browser_tool::*;
+pub use codebase_tool::*;
 pub use context_server_registry::*;
 pub use copy_path_tool::*;
 pub use create_directory_tool::*;
@@ -82,6 +87,7 @@ pub use create_thread_tool::*;
 pub use delete_path_tool::*;
 pub use diagnostics_tool::*;
 pub use edit_file_tool::*;
+pub use evidence_tool::*;
 pub use fetch_tool::*;
 pub use find_path_tool::*;
 pub use find_references_tool::*;
@@ -92,6 +98,7 @@ pub use list_agents_and_models_tool::*;
 pub use list_directory_tool::*;
 pub use model_file_tool::*;
 pub use move_path_tool::*;
+pub use project_memory_tool::*;
 pub use read_file_tool::*;
 pub use rename_tool::*;
 pub use skill_tool::*;
@@ -99,6 +106,7 @@ pub use spawn_agent_tool::*;
 pub use symbol_locator::*;
 
 pub use terminal_tool::*;
+pub use verify_tool::*;
 pub use tool_permissions::*;
 pub use web_search_tool::*;
 pub use write_file_tool::*;
@@ -204,12 +212,14 @@ tools! {
     ApplyCodeActionTool,
     AskUserTool,
     BrowserTool,
+    CodebaseTool,
     CopyPathTool,
     CreateDirectoryTool,
     CreateThreadTool,
     DeletePathTool,
     DiagnosticsTool,
     EditFileTool,
+    EvidenceTool,
     FetchTool,
     FindPathTool,
     FindReferencesTool,
@@ -220,11 +230,13 @@ tools! {
     ListDirectoryTool,
     ModelFileTool,
     MovePathTool,
+    ProjectMemoryTool,
     ReadFileTool,
     RenameTool,
     SkillTool,
     SpawnAgentTool,
     TerminalTool,
+    VerifyTool,
     WebSearchTool,
     WriteFileTool,
 }

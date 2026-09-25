@@ -1,5 +1,6 @@
 mod dropdown;
 mod font_picker;
+mod language_picker;
 mod icon_theme_picker;
 mod input_field;
 mod number_field;
@@ -10,6 +11,7 @@ mod theme_picker;
 pub use dropdown::*;
 pub use font_picker::font_picker;
 pub use icon_theme_picker::icon_theme_picker;
+pub use language_picker::{language_picker, language_picker_label};
 pub use input_field::*;
 pub use number_field::*;
 pub use ollama_model_picker::render_ollama_model_picker;

@@ -2,7 +2,7 @@ use crate::{
     ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, ContextServerRegistry,
     CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
     DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, FindReferencesTool, GetCodeActionsTool,
-    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool,
+    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool, EvidenceTool, VerifyTool, ProjectMemoryTool, CodebaseTool,
     MovePathTool, ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
     SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
     WriteFileTool, decide_permission_from_settings,
@@ -2190,6 +2190,10 @@ impl Thread {
         self.add_tool(WebSearchTool);
         self.add_tool(BrowserTool);
         self.add_tool(ModelFileTool);
+        self.add_tool(EvidenceTool::new(self.project.clone()));
+        self.add_tool(VerifyTool::new(self.project.clone()));
+        self.add_tool(ProjectMemoryTool::new(self.project.clone()));
+        self.add_tool(CodebaseTool::new(self.project.clone()));
 
         self.add_tool(AskUserTool);
 
@@ -2361,6 +2365,22 @@ impl Thread {
     }
 
     fn update_token_usage(&mut self, update: language_model::TokenUsage, cx: &mut Context<Self>) {
+        let previous = self.current_request_token_usage;
+        if let Some(model) = self.model().cloned() {
+            let new_input = (update.input_tokens + update.cache_creation_input_tokens)
+                .saturating_sub(previous.input_tokens + previous.cache_creation_input_tokens);
+            let new_cached = update
+                .cache_read_input_tokens
+                .saturating_sub(previous.cache_read_input_tokens);
+            let new_output = update.output_tokens.saturating_sub(previous.output_tokens);
+            crate::trust::record_spend(
+                model.as_ref(),
+                new_input + new_cached,
+                new_output,
+                self.id.to_string(),
+                cx,
+            );
+        }
         self.accumulate_token_usage(update);
 
         let Some(last_user_message) = self.last_user_message() else {
@@ -2567,6 +2587,7 @@ impl Thread {
             .ok_or_else(|| anyhow!(NoModelConfiguredError))?;
 
         log::info!("Thread::send called with model: {}", model.name().0);
+        crate::trust::check_model_allowed(model.as_ref(), cx)?;
         self.advance_prompt_id();
 
         log::debug!("Total messages in thread: {}", self.messages.len());
@@ -3674,8 +3695,24 @@ impl Thread {
             acp::ToolCallUpdateFields::new().status(acp::ToolCallStatus::InProgress),
         );
         let supports_images = self.model().is_some_and(|model| model.supports_images());
+        let provenance_context = crate::trust::ProvenanceContext {
+            roots: self
+                .project
+                .read(cx)
+                .visible_worktrees(cx)
+                .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+                .collect(),
+            model: self.model().map(|model| {
+                format!("{}/{}", model.provider_id().0, model.id().0)
+            }),
+            thread: self.id().to_string(),
+            prompt_sha256: self.last_user_message().map(|message| {
+                noah_trust::provenance::sha256_hex(message.to_markdown().as_bytes())
+            }),
+            http_client: self.project.read(cx).client().http_client(),
+        };
         let tool_result = tool.run(tool_input, tool_event_stream, cx);
-        cx.foreground_executor().spawn(async move {
+        cx.spawn(async move |_this, cx| {
             let (is_error, output) = match tool_result.await {
                 Ok(mut output) => {
                     let contains_image = output
@@ -3718,6 +3755,28 @@ impl Thread {
                 }
                 Err(output) => (true, output),
             };
+            let mut output = output;
+            let screened = cx.update(|cx| {
+                crate::trust::screen_tool_output(
+                    &tool_name,
+                    std::mem::take(&mut output.llm_output),
+                    cx,
+                )
+            });
+            output.llm_output = screened;
+            if !is_error
+                && let Some(note) = crate::trust::after_file_change(
+                    &tool_name,
+                    &output.raw_output,
+                    provenance_context,
+                    cx,
+                )
+                .await
+            {
+                output
+                    .llm_output
+                    .push(LanguageModelToolResultContent::Text(Arc::from(note)));
+            }
 
             (
                 owning_message_ix,
@@ -4071,6 +4130,31 @@ impl Thread {
         cx.notify()
     }
 
+    /// The project's `.noah` knowledge files, read fresh for each request so
+    /// edits the person makes take effect immediately.
+    fn project_knowledge(&self, cx: &App) -> Vec<crate::KnowledgeFile> {
+        let Some(root) = self
+            .project
+            .read(cx)
+            .visible_worktrees(cx)
+            .next()
+            .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+        else {
+            return Vec::new();
+        };
+        noah_trust::project_files::CONTEXT_FILES
+            .iter()
+            .filter_map(|(name, label)| {
+                let text = std::fs::read_to_string(noah_trust::project_files::path(&root, name)).ok()?;
+                let text = text.trim();
+                (!text.is_empty()).then(|| crate::KnowledgeFile {
+                    label: label.to_string(),
+                    content: noah_trust::project_files::clip(text),
+                })
+            })
+            .collect()
+    }
+
     pub(crate) fn build_completion_request(
         &self,
         completion_intent: CompletionIntent,
@@ -4189,11 +4273,15 @@ impl Thread {
         // of what the active profile enables.
         let is_restricted =
             TrustedWorktrees::has_restricted_worktrees(&self.project.read(cx).worktree_store(), cx);
+        let offline = AgentSettings::get_global(cx).offline;
 
         let mut tools = self
             .tools
             .iter()
             .filter(|(_, tool)| !is_restricted || tool.allow_in_restricted_mode())
+            .filter(|(tool_name, _)| {
+                !offline || !crate::trust::NETWORK_TOOLS.contains(&tool_name.as_ref())
+            })
             .filter_map(|(tool_name, tool)| {
                 let terminal_variant = matches!(
                     tool_name.as_ref(),
@@ -4384,6 +4472,18 @@ impl Thread {
             ),
             is_linux: cfg!(target_os = "linux"),
             is_windows: cfg!(target_os = "windows"),
+            language: {
+                let language = noah_i18n::current_language(cx);
+                (language.code != "en").then(|| {
+                    if language.native_name == language.english_name {
+                        language.english_name.to_string()
+                    } else {
+                        format!("{} ({})", language.english_name, language.native_name)
+                    }
+                })
+            },
+            project_knowledge: self.project_knowledge(cx),
+            teaching_mode: AgentSettings::get_global(cx).teaching_mode,
         }
         .render(&self.templates)
         .context("failed to build system prompt")
@@ -5584,6 +5684,23 @@ pub struct ToolCallEventStream {
 }
 
 impl ToolCallEventStream {
+    /// The thread this tool call belongs to, for per-thread records such as
+    /// the evidence log.
+    pub fn thread_entity_id(&self) -> Option<gpui::EntityId> {
+        self.thread.as_ref().map(|thread| thread.entity_id())
+    }
+
+    /// The model the thread is using, such as `venice/qwen3-coder-480b`.
+    pub fn thread_model_name(&self, cx: &App) -> Option<String> {
+        let model = self.thread_model(cx)?;
+        Some(format!("{}/{}", model.provider_id().0, model.id().0))
+    }
+
+    pub fn thread_model(&self, cx: &App) -> Option<Arc<dyn LanguageModel>> {
+        let thread = self.thread.as_ref()?.upgrade()?;
+        thread.read(cx).model().cloned()
+    }
+
     #[cfg(any(test, feature = "test-support"))]
     pub fn test() -> (Self, ToolCallEventStreamReceiver) {
         let (stream, receiver, _cancellation_tx) = Self::test_with_cancellation();

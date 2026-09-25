@@ -448,7 +448,7 @@ impl Render for WelcomePage {
         };
 
         let welcome_label = if self.fallback_to_recent_projects {
-            "welcome back"
+            noah_i18n::t(cx, "welcome back")
         } else {
             "noah"
         };
@@ -480,7 +480,7 @@ impl Render for WelcomePage {
                             .child(Vector::square(VectorName::ZedLogo, rems_from_px(45_f32)))
                             .child(
                                 v_flex().child(Headline::new(welcome_label)).child(
-                                    Label::new("a shepherd for your code")
+                                    Label::new(noah_i18n::t(cx, "a shepherd for your code"))
                                         .size(LabelSize::Small)
                                         .color(Color::Muted),
                                 ),

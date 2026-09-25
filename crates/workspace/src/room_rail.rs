@@ -21,6 +21,8 @@ actions!(
         EnterTerminalRoom,
         /// Opens the browser shepherd shares with you and closes the other rooms.
         EnterBrowserRoom,
+        /// Opens mission control, where shepherd's work is supervised.
+        EnterMissionRoom,
     ]
 );
 
@@ -39,16 +41,18 @@ pub enum Room {
     Changes,
     Terminal,
     Browser,
+    Mission,
 }
 
 impl Room {
-    const ALL: [Room; 6] = [
+    const ALL: [Room; 7] = [
         Room::Write,
         Room::Shepherd,
         Room::Files,
         Room::Changes,
         Room::Terminal,
         Room::Browser,
+        Room::Mission,
     ];
 
     // Must match each panel's `Panel::persistent_name`.
@@ -60,6 +64,7 @@ impl Room {
             Room::Changes => Some("GitPanel"),
             Room::Terminal => Some("TerminalPanel"),
             Room::Browser => Some("BrowserPanel"),
+            Room::Mission => Some("MissionControlPanel"),
         }
     }
 
@@ -71,6 +76,7 @@ impl Room {
             Room::Changes => "changes",
             Room::Terminal => "terminal",
             Room::Browser => "browser",
+            Room::Mission => "mission control",
         }
     }
 
@@ -82,6 +88,7 @@ impl Room {
             Room::Changes => IconName::GitBranch,
             Room::Terminal => IconName::Terminal,
             Room::Browser => IconName::ToolWeb,
+            Room::Mission => IconName::ListTodo,
         }
     }
 
@@ -93,6 +100,7 @@ impl Room {
             Room::Changes => Box::new(EnterChangesRoom),
             Room::Terminal => Box::new(EnterTerminalRoom),
             Room::Browser => Box::new(EnterBrowserRoom),
+            Room::Mission => Box::new(EnterMissionRoom),
         }
     }
 }
@@ -115,6 +123,9 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     }))
     .on_action(cx.listener(|workspace, _: &EnterBrowserRoom, window, cx| {
         workspace.enter_room(Room::Browser, window, cx)
+    }))
+    .on_action(cx.listener(|workspace, _: &EnterMissionRoom, window, cx| {
+        workspace.enter_room(Room::Mission, window, cx)
     }))
 }
 
@@ -206,12 +217,10 @@ impl Workspace {
                 // Only a decision waiting on the person earns the accent; work in
                 // progress and counts stay in the neutral mist.
                 let awaiting_approval = badge.as_deref() == Some(SHEPHERD_AWAITING_APPROVAL);
+                let label = noah_i18n::t(cx, room.label());
                 let tooltip_label: SharedString = match &badge {
-                    Some(badge) if room == Room::Shepherd => {
-                        format!("{} · {badge}", room.label()).into()
-                    }
-                    Some(count) => format!("{} · {count}", room.label()).into(),
-                    None => room.label().into(),
+                    Some(badge) => format!("{label} · {}", noah_i18n::t(cx, badge)).into(),
+                    None => label.into(),
                 };
                 h_flex()
                     .relative()
@@ -264,7 +273,11 @@ impl Workspace {
                         .icon_size(IconSize::Small)
                         .icon_color(Color::Muted)
                         .tooltip(|_window, cx| {
-                            Tooltip::for_action("settings", &zed_actions::OpenSettings, cx)
+                            Tooltip::for_action(
+                                noah_i18n::t(cx, "settings"),
+                                &zed_actions::OpenSettings,
+                                cx,
+                            )
                         })
                         .on_click(|_, window, cx| {
                             window.dispatch_action(zed_actions::OpenSettings.boxed_clone(), cx);

@@ -9,12 +9,14 @@ mod browser_panel;
 
 use anyhow::{Context as _, Result};
 use gpui::{App, AppContext as _, Context, Entity, EventEmitter, Global, SharedString, Task};
+use util::ResultExt as _;
 use std::path::PathBuf;
 
 pub use browser_panel::{BrowserPanel, ToggleFocus};
 
 /// The agent-browser session shared by shepherd and the browser room.
 pub const SESSION: &str = "noah";
+
 
 const BINARY_NAME: &str = if cfg!(windows) {
     "agent-browser.exe"
@@ -174,10 +176,252 @@ fn find_browser() -> Option<PathBuf> {
     .find_map(|name| which::which(name).ok())
 }
 
+/// How pages noah draws itself in the browser room look: the start page and
+/// DuckDuckGo results take the theme's colors (which follow the wallpaper)
+/// and the person's UI font, so the room looks like the rest of noah.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PageStyle {
+    pub dark: bool,
+    pub background: String,
+    pub surface: String,
+    pub border: String,
+    pub text: String,
+    pub muted: String,
+    pub link: String,
+    pub font: String,
+    pub wallpaper: Option<PathBuf>,
+    pub wallpaper_opacity: f32,
+    pub placeholder: String,
+    /// BCP 47 code of noah's language, for the page's `lang`.
+    pub language: String,
+    pub right_to_left: bool,
+}
+
+impl PageStyle {
+    pub fn from_app(cx: &App) -> Self {
+        use settings::Settings as _;
+        use theme::ActiveTheme as _;
+
+        let theme = cx.theme();
+        let colors = theme.colors();
+        let dark = !theme.appearance().is_light();
+        let base = if dark {
+            gpui::black()
+        } else {
+            gpui::white()
+        };
+        // Surfaces are translucent over the wallpaper, so flatten them onto
+        // the window background the way noah paints them.
+        let window = base.blend(colors.background);
+        let background = window.blend(colors.editor_background);
+        let surface = background.blend(colors.element_background);
+        let workspace_settings = workspace::WorkspaceSettings::get_global(cx);
+        let wallpaper = match workspace_settings.wallpaper.as_deref() {
+            Some(path) => Some(PathBuf::from(path)),
+            None => bundled_wallpaper(cx),
+        };
+        Self {
+            dark,
+            background: hex(background),
+            surface: hex(surface),
+            border: hex(background.blend(colors.border)),
+            text: hex(background.blend(colors.text)),
+            muted: hex(background.blend(colors.text_muted)),
+            link: hex(background.blend(colors.text_accent)),
+            font: web_font_family(&theme_settings::ThemeSettings::get_global(cx).ui_font.family),
+            wallpaper,
+            wallpaper_opacity: workspace_settings.wallpaper_opacity.clamp(0.0, 1.0),
+            placeholder: noah_i18n::t(cx, "search or enter an address").to_string(),
+            language: noah_i18n::current_language(cx).code.to_string(),
+            right_to_left: noah_i18n::is_right_to_left(noah_i18n::current_language(cx)),
+        }
+    }
+
+    pub fn color_scheme(&self) -> &'static str {
+        if self.dark { "dark" } else { "light" }
+    }
+
+    /// DuckDuckGo's appearance settings, passed in the URL so nothing is
+    /// stored with DuckDuckGo: theme, background, text, link, visited link,
+    /// URL and header colors, font, and no ads.
+    fn search_parameters(&self) -> Vec<(&'static str, String)> {
+        let bare = |color: &str| color.trim_start_matches('#').to_string();
+        vec![
+            ("kae", if self.dark { "d" } else { "-1" }.to_string()),
+            ("k7", bare(&self.background)),
+            ("kj", bare(&self.background)),
+            ("k8", bare(&self.text)),
+            ("k9", bare(&self.link)),
+            ("kaa", bare(&self.link)),
+            ("kx", bare(&self.muted)),
+            ("kt", self.font.clone()),
+            ("k1", "-1".to_string()),
+        ]
+    }
+
+    pub fn search_url(&self, query: &str) -> String {
+        let mut url = format!("https://duckduckgo.com/?q={}", encode_query(query));
+        for (key, value) in self.search_parameters() {
+            url.push_str(&format!("&{key}={}", encode_query(&value)));
+        }
+        url
+    }
+
+    /// The page the browser room opens to: a search box in noah's colors, over
+    /// the wallpaper the way the editor shows it.
+    pub fn start_page_html(&self) -> String {
+        let hidden_inputs: String = self
+            .search_parameters()
+            .into_iter()
+            .map(|(key, value)| {
+                format!(
+                    "<input type=\"hidden\" name=\"{key}\" value=\"{}\">",
+                    escape_html(&value)
+                )
+            })
+            .collect();
+        let wallpaper = self
+            .wallpaper
+            .as_ref()
+            .and_then(|path| url::Url::from_file_path(path).ok())
+            .map(|url| {
+                format!(
+                    "body::before{{content:\"\";position:fixed;inset:0;background:url(\"{url}\") center/cover no-repeat;opacity:{opacity};z-index:-1}}",
+                    opacity = self.wallpaper_opacity
+                )
+            })
+            .unwrap_or_default();
+        format!(
+            r#"<!doctype html>
+<html lang="{language}" dir="{direction}"><head><meta charset="utf-8"><title>noah</title>
+<meta name="color-scheme" content="{scheme}">
+<style>
+html,body{{margin:0;height:100%}}
+body{{background:{background};color:{text};font-family:"{font}",system-ui,sans-serif;display:flex;align-items:center;justify-content:center;animation:enter .5s ease-out}}
+{wallpaper}
+form{{width:min(560px,86vw);display:flex;flex-direction:column;gap:14px;align-items:center}}
+.mark{{color:{muted};font-weight:300;letter-spacing:.2em;font-size:13px;text-transform:lowercase}}
+input[name=q]{{box-sizing:border-box;width:100%;padding:12px 16px;border-radius:8px;border:1px solid {border};background:{surface};color:{text};font:inherit;font-size:15px;outline:none;transition:border-color .2s ease}}
+input[name=q]:focus{{border-color:{link}}}
+input[name=q]::placeholder{{color:{muted}}}
+@keyframes enter{{from{{opacity:0}}to{{opacity:1}}}}
+@media (prefers-reduced-motion:reduce){{body{{animation:none}}}}
+</style></head>
+<body><form action="https://duckduckgo.com/" method="get" autocomplete="off">
+<div class="mark">noah</div>
+<input name="q" placeholder="{placeholder}" autofocus>
+{hidden_inputs}
+</form></body></html>
+"#,
+            scheme = self.color_scheme(),
+            background = self.background,
+            text = self.text,
+            font = escape_html(&self.font),
+            muted = self.muted,
+            border = self.border,
+            surface = self.surface,
+            link = self.link,
+            placeholder = escape_html(&self.placeholder),
+            language = escape_html(&self.language),
+            direction = if self.right_to_left { "rtl" } else { "ltr" },
+        )
+    }
+}
+
+// The color scheme is applied with `set media` on the running browser rather
+// than as a launch option: agent-browser relaunches the browser when launch
+// options change, which would drop the person's tabs and the live view.
+pub(crate) async fn apply_color_scheme(style: &PageStyle) -> Result<String> {
+    run_command(vec![
+        "set".into(),
+        "media".into(),
+        style.color_scheme().into(),
+    ])
+    .await
+}
+
+/// Where the start page is written; it is regenerated whenever the look
+/// changes.
+pub fn start_page_path() -> PathBuf {
+    paths::data_dir().join("browser").join("start.html")
+}
+
+pub fn start_page_url() -> Option<String> {
+    url::Url::from_file_path(start_page_path())
+        .ok()
+        .map(|url| url.to_string())
+}
+
+pub fn write_start_page(style: &PageStyle) -> Result<String> {
+    let path = start_page_path();
+    if let Some(directory) = path.parent() {
+        std::fs::create_dir_all(directory)?;
+    }
+    std::fs::write(&path, style.start_page_html())?;
+    start_page_url().context("the start page has no file URL")
+}
+
+/// The bundled wallpaper only exists inside noah's assets, so it's copied out
+/// once for pages in the browser to show.
+fn bundled_wallpaper(cx: &App) -> Option<PathBuf> {
+    let path = paths::data_dir().join("browser").join("wallpaper.jpg");
+    if path.is_file() {
+        return Some(path);
+    }
+    let bytes = cx
+        .asset_source()
+        .load("images/noah/wallpaper.jpg")
+        .log_err()
+        .flatten()?;
+    std::fs::create_dir_all(path.parent()?).log_err()?;
+    std::fs::write(&path, bytes).log_err()?;
+    Some(path)
+}
+
+/// noah's bundled fonts go by internal names (`.ZedSans`) that web pages
+/// can't resolve; pages get the real family names instead.
+fn web_font_family(family: &str) -> String {
+    match family {
+        ".ZedSans" | "Zed Plex Sans" => "IBM Plex Sans".to_string(),
+        ".ZedMono" | "Zed Plex Mono" => "Lilex".to_string(),
+        other => other.trim_start_matches('.').to_string(),
+    }
+}
+
+fn hex(color: gpui::Hsla) -> String {
+    let rgba = gpui::Rgba::from(color);
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(rgba.r),
+        channel(rgba.g),
+        channel(rgba.b)
+    )
+}
+
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn encode_query(text: &str) -> String {
+    text.bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            b' ' => "+".to_string(),
+            other => format!("%{other:02X}"),
+        })
+        .collect()
+}
+
 /// Turns what someone typed in the address bar into a URL: full URLs pass
 /// through, things that look like hosts get a scheme, anything else becomes a
-/// DuckDuckGo search.
-pub fn address_to_url(address: &str) -> SharedString {
+/// DuckDuckGo search styled like noah.
+pub fn address_to_url(address: &str, style: &PageStyle) -> SharedString {
     let address = address.trim();
     if address.contains("://") || address.starts_with("about:") {
         return address.to_string().into();
@@ -190,35 +434,55 @@ pub fn address_to_url(address: &str) -> SharedString {
     if !address.contains(' ') && host.contains('.') {
         return format!("https://{address}").into();
     }
-    let query: String = address
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (byte as char).to_string()
-            }
-            b' ' => "+".to_string(),
-            other => format!("%{other:02X}"),
-        })
-        .collect();
-    format!("https://duckduckgo.com/?q={query}").into()
+    style.search_url(address).into()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn style() -> PageStyle {
+        PageStyle {
+            dark: true,
+            background: "#101412".into(),
+            surface: "#1a1f1c".into(),
+            border: "#2a302c".into(),
+            text: "#e6ece8".into(),
+            muted: "#8a948e".into(),
+            link: "#9fd4b4".into(),
+            font: "IBM Plex Sans".into(),
+            wallpaper: None,
+            wallpaper_opacity: 0.5,
+            placeholder: "search or enter an address".into(),
+            language: "en".into(),
+            right_to_left: false,
+        }
+    }
+
     #[test]
     fn addresses_become_urls() {
-        assert_eq!(address_to_url("https://a.dev/x"), "https://a.dev/x");
+        let style = style();
+        assert_eq!(address_to_url("https://a.dev/x", &style), "https://a.dev/x");
         assert_eq!(
-            address_to_url("example.com/docs"),
+            address_to_url("example.com/docs", &style),
             "https://example.com/docs"
         );
-        assert_eq!(address_to_url("localhost:3000"), "http://localhost:3000");
         assert_eq!(
-            address_to_url("rust async book"),
-            "https://duckduckgo.com/?q=rust+async+book"
+            address_to_url("localhost:3000", &style),
+            "http://localhost:3000"
         );
+        let search = address_to_url("rust async book", &style);
+        assert!(search.starts_with("https://duckduckgo.com/?q=rust+async+book&kae=d&k7=101412"));
+        assert!(search.contains("&kt=IBM+Plex+Sans"));
+    }
+
+    #[test]
+    fn start_page_uses_the_theme() {
+        let html = style().start_page_html();
+        assert!(html.contains("background:#101412"));
+        assert!(html.contains("font-family:\"IBM Plex Sans\""));
+        assert!(html.contains("name=\"k9\" value=\"9fd4b4\""));
+        assert!(!html.contains("body::before"), "no wallpaper without a file");
     }
 
     #[test]

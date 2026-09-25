@@ -245,6 +245,8 @@ impl AgentTool for FetchTool {
         let http_client = self.http_client.clone();
         cx.spawn(async move |cx| {
             let input: FetchToolInput = input.recv().await.map_err(|e| e.to_string())?;
+            let url = normalize_url(&input.url);
+            cx.update(|cx| crate::trust::check_host_allowed(&url, cx))?;
 
             // First, the standard tool-permission gate (honors the fetch tool's
             // allow/deny/confirm rules).

@@ -1260,6 +1260,9 @@
     },
     // When enabled, agent edits will be displayed in single-file editors for review
     "single_file_review": false,
+    // Follow shepherd while it works: each file it edits opens in the editor,
+    // and new and removed text fades in and out as it lands.
+    "follow_live_edits": true,
     // Settings for automatic agent context compaction, which summarizes earlier
     // messages to free up room in the model's context window once it grows too
     // large.
@@ -1286,6 +1289,7 @@
         "enable_all_context_servers": true,
         "tools": {
           "browser": true,
+          "codebase": true,
           "copy_path": true,
           "create_directory": true,
           "create_thread": true,
@@ -1294,6 +1298,7 @@
           "apply_code_action": true,
           "ask_user": false,
           "edit_file": true,
+          "evidence": true,
           "write_file": true,
           "fetch": true,
           "find_path": true,
@@ -1304,12 +1309,14 @@
           "list_directory": true,
           "model_file": true,
           "move_path": true,
+          "project_memory": true,
           "rename_symbol": true,
           "read_file": true,
           "grep": true,
           "skill": true,
           "spawn_agent": true,
           "terminal": true,
+          "verify": true,
           "search_web": true,
         },
       },
@@ -1318,6 +1325,8 @@
         // We don't know which of the context server tools are safe for the "Ask" profile, so we don't enable them by default.
         // "enable_all_context_servers": true,
         "tools": {
+          "codebase": true,
+          "verify": true,
           "create_thread": true,
           "diagnostics": true,
           "ask_user": false,
@@ -1695,6 +1704,10 @@
   // new release in the background, verifies its checksum and installs it; the
   // title bar then offers a restart. Nothing about you is sent with the check.
   "auto_update": true,
+  // The language noah's interface and shepherd use: a language code such as
+  // "es", "pt-BR", "ja" or "ar", or "system" to follow your operating system.
+  // Every language is listed under Settings > General > Language.
+  "language": "system",
   // How to render LSP `textDocument/documentColor` colors in the editor.
   //
   // Possible values:

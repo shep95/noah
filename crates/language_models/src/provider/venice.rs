@@ -43,6 +43,8 @@ pub struct VeniceModel {
     pub supports_tools: bool,
     pub supports_images: bool,
     pub traits: Vec<String>,
+    /// US dollars per million input and output tokens.
+    pub pricing: Option<(f64, f64)>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +76,22 @@ struct ModelSpec {
     traits: Vec<String>,
     #[serde(default)]
     offline: bool,
+    #[serde(default)]
+    pricing: Option<ModelPricing>,
+}
+
+#[derive(Default, Deserialize)]
+struct ModelPricing {
+    #[serde(default)]
+    input: Option<Price>,
+    #[serde(default)]
+    output: Option<Price>,
+}
+
+#[derive(Default, Deserialize)]
+struct Price {
+    #[serde(default)]
+    usd: Option<f64>,
 }
 
 #[derive(Default, Deserialize)]
@@ -121,6 +139,9 @@ fn parse_models(body: &str) -> Result<Vec<VeniceModel>> {
                 supports_tools: spec.capabilities.supports_function_calling,
                 supports_images: spec.capabilities.supports_vision,
                 traits: spec.traits,
+                pricing: spec.pricing.and_then(|pricing| {
+                    Some((pricing.input?.usd?, pricing.output?.usd?))
+                }),
             }
         })
         .collect())
@@ -325,6 +346,19 @@ impl LanguageModelProvider for VeniceLanguageModelProvider {
         PROVIDER_ID
     }
 
+    fn speech_api(&self, cx: &App) -> Option<language_model::SpeechApi> {
+        let api_url = Self::api_url(cx);
+        let api_key = self.state.read(cx).api_key_state.key(&api_url)?;
+        Some(language_model::SpeechApi {
+            provider: "Venice".into(),
+            api_url: api_url.to_string(),
+            api_key,
+            transcription_model: "nvidia/parakeet-tdt-0.6b-v3".into(),
+            speech_model: "tts-kokoro".into(),
+            voice: "af_sky".into(),
+        })
+    }
+
     fn name(&self) -> LanguageModelProviderName {
         PROVIDER_NAME
     }
@@ -489,6 +523,10 @@ impl LanguageModel for VeniceLanguageModel {
 
     fn telemetry_id(&self) -> String {
         format!("venice/{}", self.model.id)
+    }
+
+    fn price_per_million_tokens(&self) -> Option<(f64, f64)> {
+        self.model.pricing
     }
 
     fn max_token_count(&self) -> u64 {

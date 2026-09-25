@@ -328,6 +328,34 @@ pub struct AgentSettingsContent {
     ///
     /// Default: false
     pub single_file_review: Option<bool>,
+    /// Whether the editor follows shepherd while it works, opening each file
+    /// it edits so the changes can be watched as they land.
+    ///
+    /// Default: true
+    pub follow_live_edits: Option<bool>,
+    /// The model that independently reviews shepherd's changes through the
+    /// `verify` tool. Pick one from a different model family than the one
+    /// writing code, so their mistakes aren't correlated. Unset picks one
+    /// automatically.
+    pub verifier_model: Option<LanguageModelSelection>,
+    /// Teaching mode: shepherd explains its reasoning, asks you questions
+    /// and leaves the critical part for you to write, so your own skills
+    /// stay sharp.
+    ///
+    /// Default: false
+    pub teaching_mode: Option<bool>,
+    /// Offline mode: shepherd only uses local models (Ollama, LM Studio) and
+    /// the web, browser and package-registry tools are switched off, so
+    /// nothing leaves this machine.
+    ///
+    /// Default: false
+    pub offline: Option<bool>,
+    /// A monthly spending limit in US dollars for paid models. noah warns at
+    /// 80% and asks before going over. Unset means no limit.
+    pub monthly_budget_usd: Option<f64>,
+    /// Hosts shepherd's fetch and browser tools may reach, such as
+    /// "docs.rs" or "*.github.com". Empty or unset allows every host.
+    pub allowed_hosts: Option<Vec<String>>,
     /// Additional parameters for language model requests. When making a request
     /// to a model, parameters will be taken from the last entry in this list
     /// that matches the model's provider and name. In each entry, both provider

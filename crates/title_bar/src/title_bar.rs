@@ -807,7 +807,7 @@ impl TitleBar {
         let display_name = if let Some(ref name) = name {
             util::truncate_and_trailoff(name, MAX_PROJECT_NAME_LENGTH)
         } else {
-            "open a project".to_string()
+            noah_i18n::t(cx, "open a project").to_string()
         };
 
         let is_sidebar_open = self

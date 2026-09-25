@@ -9532,6 +9532,77 @@ impl Editor {
         cx.notify();
     }
 
+    /// Briefly lights up text an agent just wrote, and lines it just removed
+    /// text from, fading in and back out in the theme's own created and
+    /// deleted colors so live edits are easy to follow. Offsets are into the
+    /// editor's (singleton) buffer.
+    pub fn flash_agent_edits(
+        &mut self,
+        inserted: &[Range<usize>],
+        removed_lines: &[Range<usize>],
+        cx: &mut Context<Self>,
+    ) {
+        const FADE: Duration = Duration::from_millis(1600);
+        const RISE: f32 = 0.12;
+        static NEXT_FLASH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+        if cx.reduce_motion() || (inserted.is_empty() && removed_lines.is_empty()) {
+            return;
+        }
+        let snapshot = self.buffer.read(cx).snapshot(cx);
+        let to_anchors = |ranges: &[Range<usize>]| -> Vec<Range<Anchor>> {
+            ranges
+                .iter()
+                .map(|range| {
+                    snapshot.anchor_after(MultiBufferOffset(range.start))
+                        ..snapshot.anchor_before(MultiBufferOffset(range.end))
+                })
+                .collect()
+        };
+        let inserted = to_anchors(inserted);
+        let removed_lines = to_anchors(removed_lines);
+
+        let id = NEXT_FLASH.fetch_add(2, std::sync::atomic::Ordering::Relaxed);
+        let started = Instant::now();
+        let strength = move || {
+            let progress = (started.elapsed().as_secs_f32() / FADE.as_secs_f32()).min(1.0);
+            if progress < RISE {
+                progress / RISE
+            } else {
+                let falling = 1.0 - (progress - RISE) / (1.0 - RISE);
+                falling * falling
+            }
+        };
+        self.highlight_background(
+            HighlightKey::AgentEditFlash(id),
+            &inserted,
+            move |_, theme| theme.status().created.opacity(0.45 * strength()),
+            cx,
+        );
+        self.highlight_background(
+            HighlightKey::AgentEditFlash(id + 1),
+            &removed_lines,
+            move |_, theme| theme.status().deleted.opacity(0.35 * strength()),
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            while started.elapsed() < FADE {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    return;
+                }
+            }
+            this.update(cx, |editor, cx| {
+                editor.clear_background_highlights(HighlightKey::AgentEditFlash(id), cx);
+                editor.clear_background_highlights(HighlightKey::AgentEditFlash(id + 1), cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub fn clear_background_highlights(
         &mut self,
         key: HighlightKey,

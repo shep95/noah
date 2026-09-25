@@ -309,6 +309,8 @@ impl AgentDiffPane {
     fn keep_all(&mut self, _: &KeepAll, _window: &mut Window, cx: &mut Context<Self>) {
         let telemetry = ActionLogTelemetry::from(self.thread.read(cx));
         let action_log = self.thread.read(cx).action_log().clone();
+        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        crate::mission_control::record_review_outcome(changed, true, cx);
         action_log.update(cx, |action_log, cx| {
             action_log.keep_all_edits(Some(telemetry), cx)
         });
@@ -368,6 +370,13 @@ fn keep_edits_in_ranges(
     update_editor_selection(editor, buffer_snapshot, &diff_hunks_in_ranges, window, cx);
 
     let multibuffer = editor.buffer().clone();
+    let reviewed: Vec<_> = diff_hunks_in_ranges
+        .iter()
+        .filter_map(|hunk| multibuffer.read(cx).buffer(hunk.buffer_id))
+        .collect::<collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    crate::mission_control::record_review_outcome(reviewed, true, cx);
     for hunk in &diff_hunks_in_ranges {
         let buffer = multibuffer.read(cx).buffer(hunk.buffer_id);
         if let Some(buffer) = buffer {
@@ -416,6 +425,7 @@ fn reject_edits_in_ranges(
     let action_log = thread.read(cx).action_log().clone();
     let telemetry = ActionLogTelemetry::from(thread.read(cx));
     let mut undo_buffers = Vec::new();
+    crate::mission_control::record_review_outcome(ranges_by_buffer.keys().cloned(), false, cx);
 
     for (buffer, ranges) in ranges_by_buffer {
         action_log
@@ -1266,6 +1276,14 @@ impl Render for AgentDiffToolbar {
 pub struct AgentDiff {
     reviewing_editors: HashMap<WeakEntity<Editor>, EditorState>,
     workspace_threads: HashMap<WeakEntity<Workspace>, WorkspaceThread>,
+    live_edit_watchers: HashMap<WeakEntity<Buffer>, LiveEditWatcher>,
+}
+
+/// Follows a buffer open in the editor so shepherd's edits to it can be shown
+/// as they land.
+struct LiveEditWatcher {
+    version: clock::Global,
+    _subscription: Subscription,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1521,6 +1539,7 @@ impl AgentDiff {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.watch_live_edits(&workspace, &buffer, cx);
         let Some(workspace_thread) = self.workspace_threads.get_mut(&workspace) else {
             return;
         };
@@ -1553,6 +1572,91 @@ impl AgentDiff {
             });
 
         self.update_reviewing_editors(&workspace, window, cx);
+    }
+
+    fn watch_live_edits(
+        &mut self,
+        workspace: &WeakEntity<Workspace>,
+        buffer: &WeakEntity<Buffer>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(buffer_entity) = buffer.upgrade() else {
+            return;
+        };
+        if self.live_edit_watchers.contains_key(buffer) {
+            return;
+        }
+        let version = buffer_entity.read(cx).version();
+        let subscription = cx.subscribe(&buffer_entity, {
+            let workspace = workspace.clone();
+            move |this, buffer, event: &language::BufferEvent, cx| {
+                if matches!(event, language::BufferEvent::Edited { .. }) {
+                    this.show_live_edits(&workspace, buffer, cx);
+                }
+            }
+        });
+        cx.observe_release(&buffer_entity, {
+            let buffer = buffer.clone();
+            move |this, _, _| {
+                this.live_edit_watchers.remove(&buffer);
+            }
+        })
+        .detach();
+        self.live_edit_watchers.insert(
+            buffer.clone(),
+            LiveEditWatcher {
+                version,
+                _subscription: subscription,
+            },
+        );
+    }
+
+    /// Lights up what shepherd just changed in every editor showing the
+    /// buffer. Edits made while shepherd isn't working are the person's own
+    /// typing, so they are left alone.
+    fn show_live_edits(
+        &mut self,
+        workspace: &WeakEntity<Workspace>,
+        buffer: Entity<Buffer>,
+        cx: &mut Context<Self>,
+    ) {
+        let weak_buffer = buffer.downgrade();
+        let Some(watcher) = self.live_edit_watchers.get_mut(&weak_buffer) else {
+            return;
+        };
+        let snapshot = buffer.read(cx).snapshot();
+        let edits: Vec<text::Edit<usize>> = snapshot.edits_since(&watcher.version).collect();
+        watcher.version = snapshot.version().clone();
+
+        let Some(workspace_thread) = self.workspace_threads.get(workspace) else {
+            return;
+        };
+        let shepherd_is_working = workspace_thread.thread.upgrade().is_some_and(|thread| {
+            thread.read(cx).status() == acp_thread::ThreadStatus::Generating
+        });
+        if !shepherd_is_working || edits.is_empty() {
+            return;
+        }
+        let mut inserted = Vec::new();
+        let mut removed_lines = Vec::new();
+        for edit in &edits {
+            if !edit.new.is_empty() {
+                inserted.push(edit.new.clone());
+            } else if !edit.old.is_empty() {
+                let row = snapshot.offset_to_point(edit.new.start).row;
+                let line_start = snapshot.point_to_offset(Point::new(row, 0));
+                let line_end = snapshot.point_to_offset(Point::new(row, snapshot.line_len(row)));
+                removed_lines.push(line_start..line_end.max(line_start + 1).min(snapshot.len()));
+            }
+        }
+        let Some(editors) = workspace_thread.singleton_editors.get(&weak_buffer) else {
+            return;
+        };
+        for editor in editors.keys().filter_map(|editor| editor.upgrade()) {
+            editor.update(cx, |editor, cx| {
+                editor.flash_agent_edits(&inserted, &removed_lines, cx);
+            });
+        }
     }
 
     fn update_reviewing_editors(
