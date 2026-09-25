@@ -153,5 +153,6 @@ Description: noah, a native code editor with shepherd
  Free, no account. Built on Zed. Bring a Venice key or run models locally.
 EOF
 deb="$PWD/dist/noah-linux-$DEB_ARCH.deb"
-dpkg-deb --root-owner-group --build "$deb_root" "$deb" >/dev/null
+# xz keeps the package under GitHub's 100 MB file limit.
+dpkg-deb --root-owner-group -Zxz -z9 --build "$deb_root" "$deb" >/dev/null
 echo "built $deb"
