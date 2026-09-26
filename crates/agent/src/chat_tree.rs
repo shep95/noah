@@ -16,7 +16,7 @@ use asherin_chat::tree::ConversationKind;
 use chrono::Utc;
 use collections::HashMap;
 use futures::StreamExt as _;
-use gpui::{App, AsyncApp, Context, Entity, SharedString, Task};
+use gpui::{App, AppContext as _, AsyncApp, Context, Entity, SharedString, Task};
 use language_model::{
     LanguageModel, LanguageModelCompletionEvent, LanguageModelRegistry, LanguageModelRequest,
     LanguageModelRequestMessage, Role, SelectedModel,
