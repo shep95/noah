@@ -1866,6 +1866,13 @@ impl MessageEditor {
         self.editor.read(cx).text(cx)
     }
 
+    /// Whether the draft is short and unspecific enough that sharpening would
+    /// help: under twelve words, naming no file, path or @ mention. The hint
+    /// shows only then, so it never nags over a prompt that is already exact.
+    pub(crate) fn draft_is_vague(&self, cx: &App) -> bool {
+        draft_is_vague(&self.text(cx))
+    }
+
     pub fn set_cursor_offset(
         &mut self,
         offset: usize,
@@ -2000,10 +2007,37 @@ impl Focusable for MessageEditor {
     }
 }
 
+pub(crate) fn draft_is_vague(text: &str) -> bool {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() || words.len() >= 12 {
+        return false;
+    }
+    let names_something = |word: &&str| {
+        word.starts_with('@')
+            || word.contains('/')
+            || word.contains('\\')
+            || word.rsplit_once('.').is_some_and(|(stem, extension)| {
+                !stem.is_empty()
+                    && (1..=5).contains(&extension.len())
+                    && extension.chars().all(|character| character.is_ascii_alphanumeric())
+            })
+    };
+    !words.iter().any(names_something)
+}
+
 impl Render for MessageEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sharpen_hint = self.draft_is_vague(cx);
         div()
-            .key_context("MessageEditor")
+            .key_context({
+                let mut context = gpui::KeyContext::new_with_defaults();
+                context.add("MessageEditor");
+                // Tab sharpens only while the hint is showing.
+                if sharpen_hint {
+                    context.add("sharpen_hint");
+                }
+                context
+            })
             .on_action(cx.listener(Self::chat))
             .on_action(cx.listener(Self::send_immediately))
             .on_action(cx.listener(Self::chat_with_follow))
@@ -5767,5 +5801,28 @@ mod tests {
             text.starts_with("prefix text\n\n"),
             "Expected text to start with 'prefix text\\n\\n', got: {text:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod sharpen_hint_tests {
+    use super::draft_is_vague;
+
+    #[test]
+    fn only_short_drafts_that_name_nothing_get_the_hint() {
+        for draft in ["fix the bug", "make it faster please", "why does login fail sometimes?"] {
+            assert!(draft_is_vague(draft), "{draft}");
+        }
+        for draft in [
+            "",
+            "   ",
+            "fix the bug in auth.rs",
+            "look at src/main.rs",
+            "ask @shepherd about it",
+            "check C:\\Users\\me\\notes",
+            "the login form should keep the email when the password is wrong and show one message",
+        ] {
+            assert!(!draft_is_vague(draft), "{draft}");
+        }
     }
 }

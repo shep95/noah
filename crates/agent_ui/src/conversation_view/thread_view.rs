@@ -4502,6 +4502,7 @@ impl ThreadView {
                                             .children(self.model_selector.clone()),
                                     })
                                     .children(self.render_voice_buttons(cx))
+                                    .children(self.render_sharpen_hint(cx))
                                     .child(self.render_sharpen_button(cx))
                                     .child(self.render_send_button(cx)),
                             ),
@@ -5648,6 +5649,22 @@ impl ThreadView {
             }
         }));
         cx.notify();
+    }
+
+    /// A quiet "sharpen? (tab)" beside the sharpen button, only while the
+    /// draft is short and names nothing; an exact prompt is never nagged.
+    fn render_sharpen_hint(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.sharpening.is_some() || !self.message_editor.read(cx).draft_is_vague(cx) {
+            return None;
+        }
+        Some(
+            Button::new("sharpen-hint", noah_i18n::t(cx, "sharpen? (tab)"))
+                .style(ButtonStyle::Transparent)
+                .label_size(LabelSize::Small)
+                .color(Color::Muted)
+                .on_click(cx.listener(|this, _, window, cx| this.sharpen_prompt(window, cx)))
+                .into_any_element(),
+        )
     }
 
     fn render_sharpen_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -12565,6 +12582,9 @@ impl Render for ThreadView {
                 context
             })
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(|this, _: &crate::SharpenPrompt, window, cx| {
+                this.sharpen_prompt(window, cx)
+            }))
             .on_action(cx.listener(|this, _: &menu::Cancel, _, cx| {
                 if this.parent_session_id.is_none() {
                     this.cancel_generation(cx);

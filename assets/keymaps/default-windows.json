@@ -1722,4 +1722,10 @@
       "shift-tab": "skill_creator::FocusPreviousField",
     },
   },
+  {
+    "context": "MessageEditor && sharpen_hint > Editor",
+    "bindings": {
+      "tab": "agent::SharpenPrompt"
+    }
+  },
 ]

@@ -218,6 +218,9 @@ pub(crate) fn agent_sidebar_side(cx: &App) -> &'static str {
 actions!(
     agent,
     [
+        /// Has shepherd rewrite the draft in the message box into a clearer
+        /// prompt, left there for you to review.
+        SharpenPrompt,
         /// Toggles the menu to create new agent threads.
         ToggleNewThreadMenu,
         /// Toggles the options menu for agent settings and preferences.
