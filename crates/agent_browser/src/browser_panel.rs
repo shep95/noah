@@ -482,6 +482,14 @@ impl BrowserPanel {
 
     fn handle_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let keystroke = &event.keystroke;
+        // Chords with shift or alt on top of control are noah's own (the
+        // command palette, the rooms); pages never need them, so they pass
+        // through to the workspace instead of vanishing into the page.
+        let noah_chord = (keystroke.modifiers.control || keystroke.modifiers.platform)
+            && (keystroke.modifiers.shift || keystroke.modifiers.alt);
+        if noah_chord {
+            return;
+        }
         let modifiers = cdp_modifiers(&keystroke.modifiers);
         if (keystroke.modifiers.control || keystroke.modifiers.platform) && keystroke.key == "v" {
             if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
