@@ -2275,24 +2275,9 @@ impl Thread {
             && worktrees.all(|worktree| worktree.read(cx).abs_path().as_ref() == chat_directory)
     }
 
-    /// The tools asherin.search offers: enough to write python programs, run
-    /// them, and read what they produced. Built-in web search, the browser
-    /// and fetching are deliberately absent; there, python is how you look.
-    pub const SEARCH_CONSOLE_TOOLS: &'static [&'static str] = &[
-        TerminalTool::NAME,
-        "edit_file",
-        "write_file",
-        "create_directory",
-        "read_file",
-        "list_directory",
-        "find_path",
-        "grep",
-        "ask_user",
-    ];
-
-    /// Whether this thread runs in asherin.search's folder. There, python is
-    /// the only search instrument: shepherd writes and runs programs that
-    /// look things up, and reads what they bring back.
+    /// Whether this thread runs in asherin.search's folder, where shepherd
+    /// researches: searches, reads pages, calls apis and writes python that
+    /// does the repetitive looking, then brings back links and a map.
     pub fn is_search_project(project: &Entity<Project>, cx: &App) -> bool {
         let search_directory = paths::search_directory();
         let mut worktrees = project.read(cx).visible_worktrees(cx).peekable();
@@ -4418,9 +4403,9 @@ impl Thread {
         // In asherin.chat the chat profile's tools apply whatever profile is
         // selected, so chat can't edit files or run commands.
         let chat_profile = AgentProfileId(builtin_profiles::CHAT.into());
-        // In asherin.search the write profile applies, narrowed below to the
-        // tools that write and run python, so the console works whatever
-        // profile is selected and can search no other way.
+        // In asherin.search the write profile applies whatever profile is
+        // selected, so shepherd can search the web, read pages and write and
+        // run python there.
         let write_profile = AgentProfileId(builtin_profiles::WRITE.into());
         let is_search = Self::is_search_project(&self.project, cx);
         let profile_id = if Self::is_chat_project(&self.project, cx) {
@@ -4481,12 +4466,6 @@ impl Thread {
                 }
             })
             .filter(|(tool_name, _)| crate::tools::tool_feature_flag_enabled(tool_name, cx))
-            .filter(|(tool_name, _)| {
-                !is_search
-                    || Self::SEARCH_CONSOLE_TOOLS
-                        .iter()
-                        .any(|allowed| provider_compatible_tool_name(allowed) == tool_name.as_ref())
-            })
             .collect::<BTreeMap<_, _>>();
 
         let mut context_server_tools = Vec::new();
