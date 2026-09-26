@@ -2721,6 +2721,9 @@ impl AgentPanel {
         if self.terminal_status_visible(terminal_id, window, cx) {
             return;
         }
+        if workspace::QuietMode::hold(cx) {
+            return;
+        }
         let settings = AgentSettings::get_global(cx);
         match settings.notify_when_agent_waiting {
             NotifyWhenAgentWaiting::PrimaryScreen => {
@@ -2970,6 +2973,9 @@ impl AgentPanel {
 
     #[cfg(feature = "audio")]
     fn play_terminal_notification_sound(&self, visible: bool, cx: &mut App) {
+        if workspace::QuietMode::is_on(cx) {
+            return;
+        }
         let settings = AgentSettings::get_global(cx);
         if settings.play_sound_when_agent_done.should_play(visible) {
             Audio::play_sound(Sound::AgentDone, cx);

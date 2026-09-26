@@ -200,6 +200,21 @@ impl StatusBar {
                 sidebar.show_toggle && !sidebar.open && sidebar.side == SidebarSide::Left,
                 |this| this.child(self.render_sidebar_toggle(sidebar, cx)),
             )
+            // The one thing quiet mode shows: that it is on, and how to end it.
+            .when(crate::QuietMode::is_on(cx), |this| {
+                this.child(
+                    div()
+                        .id("quiet-mode")
+                        .px_1()
+                        .child(Label::new("quiet").size(LabelSize::Small).color(Color::Muted))
+                        .tooltip(|_, cx| {
+                            Tooltip::for_action("quiet mode is on", &crate::ToggleQuietMode, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(crate::ToggleQuietMode), cx)
+                        }),
+                )
+            })
             .children(self.left_items.iter().enumerate().map(|(index, item)| {
                 render_hideable_item("status-bar-left", index, item.as_ref(), cx)
             }))
@@ -236,6 +251,7 @@ impl StatusBar {
     ) -> impl IntoElement {
         let on_right = sidebar.side == SidebarSide::Right;
         let has_notifications = sidebar.has_notifications;
+        let quiet = crate::QuietMode::is_on(cx);
         let indicator_border = cx.theme().colors().status_bar_background;
 
         let toggle = sidebar_side_context_menu("sidebar-status-toggle-menu", cx)
@@ -261,7 +277,7 @@ impl StatusBar {
                 .icon_size(IconSize::Small)
                 .tab_index(0isize)
                 .aria_label("Open chat history")
-                .when(has_notifications, |this| {
+                .when(has_notifications && !quiet, |this| {
                     this.indicator(Indicator::dot().color(Color::Accent))
                         .indicator_border_color(Some(indicator_border))
                 })

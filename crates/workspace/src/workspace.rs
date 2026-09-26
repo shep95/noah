@@ -424,6 +424,9 @@ actions!(
         CloseAllDocks,
         /// Toggles all docks.
         ToggleAllDocks,
+        /// Quiet mode: hides every panel, badge and sound. shepherd keeps
+        /// working and holds what it has to tell you until quiet mode ends.
+        ToggleQuietMode,
         /// Closes the current window.
         CloseWindow,
         /// Closes the current project.
@@ -1584,6 +1587,33 @@ struct DispatchingKeystrokes {
 /// A `Workspace` usually consists of 1 or more projects, a central pane group, 3 docks and a status bar.
 /// The `Workspace` owns everybody's state and serves as a default, "global context",
 /// that can be used to register a global action to be triggered from any place in the window.
+/// Quiet mode, across every window: panels closed, no sounds, no pop-ups.
+/// shepherd keeps working; what it would have said is counted and told once
+/// when quiet mode ends.
+#[derive(Default)]
+pub struct QuietMode {
+    on: bool,
+    held: usize,
+}
+
+impl gpui::Global for QuietMode {}
+
+impl QuietMode {
+    pub fn is_on(cx: &App) -> bool {
+        cx.try_global::<Self>().is_some_and(|quiet| quiet.on)
+    }
+
+    /// Whether a notice must be held back. When it must, it is counted, so
+    /// the person hears how many waited.
+    pub fn hold(cx: &mut App) -> bool {
+        if !Self::is_on(cx) {
+            return false;
+        }
+        cx.global_mut::<Self>().held += 1;
+        true
+    }
+}
+
 pub struct Workspace {
     weak_self: WeakEntity<Self>,
     workspace_actions: Vec<Box<dyn Fn(Div, &Workspace, &mut Window, &mut Context<Self>) -> Div>>,
@@ -4641,6 +4671,39 @@ impl Workspace {
     ///
     /// If any docks are open, closes all and remembers their positions. If all
     /// docks are closed, restores the last remembered dock configuration.
+    fn toggle_quiet_mode(
+        &mut self,
+        _: &ToggleQuietMode,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let quiet = cx.default_global::<QuietMode>();
+        if quiet.on {
+            quiet.on = false;
+            let held = std::mem::take(&mut quiet.held);
+            self.restore_last_open_docks(window, cx);
+            if held > 0 {
+                struct QuietModeToast;
+                let message = if held == 1 {
+                    "shepherd held one thing for you while it was quiet".to_string()
+                } else {
+                    format!("shepherd held {held} things for you while it was quiet")
+                };
+                self.show_toast(
+                    Toast::new(NotificationId::unique::<QuietModeToast>(), message).autohide(),
+                    cx,
+                );
+            }
+        } else {
+            quiet.on = true;
+            quiet.held = 0;
+            if !self.get_open_dock_positions(cx).is_empty() {
+                self.close_all_docks(window, cx);
+            }
+        }
+        cx.notify();
+    }
+
     fn toggle_all_docks(
         &mut self,
         _: &ToggleAllDocks,
@@ -8222,6 +8285,7 @@ impl Workspace {
                 }),
             )
             .on_action(cx.listener(Self::toggle_all_docks))
+            .on_action(cx.listener(Self::toggle_quiet_mode))
             .on_action(cx.listener(
                 |workspace: &mut Workspace, _: &ClearAllNotifications, _, cx| {
                     workspace.clear_all_notifications(cx);

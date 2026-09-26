@@ -2896,10 +2896,15 @@ impl ConversationView {
         caption: impl Into<SharedString>,
         icon: IconName,
         notice: Notice,
-        // (the state the notification announces; see `play_notification_sound`)
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // In quiet mode nothing sounds or pops up; the thread still waits for
+        // its answer, and the person hears how many things waited when quiet
+        // mode ends.
+        if workspace::QuietMode::hold(cx) {
+            return;
+        }
         #[cfg(feature = "audio")]
         self.play_notification_sound(notice, window, cx);
         #[cfg(not(feature = "audio"))]
