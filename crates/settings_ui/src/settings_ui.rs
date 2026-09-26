@@ -4717,7 +4717,7 @@ pub(crate) fn replace_shepherd_brain(window: &mut Window, cx: &mut App) {
         prompt: Some("Use as shepherd's brain".into()),
     });
     window
-        .spawn(cx, async move |cx| {
+        .spawn(cx, async move |cx| -> Result<()> {
             let installed: Result<Option<PathBuf>> = async {
                 let Some(source) = chosen.await??.and_then(|mut paths| paths.pop()) else {
                     return Ok(None);
