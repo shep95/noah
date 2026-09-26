@@ -763,7 +763,23 @@ impl ChatTreePanel {
 
     fn reopen_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.closed_tabs.pop() {
+            // The tab is known before the conversation has loaded, so it goes
+            // back on the strip now rather than when the load reports in.
+            if !self.tabs.iter().any(|tab| tab.id == id) {
+                self.tabs.push(ChatTab {
+                    id: id.clone(),
+                    pinned: false,
+                });
+            }
             self.open_session(id, window, cx);
+            cx.notify();
+            if let Some(panel) = self
+                .workspace
+                .upgrade()
+                .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
+            {
+                panel.update(cx, |_, cx| cx.notify());
+            }
         }
     }
 
