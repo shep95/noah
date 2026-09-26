@@ -54,8 +54,8 @@ impl Render for AgentPanelOnboarding {
                     .child(Headline::new("shepherd"))
                     .child(
                         Label::new(
-                            "Research, then plan, then build. Give it a Venice API key or a \
-                             local model and it starts reading your project.",
+                            "Research, then plan, then build. Give it an API key from any provider \
+                             or a local model and it starts reading your project.",
                         )
                         .color(Color::Muted),
                     )

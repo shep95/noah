@@ -104,7 +104,9 @@ impl ChatTreePanel {
             _load: None,
             _subscriptions: subscriptions,
         };
-        panel.reload(cx);
+        // The panel is built while its workspace is being updated, and the
+        // first load reads that workspace, so it waits for the update to end.
+        cx.defer_in(window, |panel, _window, cx| panel.reload(cx));
         panel
     }
 
