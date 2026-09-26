@@ -16,7 +16,6 @@ use language::language_settings::SoftWrap;
 use serde::{Deserialize, Serialize};
 use settings::Settings as _;
 use ui::prelude::*;
-use util::ResultExt as _;
 use workspace::WorkspaceSettings;
 
 /// Typing pauses this long before the file is written.
