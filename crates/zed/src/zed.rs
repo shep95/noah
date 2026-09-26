@@ -1329,7 +1329,7 @@ fn register_actions(
                     return;
                 }
                 cx.spawn_in(window, async move |workspace, cx| {
-                    let panel = DebugPanel::load(workspace.clone(), cx.clone()).await?;
+                    let panel = DebugPanel::load(workspace.clone(), cx).await?;
                     workspace.update_in(cx, |workspace, window, cx| {
                         if workspace.panel::<DebugPanel>(cx).is_none() {
                             workspace.add_panel(panel, window, cx);
