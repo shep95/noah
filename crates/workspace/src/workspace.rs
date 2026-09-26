@@ -5058,6 +5058,12 @@ impl Workspace {
     // Otherwise, focusing the center pane triggers dismiss_zoomed_items_to_reveal
     // which closes the zoomed dock.
     pub fn fallback_focus_handle(&self, window: &Window, cx: &App) -> FocusHandle {
+        // When a room fills the window the centre panes aren't drawn, so
+        // focus that fell out of the tree returns to the room itself rather
+        // than to a pane no key could reach.
+        if let Some((_, panel)) = self.room_panel(cx) {
+            return panel.activation_focus_handle(cx);
+        }
         self.all_docks()
             .into_iter()
             .find_map(|dock| {
@@ -9160,6 +9166,14 @@ impl Workspace {
     /// the browser, mission control, the device room, and shepherd in
     /// asherin.chat, search and pages stand alone rather than beside a file.
     fn room_center_override(&self, cx: &App) -> Option<(DockPosition, FocusHandle, AnyView)> {
+        let (dock, panel) = self.room_panel(cx)?;
+        let dock = dock.read(cx);
+        Some((dock.position(), dock.focus_handle(cx), panel.to_any()))
+    }
+
+    /// The panel that is the room the window is standing in, with its dock,
+    /// when a room fills the window.
+    fn room_panel(&self, cx: &App) -> Option<(Entity<Dock>, Arc<dyn PanelHandle>)> {
         if self.zoomed.is_some() {
             return None;
         }
@@ -9170,11 +9184,11 @@ impl Workspace {
                     .contains(&folder)
             });
         for dock in self.all_docks() {
-            let dock = dock.read(cx);
-            if !dock.is_open() {
-                continue;
-            }
-            let Some(panel) = dock.visible_panel() else {
+            let (open, panel) = {
+                let dock = dock.read(cx);
+                (dock.is_open(), dock.visible_panel().cloned())
+            };
+            let Some(panel) = panel.filter(|_| open) else {
                 continue;
             };
             let fills = matches!(
@@ -9182,7 +9196,7 @@ impl Workspace {
                 "BrowserPanel" | "MissionControlPanel" | "DevicePanel"
             ) || (conversation_room && panel.persistent_name() == "AgentPanel");
             if fills {
-                return Some((dock.position(), dock.focus_handle(cx), panel.to_any()));
+                return Some((dock.clone(), panel));
             }
         }
         None
