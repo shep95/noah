@@ -1,4 +1,23 @@
 [
+  {
+    "context": "AcpThread && asherin_chat",
+    "bindings": {
+      "ctrl-t": "asherin_chat::NewChatTab",
+      "ctrl-w": "asherin_chat::CloseChatTab",
+      "ctrl-tab": "asherin_chat::NextChatTab",
+      "ctrl-shift-tab": "asherin_chat::PreviousChatTab",
+      "ctrl-shift-t": "asherin_chat::ReopenChatTab",
+      "alt-1": ["asherin_chat::ActivateChatTab", 1],
+      "alt-2": ["asherin_chat::ActivateChatTab", 2],
+      "alt-3": ["asherin_chat::ActivateChatTab", 3],
+      "alt-4": ["asherin_chat::ActivateChatTab", 4],
+      "alt-5": ["asherin_chat::ActivateChatTab", 5],
+      "alt-6": ["asherin_chat::ActivateChatTab", 6],
+      "alt-7": ["asherin_chat::ActivateChatTab", 7],
+      "alt-8": ["asherin_chat::ActivateChatTab", 8],
+      "alt-9": ["asherin_chat::ActivateChatTab", 9]
+    }
+  },
   // Standard Windows bindings
   {
     "use_key_equivalents": true,

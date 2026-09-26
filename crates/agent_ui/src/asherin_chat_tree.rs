@@ -8,20 +8,34 @@ use agent_client_protocol::schema::v1 as acp;
 use asherin_chat::tree::{ConversationKind, ConversationNode, TreeRow, build_tree};
 use collections::HashMap;
 use editor::{Editor, EditorEvent};
+use std::time::Duration;
+
 use gpui::{
-    Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, KeyDownEvent, Pixels,
-    Subscription, Task, WeakEntity, Window, px,
+    Action, Animation, AnimationExt as _, AnyElement, App, Context, Entity, EventEmitter,
+    FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels, Subscription, Task, WeakEntity,
+    Window, ease_out_quint, px, relative,
 };
-use ui::{Tooltip, prelude::*};
+use ui::{ContextMenu, Tooltip, prelude::*, right_click_menu};
 use util::ResultExt as _;
 use util::path_list::PathList;
 use workspace::Workspace;
 use workspace::dock::{DockPosition, Panel, PanelEvent};
 
-use crate::asherin_chat::{self as room, ToggleTree};
+use crate::asherin_chat::{
+    self as room, ActivateChatTab, CloseChatTab, NewChatTab, NextChatTab, OpenChatBeside,
+    PreviousChatTab, ReopenChatTab, ToggleTree,
+};
 use crate::{AgentPanel, NewThread};
 
 const INDENT: f32 = 14.;
+/// Past this many unpinned tabs, the oldest collapse into the overflow menu.
+const MAX_VISIBLE_TABS: usize = 8;
+
+#[derive(Clone, PartialEq)]
+struct ChatTab {
+    id: acp::SessionId,
+    pinned: bool,
+}
 
 /// Adds the tree to asherin.chat's window, now or once the chat folder is
 /// its project. Other windows never get it.
@@ -69,6 +83,10 @@ pub struct ChatTreePanel {
     rows: Vec<TreeRow<acp::SessionId>>,
     selected: Option<usize>,
     observing_agent_panel: bool,
+    /// Conversations open as tabs in this chat window, pinned ones first.
+    tabs: Vec<ChatTab>,
+    /// Recently closed tabs, newest last, for reopening.
+    closed_tabs: Vec<acp::SessionId>,
     _load: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -101,6 +119,8 @@ impl ChatTreePanel {
             rows: Vec::new(),
             selected: None,
             observing_agent_panel: false,
+            tabs: Vec::new(),
+            closed_tabs: Vec::new(),
             _load: None,
             _subscriptions: subscriptions,
         };
@@ -142,8 +162,11 @@ impl ChatTreePanel {
             return;
         };
         self.observing_agent_panel = true;
-        self._subscriptions
-            .push(cx.observe(&panel, |_, _, cx| cx.notify()));
+        self._subscriptions.push(cx.observe(&panel, |this, _, cx| {
+            this.track_active_tab(cx);
+            cx.notify();
+        }));
+        self.track_active_tab(cx);
     }
 
     fn collect_nodes(&self, cx: &App) -> Vec<ConversationNode<acp::SessionId>> {
@@ -274,6 +297,10 @@ impl ChatTreePanel {
             cx.defer(move |cx| room::open_handoff_thread(project_path, id, cx));
             return;
         }
+        self.open_session(id, window, cx);
+    }
+
+    fn open_session(&self, id: acp::SessionId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(workspace) = self.workspace.upgrade() else {
             return;
         };
@@ -564,5 +591,473 @@ impl Panel for ChatTreePanel {
 
     fn activation_priority(&self) -> u32 {
         23
+    }
+}
+
+/// The chat window's active conversation. Takes the workspace rather than
+/// reading it, so actions that run while it's being updated can call it.
+fn active_session_in(workspace: &Workspace, cx: &App) -> Option<acp::SessionId> {
+    workspace
+        .panel::<AgentPanel>(cx)?
+        .read(cx)
+        .active_conversation_view()?
+        .read(cx)
+        .root_session_id
+        .clone()
+}
+
+impl ChatTreePanel {
+    fn track_active_tab(&mut self, cx: &mut Context<Self>) {
+        let Some(active) = self.active_session(cx) else {
+            return;
+        };
+        if !self.tabs.iter().any(|tab| tab.id == active) {
+            self.tabs.push(ChatTab {
+                id: active.clone(),
+                pinned: false,
+            });
+        }
+        self.closed_tabs.retain(|id| *id != active);
+    }
+
+    fn tab_title(&self, id: &acp::SessionId) -> (SharedString, ConversationKind) {
+        self.nodes
+            .iter()
+            .find(|node| &node.id == id)
+            .map(|node| (SharedString::from(node.title.clone()), node.kind))
+            .unwrap_or_else(|| ("new chat".into(), ConversationKind::Root))
+    }
+
+    /// Pinned tabs first, each group in the order it was opened.
+    fn ordered_tabs(&self) -> Vec<ChatTab> {
+        let (mut pinned, unpinned): (Vec<ChatTab>, Vec<ChatTab>) =
+            self.tabs.iter().cloned().partition(|tab| tab.pinned);
+        pinned.extend(unpinned);
+        pinned
+    }
+
+    /// The tabs to draw, and the oldest unpinned ones that collapse into the
+    /// overflow menu. The active tab always stays visible.
+    fn visible_tabs(&self, active: Option<&acp::SessionId>) -> (Vec<ChatTab>, Vec<ChatTab>) {
+        let ordered = self.ordered_tabs();
+        let unpinned = ordered.iter().filter(|tab| !tab.pinned).count();
+        let mut excess = unpinned.saturating_sub(MAX_VISIBLE_TABS);
+        let mut visible = Vec::new();
+        let mut overflow = Vec::new();
+        for tab in ordered {
+            if excess > 0 && !tab.pinned && Some(&tab.id) != active {
+                excess -= 1;
+                overflow.push(tab);
+            } else {
+                visible.push(tab);
+            }
+        }
+        (visible, overflow)
+    }
+
+    fn activate_tab(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(tab) = self.ordered_tabs().get(index) {
+            self.open_session(tab.id.clone(), window, cx);
+        }
+    }
+
+    fn cycle_tab(
+        &mut self,
+        forward: bool,
+        active: Option<acp::SessionId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let ordered = self.ordered_tabs();
+        if ordered.is_empty() {
+            return;
+        }
+        let current = active
+            .and_then(|active| ordered.iter().position(|tab| tab.id == active))
+            .unwrap_or(0);
+        let next = if forward {
+            (current + 1) % ordered.len()
+        } else {
+            (current + ordered.len() - 1) % ordered.len()
+        };
+        if let Some(tab) = ordered.get(next) {
+            self.open_session(tab.id.clone(), window, cx);
+        }
+    }
+
+    fn close_tab(
+        &mut self,
+        id: &acp::SessionId,
+        active: Option<&acp::SessionId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let ordered = self.ordered_tabs();
+        let Some(position) = ordered.iter().position(|tab| &tab.id == id) else {
+            return;
+        };
+        self.tabs.retain(|tab| &tab.id != id);
+        self.closed_tabs.push(id.clone());
+        if active == Some(id) {
+            // Show the neighbour that takes its place, like closing an editor
+            // tab; with no tabs left, start a new chat.
+            let neighbour = ordered
+                .get(position + 1)
+                .or_else(|| position.checked_sub(1).and_then(|index| ordered.get(index)));
+            match neighbour {
+                Some(tab) => self.open_session(tab.id.clone(), window, cx),
+                None => self.new_chat(window, cx),
+            }
+        }
+        cx.notify();
+    }
+
+    fn reopen_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(id) = self.closed_tabs.pop() {
+            self.open_session(id, window, cx);
+        }
+    }
+
+    fn toggle_pin(&mut self, id: &acp::SessionId, cx: &mut Context<Self>) {
+        if let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) {
+            tab.pinned = !tab.pinned;
+            cx.notify();
+        }
+    }
+
+    /// Opens `id` beside the chat, in the window's centre, so two
+    /// conversations can be read side by side.
+    fn open_beside(&self, id: acp::SessionId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(workspace) = self.workspace.upgrade() else {
+            return;
+        };
+        let title = self.tab_title(&id).0;
+        window.defer(cx, move |window, cx| {
+            workspace.update(cx, |workspace, cx| {
+                let Some(panel) = workspace.panel::<AgentPanel>(cx) else {
+                    return;
+                };
+                let Some(conversation_view) = panel.update(cx, |panel, cx| {
+                    panel.conversation_for_split(
+                        id,
+                        Some(PathList::new(&[paths::chat_directory()])),
+                        window,
+                        cx,
+                    )
+                }) else {
+                    return;
+                };
+                let item = cx.new(|_| ChatSplitItem {
+                    conversation_view,
+                    title,
+                });
+                workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
+            });
+        });
+    }
+
+    /// The tab strip drawn above an asherin.chat conversation.
+    pub(crate) fn render_tab_strip(
+        panel: &Entity<Self>,
+        active: Option<&acp::SessionId>,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        let this = panel.read(cx);
+        let (visible, overflow) = this.visible_tabs(active);
+        if visible.is_empty() {
+            return None;
+        }
+        let colors = cx.theme().colors();
+        let border = colors.border;
+        let underline_color = colors.text;
+        let tabs: Vec<AnyElement> = visible
+            .iter()
+            .enumerate()
+            .map(|(index, tab)| {
+                let (title, kind) = this.tab_title(&tab.id);
+                let glyph = match kind {
+                    ConversationKind::Root => "",
+                    ConversationKind::Branch => "↳ ",
+                    ConversationKind::Side => "~ ",
+                    ConversationKind::Handoff => "→ ",
+                };
+                let is_active = Some(&tab.id) == active;
+                let id = tab.id.clone();
+                let pinned = tab.pinned;
+                let underline_id = SharedString::from(format!("chat-tab-line-{}", tab.id.0));
+                let fade_id = SharedString::from(format!("chat-tab-in-{}", tab.id.0));
+                let trigger = {
+                    let panel = panel.clone();
+                    let id = id.clone();
+                    let close_panel = panel.clone();
+                    let close_id = id.clone();
+                    let middle_panel = panel.clone();
+                    let middle_id = id.clone();
+                    let active = active.cloned();
+                    let middle_active = active.clone();
+                    v_flex()
+                        .id(("chat-tab", index))
+                        .max_w(px(200.))
+                        .cursor_pointer()
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .py_1()
+                                .when(pinned, |row| {
+                                    row.child(
+                                        Icon::new(IconName::Pin)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Muted),
+                                    )
+                                })
+                                .child(
+                                    Label::new(format!("{glyph}{title}"))
+                                        .size(LabelSize::Small)
+                                        .color(if is_active {
+                                            Color::Default
+                                        } else {
+                                            Color::Muted
+                                        })
+                                        .truncate(),
+                                )
+                                .child(
+                                    IconButton::new(("chat-tab-close", index), IconName::Close)
+                                        .icon_size(IconSize::XSmall)
+                                        .icon_color(Color::Muted)
+                                        .tooltip(Tooltip::text("close tab"))
+                                        .on_click(move |_, window, cx| {
+                                            cx.stop_propagation();
+                                            close_panel.update(cx, |panel, cx| {
+                                                panel.close_tab(
+                                                    &close_id,
+                                                    active.as_ref(),
+                                                    window,
+                                                    cx,
+                                                )
+                                            });
+                                        }),
+                                ),
+                        )
+                        .child(if is_active {
+                            // The underline draws itself across the tab each
+                            // time the tab becomes the active one.
+                            div()
+                                .h(px(1.))
+                                .bg(underline_color)
+                                .with_animation(
+                                    underline_id,
+                                    Animation::new(Duration::from_millis(180))
+                                        .with_easing(ease_out_quint()),
+                                    |line, delta| line.w(relative(delta)),
+                                )
+                                .into_any_element()
+                        } else {
+                            div().h(px(1.)).into_any_element()
+                        })
+                        .on_click(move |_, window, cx| {
+                            panel
+                                .update(cx, |panel, cx| panel.open_session(id.clone(), window, cx));
+                        })
+                        .on_mouse_down(MouseButton::Middle, move |_, window, cx| {
+                            middle_panel.update(cx, |panel, cx| {
+                                panel.close_tab(&middle_id, middle_active.as_ref(), window, cx)
+                            });
+                        })
+                        .with_animation(
+                            fade_id,
+                            Animation::new(Duration::from_millis(180))
+                                .with_easing(ease_out_quint()),
+                            |tab, delta| tab.opacity(delta),
+                        )
+                };
+                let menu_panel = panel.clone();
+                let menu_id = id.clone();
+                let menu_active = active.cloned();
+                right_click_menu(("chat-tab-menu", index))
+                    .trigger(move |_, _, _| trigger)
+                    .menu(move |window, cx| {
+                        let panel = menu_panel.clone();
+                        let id = menu_id.clone();
+                        let active = menu_active.clone();
+                        ContextMenu::build(window, cx, move |menu, _, _| {
+                            let pin_panel = panel.clone();
+                            let pin_id = id.clone();
+                            let beside_panel = panel.clone();
+                            let beside_id = id.clone();
+                            let close_panel = panel.clone();
+                            let close_id = id.clone();
+                            let active = active.clone();
+                            menu.entry(
+                                if pinned { "unpin tab" } else { "pin tab" },
+                                None,
+                                move |_, cx| {
+                                    pin_panel.update(cx, |panel, cx| panel.toggle_pin(&pin_id, cx));
+                                },
+                            )
+                            .entry("open beside", None, move |window, cx| {
+                                beside_panel.update(cx, |panel, cx| {
+                                    panel.open_beside(beside_id.clone(), window, cx)
+                                });
+                            })
+                            .entry(
+                                "close tab",
+                                None,
+                                move |window, cx| {
+                                    close_panel.update(cx, |panel, cx| {
+                                        panel.close_tab(&close_id, active.as_ref(), window, cx)
+                                    });
+                                },
+                            )
+                        })
+                    })
+                    .into_any_element()
+            })
+            .collect();
+        let overflow_menu = (!overflow.is_empty()).then(|| {
+            let panel = panel.clone();
+            let entries: Vec<(acp::SessionId, SharedString)> = overflow
+                .iter()
+                .map(|tab| (tab.id.clone(), this.tab_title(&tab.id).0))
+                .collect();
+            let count = entries.len();
+            ui::PopoverMenu::new("chat-tab-overflow")
+                .trigger(
+                    Button::new("chat-tab-overflow-trigger", format!("+{count}"))
+                        .label_size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .menu(move |window, cx| {
+                    let panel = panel.clone();
+                    let entries = entries.clone();
+                    Some(ContextMenu::build(window, cx, move |mut menu, _, _| {
+                        for (id, title) in entries.iter().cloned() {
+                            let panel = panel.clone();
+                            menu = menu.entry(title, None, move |window, cx| {
+                                panel.update(cx, |panel, cx| {
+                                    panel.open_session(id.clone(), window, cx)
+                                });
+                            });
+                        }
+                        menu
+                    }))
+                })
+                .into_any_element()
+        });
+        let new_panel = panel.clone();
+        Some(
+            h_flex()
+                .w_full()
+                .px_2()
+                .gap_3()
+                .border_b_1()
+                .border_color(border)
+                .overflow_hidden()
+                .children(tabs)
+                .children(overflow_menu)
+                .child(
+                    IconButton::new("chat-tab-new", IconName::Plus)
+                        .icon_size(IconSize::XSmall)
+                        .icon_color(Color::Muted)
+                        .tooltip(Tooltip::text("new chat"))
+                        .on_click(move |_, window, cx| {
+                            new_panel.update(cx, |panel, cx| panel.new_chat(window, cx));
+                        }),
+                )
+                .into_any_element(),
+        )
+    }
+}
+
+/// The chat window's tab shortcuts. They're bound only inside asherin.chat's
+/// conversation, so they don't change the editor's own tab keys.
+pub(crate) fn register_tab_actions(workspace: &mut Workspace) {
+    fn with_tabs(
+        workspace: &mut Workspace,
+        window: &mut Window,
+        cx: &mut Context<Workspace>,
+        run: impl FnOnce(
+            &mut ChatTreePanel,
+            Option<acp::SessionId>,
+            &mut Window,
+            &mut Context<ChatTreePanel>,
+        ),
+    ) {
+        let Some(panel) = workspace.panel::<ChatTreePanel>(cx) else {
+            return;
+        };
+        let active = active_session_in(workspace, cx);
+        panel.update(cx, |panel, cx| run(panel, active, window, cx));
+    }
+    workspace.register_action(|workspace, _: &NewChatTab, window, cx| {
+        with_tabs(workspace, window, cx, |panel, _, window, cx| {
+            panel.new_chat(window, cx)
+        });
+    });
+    workspace.register_action(|workspace, _: &CloseChatTab, window, cx| {
+        with_tabs(workspace, window, cx, |panel, active, window, cx| {
+            if let Some(active) = active {
+                panel.close_tab(&active, Some(&active), window, cx);
+            }
+        });
+    });
+    workspace.register_action(|workspace, _: &NextChatTab, window, cx| {
+        with_tabs(workspace, window, cx, |panel, active, window, cx| {
+            panel.cycle_tab(true, active, window, cx)
+        });
+    });
+    workspace.register_action(|workspace, _: &PreviousChatTab, window, cx| {
+        with_tabs(workspace, window, cx, |panel, active, window, cx| {
+            panel.cycle_tab(false, active, window, cx)
+        });
+    });
+    workspace.register_action(|workspace, _: &ReopenChatTab, window, cx| {
+        with_tabs(workspace, window, cx, |panel, _, window, cx| {
+            panel.reopen_tab(window, cx)
+        });
+    });
+    workspace.register_action(|workspace, action: &ActivateChatTab, window, cx| {
+        let index = action.0.saturating_sub(1);
+        with_tabs(workspace, window, cx, |panel, _, window, cx| {
+            panel.activate_tab(index, window, cx)
+        });
+    });
+    workspace.register_action(|workspace, _: &OpenChatBeside, window, cx| {
+        with_tabs(workspace, window, cx, |panel, active, window, cx| {
+            if let Some(active) = active {
+                panel.open_beside(active, window, cx);
+            }
+        });
+    });
+}
+
+/// A conversation opened beside the chat to compare it with another.
+pub(crate) struct ChatSplitItem {
+    conversation_view: Entity<crate::ConversationView>,
+    title: SharedString,
+}
+
+impl EventEmitter<()> for ChatSplitItem {}
+
+impl Focusable for ChatSplitItem {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.conversation_view.focus_handle(cx)
+    }
+}
+
+impl Render for ChatSplitItem {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.conversation_view.clone())
+    }
+}
+
+impl workspace::Item for ChatSplitItem {
+    type Event = ();
+
+    fn include_in_nav_history() -> bool {
+        false
+    }
+
+    fn tab_content_text(&self, _detail: usize, _cx: &App) -> SharedString {
+        self.title.clone()
     }
 }

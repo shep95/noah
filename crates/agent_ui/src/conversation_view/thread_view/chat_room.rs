@@ -526,6 +526,19 @@ impl ThreadView {
 
     /// The agent picker beside the model picker: which custom agent this
     /// conversation uses.
+    /// The tabs of the conversations open in the chat window.
+    pub(super) fn render_chat_tabs(&self, cx: &App) -> Option<AnyElement> {
+        if self.is_subagent() || !self.is_chat_room(cx) {
+            return None;
+        }
+        let workspace = self.workspace.upgrade()?;
+        let panel = workspace
+            .read(cx)
+            .panel::<crate::asherin_chat_tree::ChatTreePanel>(cx)?;
+        let session_id = self.thread.read(cx).session_id().clone();
+        crate::asherin_chat_tree::ChatTreePanel::render_tab_strip(&panel, Some(&session_id), cx)
+    }
+
     pub(super) fn render_chat_agent_picker(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.is_subagent() || !self.is_chat_room(cx) {
             return None;

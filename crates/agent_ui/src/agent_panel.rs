@@ -4600,6 +4600,36 @@ impl AgentPanel {
         );
     }
 
+    /// Another view of a saved native conversation, for asherin.chat's
+    /// "open beside". It isn't made the panel's active thread.
+    pub(crate) fn conversation_for_split(
+        &mut self,
+        session_id: acp::SessionId,
+        work_dirs: Option<PathList>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Entity<ConversationView>> {
+        let thread_id = ThreadMetadataStore::try_global(cx)?
+            .read(cx)
+            .entry_by_session(&session_id)
+            .map(|metadata| metadata.thread_id)?;
+        Some(
+            self.create_agent_thread_with_server(
+                Agent::NativeAgent,
+                None,
+                Some(thread_id),
+                work_dirs,
+                None,
+                None,
+                None,
+                AgentThreadSource::AgentPanel,
+                window,
+                cx,
+            )
+            .conversation_view,
+        )
+    }
+
     pub(crate) fn create_agent_thread_with_server(
         &mut self,
         agent: Agent,

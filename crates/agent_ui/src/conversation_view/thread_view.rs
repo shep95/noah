@@ -12539,6 +12539,7 @@ impl Render for ThreadView {
         let list_state = self.list_state.clone();
 
         let conversation = v_flex()
+            .children(self.render_chat_tabs(cx))
             .when(self.resumed_without_history, |this| {
                 this.child(Self::render_resume_notice(cx))
             })
@@ -12555,7 +12556,15 @@ impl Render for ThreadView {
             });
 
         v_flex()
-            .key_context("AcpThread")
+            .key_context({
+                let mut context = gpui::KeyContext::new_with_defaults();
+                context.add("AcpThread");
+                // asherin.chat's tab shortcuts are bound only here.
+                if self.is_chat_room(cx) {
+                    context.add("asherin_chat");
+                }
+                context
+            })
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &menu::Cancel, _, cx| {
                 if this.parent_session_id.is_none() {

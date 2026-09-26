@@ -55,8 +55,29 @@ actions!(
         BringBack,
         /// Creates a custom asherin.chat agent from a template.
         NewChatAgent,
+        /// Starts a new asherin.chat conversation in a new tab.
+        NewChatTab,
+        /// Closes the current asherin.chat tab. The conversation stays in
+        /// the tree.
+        CloseChatTab,
+        /// Switches to the next asherin.chat tab.
+        NextChatTab,
+        /// Switches to the previous asherin.chat tab.
+        PreviousChatTab,
+        /// Reopens the asherin.chat tab closed most recently.
+        ReopenChatTab,
+        /// Opens the current asherin.chat conversation beside the chat, to
+        /// compare two conversations.
+        OpenChatBeside,
     ]
 );
+
+/// Switches to the asherin.chat tab at this position, counting from 1.
+#[derive(
+    Clone, PartialEq, Debug, serde::Deserialize, schemars::JsonSchema, Default, gpui::Action,
+)]
+#[action(namespace = asherin_chat)]
+pub struct ActivateChatTab(pub usize);
 
 pub fn init(cx: &mut App) {
     cx.on_action(|_: &zed_actions::OpenAsherinChat, cx| {
@@ -94,6 +115,7 @@ pub fn init(cx: &mut App) {
         workspace.register_action(|workspace, _: &NewChatAgent, window, cx| {
             open_new_chat_agent(workspace, None, window, cx);
         });
+        crate::asherin_chat_tree::register_tab_actions(workspace);
         crate::asherin_chat_tree::attach_to_chat_room(workspace, window, cx);
     })
     .detach();
