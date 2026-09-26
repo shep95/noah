@@ -492,6 +492,31 @@ impl MissionControlPanel {
         .detach_and_log_err(cx);
     }
 
+    /// Writes the change's evidence and diff as one html page and opens it in
+    /// the browser room, ready to be sent to someone.
+    fn share_change(&mut self, bundle: Bundle, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(root) = self.project_root(cx) else {
+            return;
+        };
+        let task = cx.background_spawn(async move { write_share_page(&root, &bundle) });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            this.update_in(cx, |this, window, cx| match result {
+                Ok(path) => {
+                    let url = format!("file://{}", path.display());
+                    window.dispatch_action(Box::new(zed_actions::OpenInBrowserRoom { url }), cx);
+                    this.message = Some(format!("shared page written to {}", path.display()).into());
+                    cx.notify();
+                }
+                Err(error) => {
+                    this.message = Some(format!("couldn't write the page: {error:#}").into());
+                    cx.notify();
+                }
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
     fn render_section_title(title: &'static str, detail: Option<String>) -> impl IntoElement {
         h_flex()
             .pt_4()
@@ -674,6 +699,17 @@ impl MissionControlPanel {
                                 .size(LabelSize::XSmall)
                                 .color(Color::Warning),
                         )
+                    })
+                    .child({
+                        let bundle = bundle.clone();
+                        Button::new(("share-change", index), "share")
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::XSmall)
+                            .tooltip(Tooltip::text("share this change: one html page with the evidence and the diff"))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.share_change(bundle.clone(), window, cx);
+                            }))
                     })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_file(path.clone(), window, cx)
@@ -1019,6 +1055,170 @@ async fn load_snapshot(root: Option<PathBuf>, cx: &mut AsyncApp) -> Snapshot {
 
 /// Writes a self-contained audit report: provenance chain status and every
 /// recorded change, plus the evidence each change shipped with.
+/// Writes one self-contained html page for a change: the evidence bundle
+/// (claims against their checks, what wasn't verified, the files and how
+/// sure shepherd was of each) and the diff of those files, so the proof can
+/// be handed to someone who doesn't have noah.
+fn write_share_page(root: &Path, bundle: &Bundle) -> anyhow::Result<PathBuf> {
+    fn escape(text: &str) -> String {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    }
+    let files: Vec<&str> = bundle.files.iter().map(|file| file.path.as_str()).collect();
+    let diff = if files.is_empty() {
+        String::new()
+    } else {
+        let working = std::process::Command::new(paths::git_program())
+            .current_dir(root)
+            .arg("diff")
+            .arg("--")
+            .args(&files)
+            .output()
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+            .unwrap_or_default();
+        if working.trim().is_empty() {
+            // Already committed: show the last commit that touched them.
+            std::process::Command::new(paths::git_program())
+                .current_dir(root)
+                .args(["show", "--format=commit %h %s", "--"])
+                .args(&files)
+                .output()
+                .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+                .unwrap_or_default()
+        } else {
+            working
+        }
+    };
+
+    let mut body = String::new();
+    body.push_str(&format!("<h1>{}</h1>\n", escape(&bundle.title)));
+    body.push_str(&format!(
+        "<p class=\"meta\">{} · {}{}</p>\n",
+        escape(&bundle.created.replace('T', " ")),
+        escape(root.file_name().and_then(|name| name.to_str()).unwrap_or("project")),
+        bundle
+            .model
+            .as_deref()
+            .map(|model| format!(" · {}", escape(model)))
+            .unwrap_or_default()
+    ));
+    body.push_str(&format!("<p>{}</p>\n", escape(&bundle.summary)));
+    if !bundle.behavior_changes.is_empty() {
+        body.push_str("<h2>behavior changed</h2>\n<ul>\n");
+        for change in &bundle.behavior_changes {
+            body.push_str(&format!("<li>{}</li>\n", escape(change)));
+        }
+        body.push_str("</ul>\n");
+    }
+    if !bundle.claims.is_empty() {
+        body.push_str("<h2>claims</h2>\n<ul class=\"claims\">\n");
+        for claim in &bundle.claims {
+            let (mark, class) = match bundle.grounding(claim) {
+                noah_trust::evidence::Grounding::Grounded => ("✓", "ok"),
+                _ => ("✗", "bad"),
+            };
+            body.push_str(&format!(
+                "<li class=\"{class}\"><span class=\"mark\">{mark}</span> {}{}</li>\n",
+                escape(&claim.text),
+                if claim.grounds.is_empty() {
+                    String::new()
+                } else {
+                    format!(" <span class=\"grounds\">{}</span>", escape(&claim.grounds.join(", ")))
+                }
+            ));
+        }
+        body.push_str("</ul>\n");
+    }
+    if !bundle.checks.is_empty() {
+        body.push_str("<h2>checks</h2>\n");
+        for check in &bundle.checks {
+            body.push_str(&format!(
+                "<details><summary><code>{}</code> <span class=\"{}\">{}</span> · {} ms</summary><pre>{}</pre></details>\n",
+                escape(&check.id),
+                if check.passed() { "ok" } else { "bad" },
+                escape(&check.command),
+                check.duration_ms,
+                escape(&check.output_tail)
+            ));
+        }
+    }
+    if !bundle.not_verified.is_empty() {
+        body.push_str("<h2>not verified</h2>\n<ul>\n");
+        for item in &bundle.not_verified {
+            body.push_str(&format!("<li>{}</li>\n", escape(item)));
+        }
+        body.push_str("</ul>\n");
+    }
+    if !bundle.files.is_empty() {
+        body.push_str("<h2>files</h2>\n<ul>\n");
+        for file in &bundle.files {
+            body.push_str(&format!(
+                "<li><code>{}</code> <span class=\"meta\">confidence {:.2}</span>{}</li>\n",
+                escape(&file.path),
+                file.confidence,
+                if file.note.is_empty() { String::new() } else { format!(" · {}", escape(&file.note)) }
+            ));
+        }
+        body.push_str("</ul>\n");
+    }
+    if !diff.trim().is_empty() {
+        body.push_str("<h2>diff</h2>\n<pre class=\"diff\">");
+        for line in diff.lines() {
+            let class = match line.chars().next() {
+                Some('+') if !line.starts_with("+++") => "add",
+                Some('-') if !line.starts_with("---") => "del",
+                Some('@') => "hunk",
+                _ => "",
+            };
+            body.push_str(&format!("<span class=\"{class}\">{}</span>\n", escape(line)));
+        }
+        body.push_str("</pre>\n");
+    }
+    body.push_str("<p class=\"meta\">made with noah · shepherd's evidence, not a summary of it</p>\n");
+
+    let html = format!(
+        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{}</title>\n<style>\n{}\n</style></head>\n<body><main>\n{body}</main></body></html>\n",
+        escape(&bundle.title),
+        SHARE_PAGE_STYLE
+    );
+    let directory = project_files::path(root, project_files::EVIDENCE);
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(format!("{}.html", bundle.id));
+    std::fs::write(&path, html)?;
+    Ok(path)
+}
+
+// The page follows shepherd's interface rules: layered blacks, thin
+// lowercase type, and one color that appears only where a claim is backed.
+const SHARE_PAGE_STYLE: &str = "\
+:root{color-scheme:dark}\
+body{margin:0;background:#070909;color:#d6e0d2;font:300 15px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}\
+main{max-width:820px;margin:0 auto;padding:56px 24px 96px}\
+h1{font-weight:300;font-size:30px;letter-spacing:-.01em;margin:0 0 6px}\
+h2{font-weight:300;font-size:13px;letter-spacing:.08em;color:#8a9a8e;margin:36px 0 10px}\
+p{margin:0 0 12px}\
+.meta{color:#8a9a8e;font-size:13px}\
+ul{padding-left:18px;margin:0}\
+li{margin:4px 0}\
+.claims{list-style:none;padding:0}\
+.mark{display:inline-block;width:18px}\
+.ok .mark{color:#9fd4a8}\
+.bad .mark{color:#c07a74}\
+.grounds{color:#8a9a8e;font-size:12px}\
+code{font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#0f1412;padding:1px 5px;border-radius:3px}\
+details{border:1px solid #121714;border-radius:4px;padding:8px 12px;margin:6px 0;background:#0b0f0d}\
+summary{cursor:pointer;color:#b9beb7}\
+pre{margin:10px 0 0;padding:12px;background:#080d0b;border-radius:4px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#b9beb7;white-space:pre}\
+pre.diff{padding:14px 16px}\
+.add{color:#a8bf8f}\
+.del{color:#c07a74}\
+.hunk{color:#7f9fb0}\
+span.ok{color:#9fd4a8}\
+span.bad{color:#c07a74}\
+@media(max-width:560px){main{padding:32px 16px 64px}h1{font-size:24px}}";
+
 fn write_audit_report(root: &Path) -> anyhow::Result<PathBuf> {
     let provenance_log = project_files::path(root, project_files::PROVENANCE);
     let integrity = provenance::verify(&provenance_log)?;
