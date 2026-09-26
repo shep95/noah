@@ -1,7 +1,9 @@
 pub mod adblock;
 pub mod checks;
 pub mod duplicates;
+pub mod geo;
 pub mod health;
+pub mod intel;
 pub mod startup;
 
 use anyhow::{Context as _, Result, bail};

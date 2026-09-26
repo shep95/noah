@@ -2050,6 +2050,15 @@ impl Workspace {
         }
 
         cx.on_focus_lost(window, |this, window, cx| {
+            // Every workspace held in this window hears the window lose
+            // focus. Only the one being shown may take it back: a hidden one
+            // would focus a pane that isn't drawn, and no key would reach
+            // anything afterwards.
+            let shown = Workspace::for_window(window, cx)
+                .is_some_and(|shown| shown.entity_id() == cx.entity_id());
+            if !shown {
+                return;
+            }
             let focus_handle = window
                 .focus_lost_restore_target(cx)
                 .unwrap_or_else(|| this.fallback_focus_handle(window, cx));

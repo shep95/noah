@@ -167,7 +167,7 @@ fn is_loopback_address(address: &str) -> bool {
 
 /// Splits `0.0.0.0:22`, `[::]:22`, `*:22`, `127.0.0.53%lo:53` or `[fe80::1%eth0]:546` into the
 /// address (without brackets or interface suffix) and port.
-fn parse_socket_address(text: &str) -> Option<(String, u16)> {
+pub(crate) fn parse_socket_address(text: &str) -> Option<(String, u16)> {
     let (address, port) = text.rsplit_once(':')?;
     let port = port.parse::<u16>().ok()?;
     let address = address.trim_start_matches('[').trim_end_matches(']');

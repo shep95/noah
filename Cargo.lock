@@ -11624,6 +11624,8 @@ dependencies = [
  "anyhow",
  "chrono",
  "dirs",
+ "flate2",
+ "libc",
  "log",
  "serde_json",
  "sha2",

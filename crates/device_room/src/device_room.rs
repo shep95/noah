@@ -1,6 +1,8 @@
 //! The device room: this computer's security and health, the files it holds
 //! twice, what starts with it, and an ad blocker that covers every app.
 
+use std::collections::HashSet;
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,14 +12,20 @@ use anyhow::Context as _;
 use fs::{Fs, RemoveOptions};
 use futures::AsyncReadExt as _;
 use gpui::{
-    Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels, PromptLevel,
-    SharedString, Task, WeakEntity, Window, actions, px,
+    Action, App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
+    PromptLevel, SharedString, Task, WeakEntity, Window, actions, canvas, fill, outline, point,
+    px, size,
 };
 use http_client::{AsyncBody, HttpClient, Method, Request};
 use noah_device::adblock;
 use noah_device::checks::{Category, Check, ListeningPort, Status};
 use noah_device::duplicates::{DuplicateGroup, ScanProgress};
+use noah_device::geo::{self, Country};
 use noah_device::health::HealthSnapshot;
+use noah_device::intel::{
+    self, AppInventory, BluetoothReport, DataFlow, DestinationKind, LocationReport, Neighbour,
+    TrafficReport, Watcher, WifiReport,
+};
 use noah_device::startup::StartupItem;
 use ui::{Divider, Tooltip, prelude::*};
 use util::ResultExt as _;
@@ -35,6 +43,16 @@ actions!(
 );
 
 const HEALTH_INTERVAL: Duration = Duration::from_secs(5);
+/// How often the live connections are read again while the room is open.
+const TRAFFIC_INTERVAL: Duration = Duration::from_secs(20);
+/// Two columns need this much window; narrower stacks everything.
+const TWO_COLUMN_WIDTH: Pixels = px(1040.);
+const FLOWS_SHOWN: usize = 12;
+const APPS_SHOWN: usize = 30;
+const NEARBY_SHOWN: usize = 10;
+const WATCHERS_SHOWN: usize = 10;
+/// The only outbound request the room ever makes, and only when asked.
+const PUBLIC_ADDRESS_URL: &str = "https://api64.ipify.org";
 /// Files smaller than this are skipped when looking for duplicates; tiny
 /// copies free almost nothing and there are very many of them.
 const DUPLICATE_MIN_SIZE: u64 = 64 * 1024;
@@ -66,6 +84,80 @@ enum AdBlocker {
     Working(SharedString),
 }
 
+/// Everything the intelligence desk shows, gathered together off the
+/// foreground thread.
+struct Intel {
+    traffic: TrafficReport,
+    apps: AppInventory,
+    wifi: WifiReport,
+    neighbours: Vec<Neighbour>,
+    bluetooth: BluetoothReport,
+    location: LocationReport,
+    startup: Vec<StartupItem>,
+    ports: Vec<ListeningPort>,
+    watchers: Vec<Watcher>,
+}
+
+impl Intel {
+    fn gather() -> Self {
+        // Each source is its own set of commands; together they take a
+        // while, so they run side by side.
+        let (traffic, apps, wifi, bluetooth, location, startup, ports) =
+            std::thread::scope(|scope| {
+                let traffic = scope.spawn(intel::traffic_report);
+                let apps = scope.spawn(intel::installed_apps);
+                let wifi = scope.spawn(intel::wifi_report);
+                let bluetooth = scope.spawn(intel::bluetooth_report);
+                let location = scope.spawn(intel::location_report);
+                let startup = scope.spawn(noah_device::startup::startup_items);
+                let ports = scope.spawn(noah_device::checks::listening_ports);
+                (
+                    traffic.join().unwrap_or_default(),
+                    apps.join().unwrap_or_default(),
+                    wifi.join().unwrap_or_default(),
+                    bluetooth.join().unwrap_or_default(),
+                    location.join().unwrap_or_default(),
+                    startup.join().unwrap_or_default(),
+                    ports.join().unwrap_or_default(),
+                )
+            });
+        let neighbours = intel::neighbours(wifi.gateway);
+        let watchers = intel::watchers(&traffic, &startup, &ports, &bluetooth, &wifi);
+        Self {
+            traffic,
+            apps,
+            wifi,
+            neighbours,
+            bluetooth,
+            location,
+            startup,
+            ports,
+            watchers,
+        }
+    }
+
+    fn refresh_traffic(&mut self, traffic: TrafficReport) {
+        self.traffic = traffic;
+        self.watchers = intel::watchers(
+            &self.traffic,
+            &self.startup,
+            &self.ports,
+            &self.bluetooth,
+            &self.wifi,
+        );
+    }
+}
+
+enum PublicAddress {
+    Unknown,
+    Looking,
+    Known {
+        address: IpAddr,
+        country: Option<Country>,
+    },
+    Failed(SharedString),
+}
+
 pub struct DevicePanel {
     focus_handle: FocusHandle,
     fs: Arc<dyn Fs>,
@@ -82,8 +174,17 @@ pub struct DevicePanel {
     ad_blocker: AdBlocker,
     message: Option<SharedString>,
     show_all_startup: bool,
+    intel: Option<Intel>,
+    expanded_flows: HashSet<String>,
+    show_all_flows: bool,
+    show_all_apps: bool,
+    show_all_watchers: bool,
+    public_address: PublicAddress,
     _health_task: Option<Task<()>>,
     _checks_task: Option<Task<()>>,
+    _intel_task: Option<Task<()>>,
+    _traffic_task: Option<Task<()>>,
+    _public_address_task: Option<Task<()>>,
 }
 
 impl DevicePanel {
@@ -110,8 +211,17 @@ impl DevicePanel {
                 ad_blocker: AdBlocker::Checking,
                 message: None,
                 show_all_startup: false,
+                intel: None,
+                expanded_flows: HashSet::new(),
+                show_all_flows: false,
+                show_all_apps: false,
+                show_all_watchers: false,
+                public_address: PublicAddress::Unknown,
                 _health_task: None,
                 _checks_task: None,
+                _intel_task: None,
+                _traffic_task: None,
+                _public_address_task: None,
             })
         })
     }
@@ -141,9 +251,78 @@ impl DevicePanel {
         }));
     }
 
+    /// Gathers the intelligence desk in the background and, while the room
+    /// stays open, reads the live connections again every so often.
+    fn gather_intel(&mut self, cx: &mut Context<Self>) {
+        self._intel_task = Some(cx.spawn(async move |this, cx| {
+            let intel = cx.background_spawn(async { Intel::gather() }).await;
+            this.update(cx, |this, cx| {
+                this.intel = Some(intel);
+                cx.notify();
+                this.start_traffic_monitor(cx);
+            })
+            .log_err();
+        }));
+    }
+
+    fn start_traffic_monitor(&mut self, cx: &mut Context<Self>) {
+        self._traffic_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(TRAFFIC_INTERVAL).await;
+                let still_open = this
+                    .read_with(cx, |this, _| this.active)
+                    .unwrap_or(false);
+                if !still_open {
+                    break;
+                }
+                let traffic = cx.background_spawn(async { intel::traffic_report() }).await;
+                let updated = this
+                    .update(cx, |this, cx| {
+                        if let Some(intel) = this.intel.as_mut() {
+                            intel.refresh_traffic(traffic);
+                            cx.notify();
+                        }
+                    })
+                    .is_ok();
+                if !updated {
+                    break;
+                }
+            }
+        }));
+    }
+
+    /// Asks one address service what this device looks like from outside.
+    /// This is the room's only request to the internet, and it only happens
+    /// on this click.
+    fn find_public_address(&mut self, cx: &mut Context<Self>) {
+        self.public_address = PublicAddress::Looking;
+        cx.notify();
+        let http_client = self.http_client.clone();
+        self._public_address_task = Some(cx.spawn(async move |this, cx| {
+            let result = download_text(http_client.as_ref(), PUBLIC_ADDRESS_URL).await;
+            let outcome = match result {
+                Ok(text) => match text.trim().parse::<IpAddr>() {
+                    Ok(address) => PublicAddress::Known {
+                        address,
+                        country: geo::country_of(address),
+                    },
+                    Err(_) => PublicAddress::Failed("the address service gave an odd answer".into()),
+                },
+                Err(error) => PublicAddress::Failed(format!("{error:#}").into()),
+            };
+            this.update(cx, |this, cx| {
+                this.public_address = outcome;
+                cx.notify();
+            })
+            .log_err();
+        }));
+    }
+
     fn run_checks(&mut self, cx: &mut Context<Self>) {
         self.checks = None;
         self.message = None;
+        self.intel = None;
+        self.gather_intel(cx);
         self.refresh_ad_blocker(cx);
         self._checks_task = Some(cx.spawn(async move |this, cx| {
             let (checks, ports, startup) = cx
@@ -394,6 +573,726 @@ impl DevicePanel {
             .log_err();
         })
         .detach();
+    }
+
+    fn render_desk_summary(&self, cx: &Context<Self>) -> impl IntoElement {
+        let border = cx.theme().colors().border_variant;
+        let Some(intel) = &self.intel else {
+            return v_flex()
+                .gap_1()
+                .p_2()
+                .rounded_md()
+                .border_1()
+                .border_color(border)
+                .child(Label::new("reading this device…").color(Color::Muted))
+                .child(muted(
+                    "connections, programs, wifi, bluetooth and what watches. Nothing leaves the device.",
+                ));
+        };
+        let programs = intel.traffic.flows.len();
+        let countries = intel.traffic.countries.len();
+        let watching: Vec<&Watcher> = intel
+            .watchers
+            .iter()
+            .filter(|watcher| watcher.status <= Status::Warning)
+            .collect();
+        let headline = if programs == 0 {
+            "nothing on this device is talking to the internet right now".to_string()
+        } else {
+            format!(
+                "{programs} {} talking to {} across {countries} {}",
+                plural(programs, "program is", "programs are"),
+                format!(
+                    "{} {}",
+                    intel.traffic.total_connections,
+                    plural(intel.traffic.total_connections, "place", "places")
+                ),
+                plural(countries, "country", "countries")
+            )
+        };
+        let (watch_line, watch_color) = if watching.is_empty() {
+            ("no tracker, telemetry or remote-control traffic seen".to_string(), Color::Success)
+        } else {
+            (
+                format!(
+                    "{} {} worth a look",
+                    watching.len(),
+                    plural(watching.len(), "thing is", "things are")
+                ),
+                Color::Warning,
+            )
+        };
+        v_flex()
+            .gap_1()
+            .p_2()
+            .rounded_md()
+            .border_1()
+            .border_color(border)
+            .child(Label::new(headline))
+            .child(Label::new(watch_line).size(LabelSize::Small).color(watch_color))
+            .when_some(intel.traffic.note.clone(), |this, note| this.child(muted(note)))
+    }
+
+    fn render_watchers(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut section = section("who is watching").child(muted(
+            "programs reporting to trackers or telemetry, remote-control tools, doors open to the \
+             network, autostarts from odd places, and trackers within reach.",
+        ));
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        if intel.watchers.is_empty() {
+            return section.child(
+                Label::new("nothing is watching this device that noah can see")
+                    .size(LabelSize::Small)
+                    .color(Color::Success),
+            );
+        }
+        let shown = if self.show_all_watchers {
+            intel.watchers.len()
+        } else {
+            WATCHERS_SHOWN
+        };
+        for watcher in intel.watchers.iter().take(shown) {
+            section = section.child(render_finding(watcher.status, &watcher.title, &watcher.detail));
+        }
+        if intel.watchers.len() > WATCHERS_SHOWN {
+            section = section.child(
+                Button::new(
+                    "device-watchers-toggle",
+                    if self.show_all_watchers {
+                        "show fewer".to_string()
+                    } else {
+                        format!("show all {}", intel.watchers.len())
+                    },
+                )
+                .label_size(LabelSize::Small)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.show_all_watchers = !this.show_all_watchers;
+                    cx.notify();
+                })),
+            );
+        }
+        section
+    }
+
+    /// The world, with a dot where this device's data goes and a ring where
+    /// the device is, once it has asked.
+    fn render_world_map(&self, cx: &Context<Self>) -> impl IntoElement {
+        let colors = cx.theme().colors();
+        let status = cx.theme().status();
+        let land = colors.text_muted.opacity(0.28);
+        let accent = colors.text_accent;
+        let warning = status.warning;
+        let here_color = colors.text;
+        let destinations: Vec<(f32, f32, usize, bool)> = self
+            .intel
+            .as_ref()
+            .map(|intel| {
+                intel
+                    .traffic
+                    .countries
+                    .iter()
+                    .filter_map(|(country, count)| {
+                        let (latitude, longitude) = country.centroid?;
+                        let watched = intel.traffic.flows.iter().any(|flow| {
+                            flow.destinations.iter().any(|destination| {
+                                destination.kind.is_watching()
+                                    && destination.country.is_some_and(|c| c.code == country.code)
+                            })
+                        });
+                        Some((latitude, longitude, *count, watched))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let here = match &self.public_address {
+            PublicAddress::Known {
+                country: Some(country),
+                ..
+            } => country.centroid,
+            _ => None,
+        };
+        let most = destinations
+            .iter()
+            .map(|(_, _, count, _)| *count)
+            .max()
+            .unwrap_or(1)
+            .max(1) as f32;
+        canvas(
+            |_, _, _| (),
+            move |bounds: Bounds<Pixels>, _, window, _| {
+                // The map keeps a 2:1 shape inside whatever it is given.
+                let width = bounds.size.width.min(bounds.size.height * 2.);
+                let height = width / 2.;
+                let origin = point(
+                    bounds.origin.x + (bounds.size.width - width) / 2.,
+                    bounds.origin.y + (bounds.size.height - height) / 2.,
+                );
+                let cell_width = width / geo::WORLD_DOTS_COLUMNS as f32;
+                let cell_height = height / geo::WORLD_DOTS_ROWS as f32;
+                let dot = cell_width.min(cell_height) * 0.55;
+                for (row, line) in geo::WORLD_DOTS.lines().enumerate() {
+                    for (column, cell) in line.bytes().enumerate() {
+                        if cell != b'#' {
+                            continue;
+                        }
+                        let x = origin.x + cell_width * column as f32 + (cell_width - dot) / 2.;
+                        let y = origin.y + cell_height * row as f32 + (cell_height - dot) / 2.;
+                        window.paint_quad(
+                            fill(Bounds::new(point(x, y), size(dot, dot)), land)
+                                .corner_radii(dot / 2.),
+                    );
+                    }
+                }
+                let place = |latitude: f32, longitude: f32| {
+                    point(
+                        origin.x + width * ((longitude + 180.) / 360.),
+                        origin.y + height * ((90. - latitude) / 180.),
+                    )
+                };
+                for (latitude, longitude, count, watched) in &destinations {
+                    let centre = place(*latitude, *longitude);
+                    let radius = px(3.) + px(6.) * ((*count as f32).ln_1p() / most.ln_1p());
+                    let color = if *watched { warning } else { accent };
+                    window.paint_quad(
+                        fill(
+                            Bounds::new(
+                                point(centre.x - radius, centre.y - radius),
+                                size(radius * 2., radius * 2.),
+                            ),
+                            color.opacity(0.9),
+                        )
+                        .corner_radii(radius),
+                    );
+                }
+                if let Some((latitude, longitude)) = here {
+                    let centre = place(latitude, longitude);
+                    let radius = px(7.);
+                    window.paint_quad(
+                        outline(
+                            Bounds::new(
+                                point(centre.x - radius, centre.y - radius),
+                                size(radius * 2., radius * 2.),
+                            ),
+                            here_color,
+                            gpui::BorderStyle::Solid,
+                        )
+                        .corner_radii(radius),
+                    );
+                }
+            },
+        )
+        .w_full()
+        .h(px(250.))
+    }
+
+    fn render_where_data_goes(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut section = section("where your data goes").child(muted(
+            "every live connection, placed in the country its address was given to. Larger dots \
+             mean more connections; amber means a tracker, telemetry or remote-control service.",
+        ));
+        section = section.child(self.render_world_map(cx));
+        let Some(intel) = &self.intel else {
+            return section.child(muted("reading connections…"));
+        };
+        if intel.traffic.countries.is_empty() {
+            return section.child(muted("no connections outside this network right now"));
+        }
+        let mut legend = h_flex().flex_wrap().gap_x_3().gap_y_1();
+        for (country, count) in intel.traffic.countries.iter().take(12) {
+            legend = legend.child(
+                h_flex()
+                    .gap_1()
+                    .child(
+                        div()
+                            .size(px(6.))
+                            .rounded_full()
+                            .bg(cx.theme().colors().text_accent),
+                    )
+                    .child(muted(format!("{} · {count}", country.name))),
+            );
+        }
+        section = section.child(legend);
+        section = section.child(self.render_public_address(cx));
+        section
+    }
+
+    fn render_public_address(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        match &self.public_address {
+            PublicAddress::Unknown => h_flex()
+                .gap_2()
+                .items_center()
+                .child(
+                    Button::new("device-public-address", "show where this device appears to be")
+                        .label_size(LabelSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| this.find_public_address(cx))),
+                )
+                .child(muted("asks one address service; the room's only request out"))
+                .into_any_element(),
+            PublicAddress::Looking => muted("asking…").into_any_element(),
+            PublicAddress::Known { address, country } => v_flex()
+                .child(
+                    Label::new(format!(
+                        "from outside, this device is {address}{}",
+                        country
+                            .map(|country| format!(" in {}", country.name))
+                            .unwrap_or_default()
+                    ))
+                    .size(LabelSize::Small),
+                )
+                .child(muted(
+                    "that address is what every site and service sees, and it places the device \
+                     in a city-sized area. A VPN changes it.",
+                ))
+                .into_any_element(),
+            PublicAddress::Failed(reason) => v_flex()
+                .child(muted(format!("couldn't ask: {reason}")))
+                .child(
+                    Button::new("device-public-address-retry", "try again")
+                        .label_size(LabelSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| this.find_public_address(cx))),
+                )
+                .into_any_element(),
+        }
+    }
+
+    fn render_flows(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut section = section("programs talking to the internet").child(muted(
+            "each program with a live connection, and who is on the other end.",
+        ));
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        if intel.traffic.flows.is_empty() {
+            return section.child(muted(
+                intel
+                    .traffic
+                    .note
+                    .clone()
+                    .unwrap_or_else(|| "no program has a connection open right now".to_string()),
+            ));
+        }
+        let shown = if self.show_all_flows {
+            intel.traffic.flows.len()
+        } else {
+            FLOWS_SHOWN
+        };
+        for (index, flow) in intel.traffic.flows.iter().take(shown).enumerate() {
+            section = section.child(self.render_flow(index, flow, cx));
+        }
+        if intel.traffic.flows.len() > FLOWS_SHOWN {
+            section = section.child(
+                Button::new(
+                    "device-flows-toggle",
+                    if self.show_all_flows {
+                        "show fewer".to_string()
+                    } else {
+                        format!("show all {}", intel.traffic.flows.len())
+                    },
+                )
+                .label_size(LabelSize::Small)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.show_all_flows = !this.show_all_flows;
+                    cx.notify();
+                })),
+            );
+        }
+        section
+    }
+
+    fn render_flow(&self, index: usize, flow: &DataFlow, cx: &mut Context<Self>) -> impl IntoElement {
+        let expanded = self.expanded_flows.contains(&flow.process);
+        let watching = flow
+            .destinations
+            .iter()
+            .filter(|destination| destination.kind.is_watching())
+            .count();
+        let countries = flow.countries();
+        let country_text = match countries.len() {
+            0 => String::new(),
+            1..=3 => countries
+                .iter()
+                .map(|country| country.name)
+                .collect::<Vec<_>>()
+                .join(", "),
+            count => format!("{count} countries"),
+        };
+        let process = flow.process.clone();
+        let mut entry = v_flex().gap_0p5().py_1().child(
+            h_flex()
+                .id(("device-flow", index))
+                .gap_2()
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if !this.expanded_flows.remove(&process) {
+                        this.expanded_flows.insert(process.clone());
+                    }
+                    cx.notify();
+                }))
+                .child(
+                    Icon::new(if expanded {
+                        IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
+                    })
+                    .size(IconSize::XSmall)
+                    .color(Color::Muted),
+                )
+                .child(Label::new(flow.process.clone()).size(LabelSize::Small))
+                .when(watching > 0, |this| {
+                    this.child(
+                        Label::new(format!(
+                            "{watching} {}",
+                            plural(watching, "watcher", "watchers")
+                        ))
+                        .size(LabelSize::XSmall)
+                        .color(Color::Warning),
+                    )
+                })
+                .child(div().flex_1())
+                .child(muted(format!(
+                    "{} {} · {} {}{}",
+                    flow.connection_count(),
+                    plural(flow.connection_count(), "connection", "connections"),
+                    flow.destinations.len(),
+                    plural(flow.destinations.len(), "place", "places"),
+                    if country_text.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" · {country_text}")
+                    }
+                ))),
+        );
+        if expanded {
+            if let Some(exe) = &flow.exe {
+                entry = entry.child(muted(exe.display().to_string()));
+            }
+            for destination in &flow.destinations {
+                let kind_color = match destination.kind {
+                    DestinationKind::Advertising | DestinationKind::RemoteAccess => Color::Warning,
+                    DestinationKind::Telemetry => Color::Warning,
+                    _ => Color::Muted,
+                };
+                entry = entry.child(
+                    h_flex()
+                        .gap_2()
+                        .pl_5()
+                        .child(Label::new(destination.name()).size(LabelSize::XSmall))
+                        .child(
+                            Label::new(destination.kind.label())
+                                .size(LabelSize::XSmall)
+                                .color(kind_color),
+                        )
+                        .child(div().flex_1())
+                        .child(muted(format!(
+                            "{}:{}{} · {}",
+                            destination.address,
+                            destination.port,
+                            destination
+                                .country
+                                .map(|country| format!(" · {}", country.name))
+                                .unwrap_or_default(),
+                            if destination.connections == 1 {
+                                "1 connection".to_string()
+                            } else {
+                                format!("{} connections", destination.connections)
+                            }
+                        ))),
+                );
+            }
+        }
+        entry
+    }
+
+    fn render_wifi(&self) -> impl IntoElement {
+        let mut section = section("wifi intelligence");
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        let wifi = &intel.wifi;
+        if let Some(note) = &wifi.note {
+            section = section.child(muted(note.clone()));
+        }
+        if let Some(link) = &wifi.connected {
+            let mut details = Vec::new();
+            if let Some(security) = &link.security {
+                details.push(security.clone());
+            }
+            if let Some(channel) = &link.channel {
+                details.push(format!("channel {channel}"));
+            }
+            if let Some(frequency) = &link.frequency {
+                details.push(frequency.clone());
+            }
+            if let Some(signal) = &link.signal {
+                details.push(format!("signal {signal}"));
+            }
+            if let Some(rate) = &link.rate {
+                details.push(rate.clone());
+            }
+            section = section
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(Label::new(format!("on \"{}\"", link.ssid)).size(LabelSize::Small))
+                        .child(div().flex_1())
+                        .child(muted(details.join(" · "))),
+                )
+                .when_some(link.bssid.clone(), |this, bssid| {
+                    this.child(muted(format!("access point {bssid}")))
+                });
+        } else if wifi.note.is_none() {
+            section = section.child(muted("not on wifi"));
+        }
+        let mut identity = Vec::new();
+        if let Some(address) = wifi.local_address {
+            identity.push(format!("this device {address}"));
+        }
+        if let Some(gateway) = wifi.gateway {
+            identity.push(format!("router {gateway}"));
+        }
+        if let Some(mac) = &wifi.mac_address {
+            identity.push(format!(
+                "wifi address {mac}{}",
+                match wifi.mac_randomized {
+                    Some(true) => " (random)",
+                    Some(false) => " (real hardware address)",
+                    None => "",
+                }
+            ));
+        }
+        if !identity.is_empty() {
+            section = section.child(muted(identity.join(" · ")));
+        }
+        if !wifi.dns_servers.is_empty() {
+            let servers = wifi
+                .dns_servers
+                .iter()
+                .map(|server| match intel::dns_owner(*server) {
+                    Some(owner) => format!("{server} ({owner})"),
+                    None => server.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            section = section.child(muted(format!("DNS {servers}")));
+        }
+        for finding in &wifi.findings {
+            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+        }
+        if !wifi.nearby.is_empty() {
+            section = section.child(
+                Label::new(format!("{} other networks in range", wifi.nearby.len()))
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
+            );
+            for network in wifi.nearby.iter().take(NEARBY_SHOWN) {
+                section = section.child(
+                    h_flex()
+                        .gap_2()
+                        .child(Label::new(network.ssid.clone()).size(LabelSize::XSmall))
+                        .child(div().flex_1())
+                        .child(muted(format!(
+                            "{}{}{}",
+                            network.security.clone().unwrap_or_default(),
+                            network
+                                .channel
+                                .as_ref()
+                                .map(|channel| format!(" · ch {channel}"))
+                                .unwrap_or_default(),
+                            network
+                                .signal
+                                .map(|signal| format!(" · {signal}"))
+                                .unwrap_or_default()
+                        ))),
+                );
+            }
+        }
+        section
+    }
+
+    fn render_neighbours(&self) -> impl IntoElement {
+        let mut section = section("on your network").child(muted(
+            "devices this machine has exchanged packets with lately. It shows who has been \
+             talking, not everyone who is there.",
+        ));
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        if intel.neighbours.is_empty() {
+            return section.child(muted("no other device has spoken to this one recently"));
+        }
+        for neighbour in intel.neighbours.iter().take(24) {
+            section = section.child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        Label::new(neighbour.vendor.unwrap_or("unknown maker").to_string())
+                            .size(LabelSize::XSmall),
+                    )
+                    .when(neighbour.is_gateway, |this| {
+                        this.child(
+                            Label::new("router")
+                                .size(LabelSize::XSmall)
+                                .color(Color::Accent),
+                        )
+                    })
+                    .child(div().flex_1())
+                    .child(muted(format!("{} · {}", neighbour.address, neighbour.mac))),
+            );
+        }
+        section
+    }
+
+    fn render_bluetooth(&self) -> impl IntoElement {
+        let mut section = section("bluetooth");
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        let bluetooth = &intel.bluetooth;
+        if let Some(note) = &bluetooth.note {
+            return section.child(muted(note.clone()));
+        }
+        section = section.child(muted(match bluetooth.powered {
+            Some(true) => "radio on",
+            Some(false) => "radio off",
+            None => "radio state unknown",
+        }));
+        for finding in &bluetooth.findings {
+            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+        }
+        if bluetooth.devices.is_empty() {
+            section = section.child(muted("no devices known or in range"));
+        }
+        for device in bluetooth.devices.iter().take(20) {
+            let state = match (device.connected, device.paired) {
+                (true, _) => "connected",
+                (false, true) => "paired",
+                (false, false) => "seen",
+            };
+            section = section.child(
+                h_flex()
+                    .gap_2()
+                    .child(Label::new(device.name.clone()).size(LabelSize::XSmall))
+                    .when_some(device.kind.clone(), |this, kind| this.child(muted(kind)))
+                    .child(div().flex_1())
+                    .child(muted(format!(
+                        "{state}{}",
+                        device
+                            .address
+                            .as_ref()
+                            .map(|address| format!(" · {address}"))
+                            .unwrap_or_default()
+                    ))),
+            );
+        }
+        section
+    }
+
+    fn render_location(&self) -> impl IntoElement {
+        let mut section = section("location and identity").child(muted(
+            "what this device gives away about where and whose it is, without anyone asking.",
+        ));
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        let location = &intel.location;
+        let mut facts = Vec::new();
+        if let Some(host_name) = &location.host_name {
+            facts.push(format!("named {host_name}"));
+        }
+        if let Some(timezone) = &location.timezone {
+            facts.push(format!("clock set to {timezone}"));
+        }
+        if let Some(locale) = &location.locale {
+            facts.push(format!("language {locale}"));
+        }
+        if !facts.is_empty() {
+            section = section.child(muted(facts.join(" · ")));
+        }
+        for finding in &location.findings {
+            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+        }
+        section
+    }
+
+    fn render_apps(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut section = section("programs on this device");
+        let Some(intel) = &self.intel else {
+            return section.child(muted("looking…"));
+        };
+        let inventory = &intel.apps;
+        if let Some(note) = &inventory.note {
+            section = section.child(muted(note.clone()));
+        }
+        let mut sources: Vec<(String, usize)> = Vec::new();
+        for app in &inventory.apps {
+            match sources.iter_mut().find(|(source, _)| *source == app.source) {
+                Some((_, count)) => *count += 1,
+                None => sources.push((app.source.clone(), 1)),
+            }
+        }
+        let summary = sources
+            .iter()
+            .map(|(source, count)| format!("{count} from {source}"))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        section = section.child(muted(format!(
+            "{} {}{}{}",
+            inventory.apps.len(),
+            plural(inventory.apps.len(), "program", "programs"),
+            if summary.is_empty() {
+                String::new()
+            } else {
+                format!(": {summary}")
+            },
+            inventory
+                .system_packages
+                .map(|count| format!(" · {count} system packages besides"))
+                .unwrap_or_default()
+        )));
+        let shown = if self.show_all_apps {
+            inventory.apps.len()
+        } else {
+            APPS_SHOWN
+        };
+        for app in inventory.apps.iter().take(shown) {
+            let mut detail = Vec::new();
+            if let Some(version) = &app.version {
+                detail.push(version.clone());
+            }
+            if let Some(publisher) = &app.publisher {
+                detail.push(publisher.clone());
+            }
+            if let Some(installed_on) = &app.installed_on {
+                detail.push(format!("installed {installed_on}"));
+            }
+            section = section.child(
+                h_flex()
+                    .gap_2()
+                    .child(Label::new(app.name.clone()).size(LabelSize::XSmall).truncate())
+                    .child(div().flex_1())
+                    .child(muted(detail.join(" · "))),
+            );
+        }
+        if inventory.apps.len() > APPS_SHOWN {
+            section = section.child(
+                Button::new(
+                    "device-apps-toggle",
+                    if self.show_all_apps {
+                        "show fewer".to_string()
+                    } else {
+                        format!("show all {}", inventory.apps.len())
+                    },
+                )
+                .label_size(LabelSize::Small)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.show_all_apps = !this.show_all_apps;
+                    cx.notify();
+                })),
+            );
+        }
+        section
     }
 
     fn all_findings(&self) -> Vec<&Check> {
@@ -792,13 +1691,34 @@ async fn download_text(http_client: &dyn HttpClient, url: &str) -> anyhow::Resul
     Ok(body)
 }
 
-fn render_check(check: &Check) -> impl IntoElement {
-    let (icon, color) = match check.status {
+fn status_icon(status: Status) -> (IconName, Color) {
+    match status {
         Status::Bad => (IconName::XCircle, Color::Error),
         Status::Warning => (IconName::Warning, Color::Warning),
         Status::Unknown => (IconName::Info, Color::Muted),
         Status::Good => (IconName::Check, Color::Success),
-    };
+    }
+}
+
+/// A finding from the intelligence desk, drawn like a check.
+fn render_finding(status: Status, title: &str, detail: &str) -> impl IntoElement {
+    let (icon, color) = status_icon(status);
+    h_flex()
+        .items_start()
+        .gap_2()
+        .py_0p5()
+        .child(Icon::new(icon).size(IconSize::Small).color(color))
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(Label::new(title.to_string()).size(LabelSize::Small))
+                .when(!detail.is_empty(), |this| this.child(muted(detail.to_string()))),
+        )
+}
+
+fn render_check(check: &Check) -> impl IntoElement {
+    let (icon, color) = status_icon(check.status);
     h_flex()
         .items_start()
         .gap_2()
@@ -939,7 +1859,46 @@ impl Focusable for DevicePanel {
 }
 
 impl Render for DevicePanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let two_columns = window.viewport_size().width >= TWO_COLUMN_WIDTH;
+        // The desk reads left to right: what is happening now, then what the
+        // device is and has, then the housekeeping.
+        let left = v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_1()
+            .child(self.render_desk_summary(cx))
+            .child(self.render_where_data_goes(cx))
+            .child(Divider::horizontal())
+            .child(self.render_watchers(cx))
+            .child(Divider::horizontal())
+            .child(self.render_flows(cx))
+            .child(Divider::horizontal())
+            .child(self.render_wifi())
+            .child(Divider::horizontal())
+            .child(self.render_neighbours())
+            .child(Divider::horizontal())
+            .child(self.render_bluetooth())
+            .child(Divider::horizontal())
+            .child(self.render_location());
+        let right = v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_1()
+            .child(self.render_summary(cx))
+            .child(self.render_checks())
+            .child(Divider::horizontal())
+            .child(self.render_apps(cx))
+            .child(Divider::horizontal())
+            .child(self.render_health(cx))
+            .child(Divider::horizontal())
+            .child(self.render_ports())
+            .child(Divider::horizontal())
+            .child(self.render_startup(cx))
+            .child(Divider::horizontal())
+            .child(self.render_ad_blocker(cx))
+            .child(Divider::horizontal())
+            .child(self.render_duplicates(cx));
         v_flex()
             .id("device-room")
             .key_context("DevicePanel")
@@ -964,18 +1923,13 @@ impl Render for DevicePanel {
             .when_some(self.message.clone(), |this, message| {
                 this.child(Label::new(message).size(LabelSize::Small).color(Color::Accent))
             })
-            .child(self.render_summary(cx))
-            .child(self.render_checks())
-            .child(Divider::horizontal())
-            .child(self.render_health(cx))
-            .child(Divider::horizontal())
-            .child(self.render_ad_blocker(cx))
-            .child(Divider::horizontal())
-            .child(self.render_duplicates(cx))
-            .child(Divider::horizontal())
-            .child(self.render_ports())
-            .child(Divider::horizontal())
-            .child(self.render_startup(cx))
+            .map(|this| {
+                if two_columns {
+                    this.child(h_flex().items_start().gap_6().child(left).child(right))
+                } else {
+                    this.child(left).child(Divider::horizontal()).child(right)
+                }
+            })
     }
 }
 
@@ -1033,9 +1987,12 @@ impl Panel for DevicePanel {
             self.start_health_monitor(cx);
             if self.checks.is_none() {
                 self.run_checks(cx);
+            } else if self.intel.is_some() {
+                self.start_traffic_monitor(cx);
             }
         } else if !active {
             self._health_task = None;
+            self._traffic_task = None;
         }
     }
 
