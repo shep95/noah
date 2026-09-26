@@ -1604,13 +1604,17 @@ pub fn open_noah_folder_in_active_window(
     let Some(window) = window else {
         return Task::ready(Err(anyhow!("noah has no window to open the room in")));
     };
-    match window.update(cx, |multi_workspace, window, cx| {
-        window.activate_window();
-        multi_workspace.open_noah_folder(folder, init, window, cx)
-    }) {
-        Ok(task) => task,
-        Err(error) => Task::ready(Err(error)),
-    }
+    // This is usually called from an action inside that same window's
+    // update, where a nested update of it fails, so the switch happens on
+    // the next turn of the loop.
+    cx.spawn(async move |cx| {
+        window
+            .update(cx, |multi_workspace, window, cx| {
+                window.activate_window();
+                multi_workspace.open_noah_folder(folder, init, window, cx)
+            })?
+            .await
+    })
 }
 
 /// What needs the person, across every window: decisions waiting on them,
@@ -4932,7 +4936,10 @@ impl Workspace {
         if let Some(item) = self.active_item(cx) {
             item.item_focus_handle(cx).focus(window, cx);
         } else {
-            log::error!("Could not find a focus target when switching focus to the center panes",);
+            // An empty pane still takes focus, so keys keep reaching the
+            // workspace when a room closes onto a project with nothing open.
+            let pane = self.active_pane().focus_handle(cx);
+            pane.focus(window, cx);
         }
     }
 
@@ -8867,7 +8874,7 @@ impl Workspace {
         }
         if self
             .room_center_override(cx)
-            .is_some_and(|(filled, _)| filled == position)
+            .is_some_and(|(filled, _, _)| filled == position)
         {
             return None;
         }
@@ -9113,7 +9120,20 @@ impl Workspace {
             })
             .size_full()
             .map(|this| match self.room_center_override(cx) {
-                Some((_, view)) => this.child(div().size_full().child(view)),
+                // The panel is tracked and keyed the way its dock would, so
+                // focus and the "Dock" bindings behave as if it were docked.
+                Some((_, focus_handle, view)) => this.child(
+                    div()
+                        .id("room-center")
+                        .size_full()
+                        .key_context({
+                            let mut key_context = KeyContext::new_with_defaults();
+                            key_context.add("Dock");
+                            key_context
+                        })
+                        .track_focus(&focus_handle)
+                        .child(view),
+                ),
                 None => this.child(self.center.render(
                     self.zoomed.as_ref(),
                     self.maximized_pane.as_ref(),
@@ -9139,7 +9159,7 @@ impl Workspace {
     /// where the editor panes would be, and its dock is not drawn at all, so
     /// the browser, mission control, the device room, and shepherd in
     /// asherin.chat, search and pages stand alone rather than beside a file.
-    fn room_center_override(&self, cx: &App) -> Option<(DockPosition, AnyView)> {
+    fn room_center_override(&self, cx: &App) -> Option<(DockPosition, FocusHandle, AnyView)> {
         if self.zoomed.is_some() {
             return None;
         }
@@ -9162,7 +9182,7 @@ impl Workspace {
                 "BrowserPanel" | "MissionControlPanel" | "DevicePanel"
             ) || (conversation_room && panel.persistent_name() == "AgentPanel");
             if fills {
-                return Some((dock.position(), panel.to_any()));
+                return Some((dock.position(), dock.focus_handle(cx), panel.to_any()));
             }
         }
         None

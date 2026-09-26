@@ -5116,7 +5116,7 @@ impl Focusable for AgentPanel {
     }
 }
 
-fn agent_panel_dock_position(cx: &App) -> DockPosition {
+pub(crate) fn agent_panel_dock_position(cx: &App) -> DockPosition {
     AgentSettings::get_global(cx).dock.into()
 }
 

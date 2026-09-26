@@ -383,14 +383,24 @@ impl Workspace {
             let Some(multi_workspace) = window.root::<crate::MultiWorkspace>().flatten() else {
                 return;
             };
-            let project = multi_workspace.read(cx).most_recent_workspace_where(cx, |workspace, cx| {
-                workspace.noah_room_folder(cx).is_none()
-            });
-            if let Some(project) = project {
-                multi_workspace.update(cx, |multi_workspace, cx| {
-                    multi_workspace.activate(project.clone(), None, window, cx);
+            // This workspace is mid-update, so it is skipped by handle rather
+            // than read; it is a room anyway, never the project.
+            let this_workspace = cx.entity_id();
+            let project = multi_workspace
+                .read(cx)
+                .most_recent_workspace_where(cx, |workspace, cx| {
+                    workspace.entity_id() != this_workspace
+                        && workspace.read(cx).noah_room_folder(cx).is_none()
                 });
-                project.update(cx, |project, cx| project.enter_room(room, window, cx));
+            if let Some(project) = project {
+                // Activating reads this workspace, which is mid-update here,
+                // so the switch waits for the update to finish.
+                window.defer(cx, move |window, cx| {
+                    multi_workspace.update(cx, |multi_workspace, cx| {
+                        multi_workspace.activate(project.clone(), None, window, cx);
+                    });
+                    project.update(cx, |project, cx| project.enter_room(room, window, cx));
+                });
                 return;
             }
         }

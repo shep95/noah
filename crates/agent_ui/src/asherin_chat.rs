@@ -334,18 +334,32 @@ pub(crate) fn open_room(
     // The room is a workspace in the window the person is using, beside
     // their project, never a window of its own. Panels load after the
     // workspace opens, so shepherd's is awaited before it is shown.
+    let side_panel = room_side_panel(&folder);
     let init: Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send> =
         Box::new(move |_workspace, window, cx| {
             cx.spawn_in(window, async move |workspace, cx| {
                 let mut then = then;
-                for _ in 0..100 {
+                for attempt in 0..100 {
                     let shown = workspace.update_in(cx, |workspace, window, cx| {
                         if workspace.panel::<AgentPanel>(cx).is_none() {
+                            return false;
+                        }
+                        // The room's side panel arrives a moment after the
+                        // workspace; it is worth a short wait, not a long one.
+                        let side_panel_missing = side_panel.is_some_and(|name| {
+                            !workspace.all_docks().into_iter().any(|dock| {
+                                dock.read(cx)
+                                    .panel_index_for_persistent_name(name, cx)
+                                    .is_some()
+                            })
+                        });
+                        if side_panel_missing && attempt < 40 {
                             return false;
                         }
                         let Some(panel) = workspace.focus_panel::<AgentPanel>(window, cx) else {
                             return false;
                         };
+                        arrange_room_docks(workspace, side_panel, window, cx);
                         if let Some(then) = then.take() {
                             then(workspace, panel, window, cx);
                         }
@@ -363,6 +377,50 @@ pub(crate) fn open_room(
             .detach_and_log_err(cx);
         });
     workspace::open_noah_folder_in_active_window(folder, init, cx).detach_and_log_err(cx);
+}
+
+/// The panel that stands beside shepherd's conversation in a room: the tree
+/// of chats in asherin.chat, the findings in asherin.search. Other rooms
+/// have the conversation alone.
+fn room_side_panel(folder: &Path) -> Option<&'static str> {
+    if folder == paths::chat_directory() {
+        Some("AsherinChatTree")
+    } else if folder == paths::search_directory() {
+        Some("AsherinSearchResults")
+    } else {
+        None
+    }
+}
+
+/// Like a chat app: the conversation fills the room, its side panel stands
+/// beside it, and every other dock (the project files, the terminal) is
+/// closed rather than crowding a room that isn't about code.
+fn arrange_room_docks(
+    workspace: &mut Workspace,
+    side_panel: Option<&'static str>,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    for dock in workspace.all_docks().map(Clone::clone) {
+        let (holds_agent, side_index) = {
+            let dock = dock.read(cx);
+            (
+                dock.panel_index_for_persistent_name("AgentPanel", cx)
+                    .is_some(),
+                side_panel.and_then(|name| dock.panel_index_for_persistent_name(name, cx)),
+            )
+        };
+        if holds_agent {
+            continue;
+        }
+        dock.update(cx, |dock, cx| match side_index {
+            Some(index) => {
+                dock.activate_panel(index, window, cx);
+                dock.set_open(true, window, cx);
+            }
+            None => dock.set_open(false, window, cx),
+        });
+    }
 }
 
 /// Bumped whenever a conversation's place in the tree changes in a way the

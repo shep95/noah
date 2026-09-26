@@ -873,14 +873,17 @@ impl MultiWorkspace {
     }
 
     /// The workspace shown most recently among those `keep` accepts.
+    /// The workspace shown most recently among those `keep` accepts. `keep`
+    /// gets the handle rather than the workspace so a caller that is itself a
+    /// workspace mid-update can skip its own handle instead of reading it.
     pub fn most_recent_workspace_where(
         &self,
         cx: &App,
-        keep: impl Fn(&Workspace, &App) -> bool,
+        keep: impl Fn(&Entity<Workspace>, &App) -> bool,
     ) -> Option<Entity<Workspace>> {
         self.held
             .iter()
-            .filter(|held| keep(held.workspace.read(cx), cx))
+            .filter(|held| keep(&held.workspace, cx))
             .filter_map(|held| Some((held.activated_at?, &held.workspace)))
             .max_by_key(|(activated_at, _)| *activated_at)
             .map(|(_, workspace)| workspace.clone())
