@@ -152,6 +152,12 @@ pub fn pages_directory() -> PathBuf {
     home_dir().join(".noah").join("pages")
 }
 
+/// asherin.search's home: the scripts shepherd writes to look things up and
+/// the findings it brings back.
+pub fn search_directory() -> PathBuf {
+    home_dir().join(".noah").join("search")
+}
+
 /// asherin.chat's home: the folder chat threads run in when they aren't tied
 /// to a project, holding the chat's global memory.
 pub fn chat_directory() -> PathBuf {

@@ -37,6 +37,7 @@ use crate::conversation_view::ThreadView;
 use crate::{AgentInitialContent, AgentPanel, ConversationView};
 
 const PAGES_GUIDE: &str = include_str!("../../../assets/shepherd/pages_guide.md");
+const SEARCH_GUIDE: &str = include_str!("../../../assets/shepherd/search_guide.md");
 
 actions!(
     asherin_chat,
@@ -85,6 +86,9 @@ pub fn init(cx: &mut App) {
     });
     cx.on_action(|_: &zed_actions::OpenAsherinPages, cx| {
         open_room(paths::pages_directory(), Some(PAGES_GUIDE), None, cx)
+    });
+    cx.on_action(|_: &zed_actions::OpenAsherinSearch, cx| {
+        open_room(paths::search_directory(), Some(SEARCH_GUIDE), None, cx)
     });
     cx.observe_new(|workspace: &mut Workspace, window, cx| {
         let Some(window) = window else {

@@ -55,6 +55,9 @@ actions!(
         OpenAsherinChat,
         /// Opens asherin.pages, where shepherd makes documents, books and slideshows.
         OpenAsherinPages,
+        /// Opens asherin.search, where shepherd looks things up for you: the
+        /// web, apis, and files on this machine, cross-referenced with sources.
+        OpenAsherinSearch,
         /// Opens asherin.eye, your own editable copy of the ADAM globe, and
         /// starts it in the browser room.
         OpenAsherinEye,
