@@ -1587,6 +1587,95 @@ struct DispatchingKeystrokes {
 /// A `Workspace` usually consists of 1 or more projects, a central pane group, 3 docks and a status bar.
 /// The `Workspace` owns everybody's state and serves as a default, "global context",
 /// that can be used to register a global action to be triggered from any place in the window.
+/// What needs the person, across every window: decisions waiting on them,
+/// failed runs, flagged claims and budget warnings, as one count in the
+/// title bar. Zero means walk away.
+#[derive(Default)]
+pub struct Attention {
+    items: HashMap<(AttentionKind, String), ()>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AttentionKind {
+    WaitingOnYou,
+    FailedRun,
+    FlaggedClaim,
+    BudgetWarning,
+}
+
+impl AttentionKind {
+    pub fn label(self, count: usize) -> String {
+        let noun = match (self, count) {
+            (Self::WaitingOnYou, 1) => "decision waiting on you",
+            (Self::WaitingOnYou, _) => "decisions waiting on you",
+            (Self::FailedRun, 1) => "failed run",
+            (Self::FailedRun, _) => "failed runs",
+            (Self::FlaggedClaim, 1) => "flagged claim",
+            (Self::FlaggedClaim, _) => "flagged claims",
+            (Self::BudgetWarning, 1) => "budget warning",
+            (Self::BudgetWarning, _) => "budget warnings",
+        };
+        format!("{count} {noun}")
+    }
+}
+
+struct GlobalAttention(Entity<Attention>);
+
+impl gpui::Global for GlobalAttention {}
+
+impl Attention {
+    /// The shared inbox, made on first use.
+    pub fn global(cx: &mut App) -> Entity<Self> {
+        if let Some(global) = cx.try_global::<GlobalAttention>() {
+            return global.0.clone();
+        }
+        let attention = cx.new(|_| Self::default());
+        cx.set_global(GlobalAttention(attention.clone()));
+        attention
+    }
+
+    /// Marks one thing (`key` names it, such as a session id) as needing the
+    /// person, or as settled.
+    pub fn set(cx: &mut App, kind: AttentionKind, key: impl Into<String>, needs_person: bool) {
+        let key = (kind, key.into());
+        Self::global(cx).update(cx, |attention, cx| {
+            let changed = if needs_person {
+                attention.items.insert(key, ()).is_none()
+            } else {
+                attention.items.remove(&key).is_some()
+            };
+            if changed {
+                cx.notify();
+            }
+        });
+    }
+
+    /// Drops everything recorded for `key` under every kind.
+    pub fn settle_all(cx: &mut App, key: &str) {
+        Self::global(cx).update(cx, |attention, cx| {
+            let before = attention.items.len();
+            attention.items.retain(|(_, item_key), _| item_key != key);
+            if attention.items.len() != before {
+                cx.notify();
+            }
+        });
+    }
+
+    pub fn count(&self) -> usize {
+        self.items.len()
+    }
+
+    /// The count per kind, in a fixed order, kinds with nothing left out.
+    pub fn breakdown(&self) -> Vec<(AttentionKind, usize)> {
+        let mut counts: std::collections::BTreeMap<AttentionKind, usize> =
+            std::collections::BTreeMap::new();
+        for (kind, _) in self.items.keys() {
+            *counts.entry(*kind).or_default() += 1;
+        }
+        counts.into_iter().collect()
+    }
+}
+
 /// Quiet mode, across every window: panels closed, no sounds, no pop-ups.
 /// shepherd keeps working; what it would have said is counted and told once
 /// when quiet mode ends.
