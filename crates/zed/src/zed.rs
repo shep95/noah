@@ -776,7 +776,14 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
             add_panel_when_ready(outline_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(terminal_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(git_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(debug_panel, workspace_handle.clone(), cx.clone()),
+            // The debugger appears once a project has a launch configuration
+            // (or the person starts a session); until then it is not a panel
+            // to hold in mind.
+            async {
+                if debug_launch_config_exists(&workspace_handle, &mut cx.clone()) {
+                    add_panel_when_ready(debug_panel, workspace_handle.clone(), cx.clone()).await
+                }
+            },
             add_panel_when_ready(browser_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(mission_control_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(device_panel, workspace_handle.clone(), cx.clone()),
@@ -789,6 +796,20 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
 
         anyhow::Ok(())
     })
+}
+
+/// Whether any open project carries a debugger launch configuration.
+fn debug_launch_config_exists(workspace: &WeakEntity<Workspace>, cx: &mut AsyncWindowContext) -> bool {
+    workspace
+        .read_with(cx, |workspace, cx| {
+            workspace.project().read(cx).visible_worktrees(cx).any(|worktree| {
+                let root = worktree.read(cx).abs_path();
+                [".zed/debug.json", ".noah/debug.json", ".vscode/launch.json"]
+                    .iter()
+                    .any(|file| root.join(file).is_file())
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn setup_or_teardown_ai_panel<P: Panel>(
@@ -1295,6 +1316,28 @@ fn register_actions(
              window: &mut Window,
              cx: &mut Context<Workspace>| {
                 workspace.toggle_panel_focus::<collab_ui::collab_panel::CollabPanel>(window, cx);
+            },
+        )
+        // A project without a launch configuration has no debug panel until
+        // the person starts a session: this adds it, then starts.
+        .register_action(
+            |workspace: &mut Workspace,
+             _: &debugger_ui::Start,
+             window: &mut Window,
+             cx: &mut Context<Workspace>| {
+                if workspace.panel::<DebugPanel>(cx).is_some() {
+                    return;
+                }
+                cx.spawn_in(window, async move |workspace, cx| {
+                    let panel = DebugPanel::load(workspace.clone(), cx.clone()).await?;
+                    workspace.update_in(cx, |workspace, window, cx| {
+                        if workspace.panel::<DebugPanel>(cx).is_none() {
+                            workspace.add_panel(panel, window, cx);
+                        }
+                        window.dispatch_action(Box::new(debugger_ui::Start), cx);
+                    })
+                })
+                .detach_and_log_err(cx);
             },
         )
         .register_action(
