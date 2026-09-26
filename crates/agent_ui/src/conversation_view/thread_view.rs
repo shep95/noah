@@ -590,6 +590,10 @@ pub struct ThreadView {
     pub(super) thread_error: Option<ThreadError>,
     /// shepherd rewriting the draft into a clearer prompt, while it runs.
     sharpening: Option<Task<()>>,
+    /// How shepherd's commits in this project held up: (held, of), shown on
+    /// an empty thread. `None` until measured, or when it has none here.
+    held_up: Option<(usize, usize)>,
+    _held_up_load: Option<Task<()>>,
     pub(crate) chat_room: chat_room::ChatRoomState,
     #[cfg(feature = "audio")]
     voice: VoiceState,
@@ -1015,6 +1019,8 @@ impl ThreadView {
             thread_retry_status: None,
             thread_error: None,
             sharpening: None,
+            held_up: None,
+            _held_up_load: None,
             chat_room: Default::default(),
             #[cfg(feature = "audio")]
             voice: VoiceState::default(),
@@ -1068,6 +1074,7 @@ impl ThreadView {
         this.sync_generating_indicator(cx);
         this.sync_editor_mode(cx);
         this.sync_existing_elicitation_states(window, cx);
+        this.load_held_up(cx);
         let list_state_for_scroll = this.list_state.clone();
         let thread_view = cx.entity().downgrade();
 
@@ -5649,6 +5656,72 @@ impl ThreadView {
             }
         }));
         cx.notify();
+    }
+
+    /// Measures, from this project's git history, how many of shepherd's
+    /// commits were neither reverted nor followed within a week by a fix to
+    /// the same files. Read once per thread view, off the main thread.
+    fn load_held_up(&mut self, cx: &mut Context<Self>) {
+        let Some(root) = self.project.upgrade().and_then(|project| {
+            project
+                .read(cx)
+                .visible_worktrees(cx)
+                .next()
+                .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+        }) else {
+            return;
+        };
+        self._held_up_load = Some(cx.spawn(async move |this, cx| {
+            let measured = cx
+                .background_spawn(async move {
+                    let output = util::command::new_command(paths::git_program())
+                        .current_dir(&root)
+                        .args(["log", "-n", "2000", "--name-only", noah_trust::outcomes::GIT_LOG_FORMAT])
+                        .output()
+                        .await
+                        .ok()?;
+                    if !output.status.success() {
+                        return None;
+                    }
+                    let log = String::from_utf8_lossy(&output.stdout);
+                    let outcomes = noah_trust::outcomes::measure(&noah_trust::outcomes::parse_git_log(&log));
+                    if outcomes.shepherd_commits == 0 {
+                        return None;
+                    }
+                    // A commit both reverted and fixed is counted against
+                    // twice here, so the rate errs on the low side.
+                    let held: usize = outcomes
+                        .by_model
+                        .values()
+                        .map(|model| model.commits.saturating_sub(model.reverted + model.fixed_soon_after))
+                        .sum();
+                    Some((held, outcomes.shepherd_commits))
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                this.held_up = measured;
+                cx.notify();
+            })
+            .ok();
+        }));
+    }
+
+    /// The headline number on an empty thread: how shepherd's work in this
+    /// project held up, so the person can watch it rise.
+    fn render_held_up(&self, _cx: &App) -> Option<AnyElement> {
+        let (held, of) = self.held_up?;
+        let percent = held * 100 / of;
+        Some(
+            h_flex()
+                .px_5()
+                .py_2()
+                .child(
+                    Label::new(format!("shepherd's work here: {percent}% held up ({held} of {of})"))
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .into_any_element(),
+        )
     }
 
     /// A quiet "sharpen? (tab)" beside the sharpen button, only while the
@@ -12567,7 +12640,7 @@ impl Render for ThreadView {
                         .vertical_scrollbar_for(&list_state, window, cx)
                         .into_any()
                 } else {
-                    this.into_any()
+                    this.children(self.render_held_up(cx)).into_any()
                 }
             });
 
