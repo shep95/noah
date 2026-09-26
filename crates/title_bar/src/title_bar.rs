@@ -494,9 +494,8 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.observe(&user_store, |_a, _, cx| cx.notify()));
-        subscriptions.push(cx.observe(&workspace::Attention::global(cx), |_, _, cx| {
-            cx.notify()
-        }));
+        let attention = workspace::Attention::global(cx);
+        subscriptions.push(cx.observe(&attention, |_, _, cx| cx.notify()));
         if let Some(workspace_entity) = workspace.weak_handle().upgrade() {
             subscriptions.push(cx.subscribe(
                 &workspace_entity,
