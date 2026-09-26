@@ -900,6 +900,59 @@ impl MissionControlPanel {
             .children(lines.into_iter().map(|line| {
                 Label::new(line).size(LabelSize::XSmall).color(Color::Muted)
             }))
+            .children(
+                self.snapshot
+                    .calibration
+                    .as_ref()
+                    .map(|calibration| Self::render_calibration(calibration)),
+            )
+    }
+
+    /// The calibration curve, drawn: for each band of stated confidence, the
+    /// faint bar is what shepherd said and the solid bar is how often it was
+    /// right, so the two line up exactly when its confidence means something.
+    fn render_calibration(calibration: &calibration::Calibration) -> impl IntoElement {
+        v_flex()
+            .pt_1()
+            .gap_0p5()
+            .children(
+                calibration
+                    .buckets
+                    .iter()
+                    .filter(|bucket| bucket.count > 0)
+                    .map(|bucket| {
+                        let stated = ((bucket.low + bucket.high) / 2.0).clamp(0.0, 1.0);
+                        let observed = bucket.kept_rate().unwrap_or(0.0).clamp(0.0, 1.0);
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                Label::new(format!("says {:.1}–{:.1}", bucket.low, bucket.high))
+                                    .size(LabelSize::XSmall)
+                                    .color(Color::Muted),
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .gap_px()
+                                    .child(
+                                        div().h_px().w(relative(stated)).bg(gpui::white().opacity(0.18)),
+                                    )
+                                    .child(
+                                        div().h(px(3.)).w(relative(observed)).bg(gpui::white().opacity(0.7)),
+                                    ),
+                            )
+                            .child(
+                                Label::new(format!(
+                                    "right {}% of {}",
+                                    (observed * 100.0).round() as u32,
+                                    bucket.count
+                                ))
+                                .size(LabelSize::XSmall)
+                                .color(Color::Muted),
+                            )
+                    }),
+            )
     }
 }
 
