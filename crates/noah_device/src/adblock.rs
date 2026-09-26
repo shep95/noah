@@ -95,7 +95,10 @@ pub fn with_blocklist(hosts: &str, domains: &[String]) -> String {
     }
     result.push_str(START_MARKER);
     result.push_str(eol);
-    for domain in domains {
+    // Checked again here, not only when the list is parsed: a domain with a
+    // space or line break in it would write its own hosts entries, and this
+    // file decides where every program on the machine connects.
+    for domain in domains.iter().filter(|domain| is_blockable_domain(domain)) {
         result.push_str("0.0.0.0 ");
         result.push_str(domain);
         result.push_str(eol);
@@ -191,7 +194,7 @@ pub fn write_hosts_elevated(contents: &str) -> Result<()> {
             .map(|duration| duration.as_nanos())
             .unwrap_or_default()
     ));
-    std::fs::write(&temporary, contents)
+    write_private_file(&temporary, contents)
         .with_context(|| format!("could not write {}", temporary.display()))?;
 
     let copy_result = copy_elevated(&temporary, &hosts);
@@ -211,6 +214,25 @@ pub fn write_hosts_elevated(contents: &str) -> Result<()> {
             hosts.display()
         ),
     }
+}
+
+/// Creates `path` fresh, readable only by this user. The file is about to be
+/// copied over the hosts file with administrator rights, so it must not be a
+/// link someone planted under a guessable name in the shared temp folder, and
+/// nobody else may change it between the write and the copy.
+fn write_private_file(path: &Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()
 }
 
 /// How long to wait for the person to answer the administrator prompt.

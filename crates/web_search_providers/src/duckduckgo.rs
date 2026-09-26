@@ -40,13 +40,65 @@ impl WebSearchProvider for DuckDuckGoWebSearchProvider {
     }
 }
 
+/// Whether `url` names this machine: `http://127.0.0.1:8765/x`,
+/// `http://localhost/`, `http://[::1]:9/`. Anything else is not a test server.
+fn is_loopback_url(url: &str) -> bool {
+    let Some(rest) = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    };
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
+#[cfg(test)]
+mod override_tests {
+    use super::is_loopback_url;
+
+    #[test]
+    fn only_this_machine_may_stand_in_for_the_search_engine() {
+        for url in [
+            "http://127.0.0.1:8765/search/html",
+            "http://localhost/",
+            "http://LOCALHOST:9",
+            "http://[::1]:8765/x",
+        ] {
+            assert!(is_loopback_url(url), "{url}");
+        }
+        for url in [
+            "https://evil.example/",
+            "http://127.0.0.1.evil.example/",
+            "http://localhost.evil.example/",
+            "http://evil.example@127.0.0.1/",
+            "ftp://127.0.0.1/",
+            "127.0.0.1:8765",
+        ] {
+            assert!(!is_loopback_url(url), "{url}");
+        }
+    }
+}
+
 async fn perform_search(
     http_client: Arc<dyn HttpClient>,
     query: String,
 ) -> Result<WebSearchResponse> {
     // `NOAH_WEB_SEARCH_URL` points both searches at another server that
-    // answers with DuckDuckGo's pages, such as a local one in tests.
-    let override_url = std::env::var("NOAH_WEB_SEARCH_URL").ok();
+    // answers with DuckDuckGo's pages, such as a local one in tests. Only a
+    // loopback server is accepted, so an inherited environment variable can't
+    // quietly send every search, and what it reveals, to a remote host.
+    let override_url = std::env::var("NOAH_WEB_SEARCH_URL")
+        .ok()
+        .filter(|url| is_loopback_url(url));
     let main_url = override_url.as_deref().unwrap_or(SEARCH_URL);
     let main_error = match search_page(&http_client, main_url, &query).await {
         Ok(html) => {
