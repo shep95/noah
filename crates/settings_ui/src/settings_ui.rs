@@ -477,6 +477,9 @@ pub fn init(cx: &mut App) {
             .register_action(|_, _: &zed_actions::UseBuiltInShepherdBrain, window, cx| {
                 use_built_in_shepherd_brain(window, cx);
             })
+            .register_action(|workspace, _: &zed_actions::WriteShepherdBrain, window, cx| {
+                write_shepherd_brain(workspace, window, cx);
+            })
             .register_action(|_, action: &OpenSettingsAt, window, cx| {
                 let window_handle = window.window_handle().downcast::<MultiWorkspace>();
                 open_settings_editor_at_target(
@@ -4701,14 +4704,10 @@ fn open_user_settings_in_workspace(
     .detach();
 }
 
-/// The largest text accepted as shepherd's brain. The built-in one is about
-/// 200 KB; anything far past this is a wrong pick, and it all goes into every
-/// prompt.
-const MAX_BRAIN_BYTES: u64 = 4 * 1024 * 1024;
-
 /// Asks for a text file and makes it shepherd's brain in place of the
 /// built-in one, by copying it to the file shepherd reads first. Only new
 /// conversations pick it up: a running one keeps the brain it started with.
+/// Any length is accepted; the model's context, not noah, is the limit.
 pub(crate) fn replace_shepherd_brain(window: &mut Window, cx: &mut App) {
     let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
         files: true,
@@ -4751,8 +4750,8 @@ pub(crate) fn replace_shepherd_brain(window: &mut Window, cx: &mut App) {
 fn install_brain_file(source: &std::path::Path) -> Result<PathBuf> {
     let metadata = std::fs::metadata(source)
         .with_context(|| format!("couldn't read {}", source.display()))?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_BRAIN_BYTES {
-        anyhow::bail!("choose a text file smaller than 4 MB");
+    if !metadata.is_file() || metadata.len() == 0 {
+        anyhow::bail!("choose a text file with something in it");
     }
     let text = std::fs::read_to_string(source)
         .with_context(|| format!("{} isn't a plain text file", source.display()))?;
@@ -4772,6 +4771,54 @@ fn install_brain_file(source: &std::path::Path) -> Result<PathBuf> {
     std::fs::rename(&partial, &destination)
         .with_context(|| format!("couldn't put {} in place", destination.display()))?;
     Ok(destination)
+}
+
+/// Opens the person's brain file as a buffer, so they can write or paste a
+/// brain of any length in noah itself. The file is created empty when there
+/// is none; empty still means the built-in brain, so opening it changes
+/// nothing until they save text into it.
+pub(crate) fn write_shepherd_brain(
+    workspace: &mut workspace::Workspace,
+    window: &mut Window,
+    cx: &mut Context<workspace::Workspace>,
+) {
+    let path = paths::shepherd_brain_file();
+    if !path.exists() {
+        let created: Result<()> = (|| {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("couldn't create {}", parent.display()))?;
+            }
+            std::fs::write(&path, "")
+                .with_context(|| format!("couldn't create {}", path.display()))
+        })();
+        if let Err(error) = created {
+            let detail = format!("{error:#}");
+            let answer = window.prompt(
+                gpui::PromptLevel::Warning,
+                "noah couldn't create your brain file",
+                Some(&detail),
+                &["ok"],
+                cx,
+            );
+            cx.spawn(async move |_, _| {
+                answer.await.log_err();
+            })
+            .detach();
+            return;
+        }
+    }
+    workspace
+        .open_abs_path(
+            path,
+            OpenOptions {
+                visible: Some(OpenVisible::None),
+                ..Default::default()
+            },
+            window,
+            cx,
+        )
+        .detach_and_log_err(cx);
 }
 
 /// Removes the person's brain file, so shepherd is back on the built-in one

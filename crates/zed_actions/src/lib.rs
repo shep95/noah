@@ -49,6 +49,9 @@ actions!(
         /// Picks a text file to use as shepherd's brain in place of the
         /// built-in one. It applies to new conversations.
         ReplaceShepherdBrain,
+        /// Opens your shepherd brain file in the editor, to write or paste
+        /// one of any length. Saving it applies to new conversations.
+        WriteShepherdBrain,
         /// Puts shepherd's built-in brain back, removing your replacement.
         UseBuiltInShepherdBrain,
         /// Opens asherin.chat, where you think with shepherd outside any project.
