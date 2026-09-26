@@ -566,6 +566,49 @@ impl PermissionSelection {
     }
 }
 
+/// The project's tour, as a reading path the person ticks off.
+struct Tour {
+    root: std::path::PathBuf,
+    stops: Vec<TourStop>,
+    read: std::collections::HashSet<usize>,
+    /// The project has no map or tour yet, so the tour is offered.
+    offer: bool,
+}
+
+struct TourStop {
+    text: String,
+    /// The file the stop names in backticks, relative to the project root.
+    path: Option<String>,
+}
+
+impl Tour {
+    fn progress_path(root: &std::path::Path) -> std::path::PathBuf {
+        noah_trust::project_files::path(root, "tour-progress.json")
+    }
+
+    /// The numbered lines of a tour ("3. `src/main.rs`: where execution
+    /// starts."), in order.
+    fn parse_stops(text: &str) -> Vec<TourStop> {
+        text.lines()
+            .filter_map(|line| {
+                let (number, rest) = line.split_once(". ")?;
+                if number.is_empty() || !number.chars().all(|character| character.is_ascii_digit()) {
+                    return None;
+                }
+                let path = rest
+                    .split_once('`')
+                    .and_then(|(_, after)| after.split_once('`'))
+                    .map(|(inside, _)| inside.to_string())
+                    .filter(|inside| !inside.contains(' '));
+                Some(TourStop {
+                    text: rest.trim().to_string(),
+                    path,
+                })
+            })
+            .collect()
+    }
+}
+
 pub struct ThreadView {
     pub(crate) root_thread_id: ThreadId,
     pub session_id: acp::SessionId,
@@ -597,6 +640,9 @@ pub struct ThreadView {
     /// The evidence bundle the last turn ended with, shown as a handoff card
     /// until the person accepts it or asks for revisions.
     handoff: Option<noah_trust::evidence::Bundle>,
+    /// The project's tour as a reading path with checkmarks, on an empty
+    /// thread; `None` until read, or when the project has no tour.
+    tour: Option<Tour>,
     pub(crate) chat_room: chat_room::ChatRoomState,
     #[cfg(feature = "audio")]
     voice: VoiceState,
@@ -1025,6 +1071,7 @@ impl ThreadView {
             held_up: None,
             _held_up_load: None,
             handoff: None,
+            tour: None,
             chat_room: Default::default(),
             #[cfg(feature = "audio")]
             voice: VoiceState::default(),
@@ -1079,6 +1126,7 @@ impl ThreadView {
         this.sync_editor_mode(cx);
         this.sync_existing_elicitation_states(window, cx);
         this.load_held_up(cx);
+        this.load_tour(cx);
         let list_state_for_scroll = this.list_state.clone();
         let thread_view = cx.entity().downgrade();
 
@@ -5708,6 +5756,151 @@ impl ThreadView {
             })
             .ok();
         }));
+    }
+
+    fn project_root(&self, cx: &App) -> Option<std::path::PathBuf> {
+        self.project.upgrade().and_then(|project| {
+            project
+                .read(cx)
+                .visible_worktrees(cx)
+                .next()
+                .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+        })
+    }
+
+    /// Reads `.noah/tour.md` (a numbered reading order) and which stops the
+    /// person has already read, or notes that the project has no tour yet.
+    fn load_tour(&mut self, cx: &mut Context<Self>) {
+        let Some(root) = self.project_root(cx) else {
+            return;
+        };
+        if Self::is_chat_project_root(&root) {
+            return;
+        }
+        let tour_path = noah_trust::project_files::path(&root, noah_trust::project_files::TOUR);
+        let stops: Vec<TourStop> = std::fs::read_to_string(&tour_path)
+            .map(|text| Tour::parse_stops(&text))
+            .unwrap_or_default();
+        let read: std::collections::HashSet<usize> = std::fs::read_to_string(Tour::progress_path(&root))
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        let has_map = noah_trust::project_files::path(&root, noah_trust::project_files::MAP).exists();
+        self.tour = Some(Tour {
+            root,
+            stops,
+            read,
+            offer: !has_map,
+        });
+        cx.notify();
+    }
+
+    fn is_chat_project_root(root: &std::path::Path) -> bool {
+        root == paths::chat_directory()
+            || root == paths::pages_directory()
+            || root == paths::search_directory()
+    }
+
+    /// The tour as a reading path: each stop a line with a checkmark once
+    /// read, opened by clicking. In a project without one, the offer.
+    fn render_tour(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let tour = self.tour.as_ref()?;
+        if tour.stops.is_empty() {
+            if !tour.offer {
+                return None;
+            }
+            return Some(
+                h_flex()
+                    .px_5()
+                    .py_1()
+                    .gap_2()
+                    .child(
+                        Label::new("new here? shepherd can give you a tour of this codebase")
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
+                    )
+                    .child(
+                        Button::new("start-tour", "start the tour")
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::Small)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.message_editor.update(cx, |editor, cx| {
+                                    editor.set_text(
+                                        "give me a tour of this codebase: write the reading order and expand the first stop",
+                                        window,
+                                        cx,
+                                    );
+                                });
+                                this.send(window, cx);
+                            })),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let read_count = tour.stops.iter().enumerate().filter(|(index, _)| tour.read.contains(index)).count();
+        Some(
+            v_flex()
+                .px_5()
+                .py_2()
+                .gap_1()
+                .child(
+                    Label::new(format!("reading path · {read_count} of {} read", tour.stops.len()))
+                        .size(LabelSize::XSmall)
+                        .color(Color::Muted),
+                )
+                .children(tour.stops.iter().enumerate().map(|(index, stop)| {
+                    let done = tour.read.contains(&index);
+                    h_flex()
+                        .id(("tour-stop", index))
+                        .gap_2()
+                        .cursor_pointer()
+                        .child(
+                            Label::new(if done { "✓" } else { "○" })
+                                .size(LabelSize::Small)
+                                .color(if done { Color::Success } else { Color::Muted }),
+                        )
+                        .child(
+                            Label::new(stop.text.clone())
+                                .size(LabelSize::Small)
+                                .color(if done { Color::Muted } else { Color::Default })
+                                .truncate(),
+                        )
+                        .on_click(cx.listener(move |this, _, window, cx| this.visit_tour_stop(index, window, cx)))
+                }))
+                .into_any_element(),
+        )
+    }
+
+    /// Opens the stop's file, if it names one, and marks the stop read.
+    fn visit_tour_stop(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tour) = self.tour.as_mut() else {
+            return;
+        };
+        let Some(stop) = tour.stops.get(index) else {
+            return;
+        };
+        let file = stop.path.as_ref().map(|path| tour.root.join(path));
+        tour.read.insert(index);
+        let progress: Vec<usize> = {
+            let mut read: Vec<usize> = tour.read.iter().copied().collect();
+            read.sort_unstable();
+            read
+        };
+        if let Ok(json) = serde_json::to_string(&progress)
+            && let Err(error) = std::fs::write(Tour::progress_path(&tour.root), json)
+        {
+            log::warn!("couldn't save the tour's progress: {error}");
+        }
+        cx.notify();
+        if let (Some(file), Some(workspace)) = (file, self.workspace.upgrade())
+            && file.is_file()
+        {
+            workspace.update(cx, |workspace, cx| {
+                workspace
+                    .open_abs_path(file, workspace::OpenOptions::default(), window, cx)
+                    .detach_and_log_err(cx);
+            });
+        }
     }
 
     /// When the turn that just finished saved an evidence bundle, shows it as
@@ -12778,7 +12971,9 @@ impl Render for ThreadView {
                         .vertical_scrollbar_for(&list_state, window, cx)
                         .into_any()
                 } else {
-                    this.children(self.render_held_up(cx)).into_any()
+                    this.children(self.render_held_up(cx))
+                        .children(self.render_tour(cx))
+                        .into_any()
                 }
             });
 

@@ -608,6 +608,32 @@ pub enum AcpServerViewEvent {
 
 impl EventEmitter<AcpServerViewEvent> for ConversationView {}
 
+/// Removes a preference entry shepherd just recorded: every line of the file
+/// that the entry contributed. The file is the person's; on any trouble it is
+/// left as it was and the reason is logged.
+fn forget_preference(path: &std::path::Path, entry: &str) {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let entry_lines: Vec<&str> = entry.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim().trim_start_matches("- ").trim();
+            !entry_lines
+                .iter()
+                .any(|entry_line| entry_line.trim_start_matches("- ").trim() == trimmed)
+        })
+        .collect();
+    let mut updated = kept.join("\n");
+    if text.ends_with('\n') {
+        updated.push('\n');
+    }
+    if let Err(error) = std::fs::write(path, updated) {
+        log::error!("couldn't undo the preference in {}: {error}", path.display());
+    }
+}
+
 /// The state a notification announces, which picks its sound: one sound per
 /// state rather than per event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -621,6 +647,9 @@ enum Notice {
 }
 
 pub struct ConversationView {
+    /// Preference entries already announced with a "learned" toast, so a
+    /// tool call that updates several times is announced once.
+    announced_preferences: std::collections::HashSet<acp::ToolCallId>,
     agent: Rc<dyn AgentServer>,
     connection_store: Entity<AgentConnectionStore>,
     connection_key: Agent,
@@ -899,6 +928,7 @@ impl ConversationView {
             project: project.clone(),
             thread_store,
             thread_id,
+            announced_preferences: std::collections::HashSet::default(),
             root_session_id: resume_session_id.clone(),
             server_state: Self::initial_state(
                 agent.clone(),
@@ -1670,6 +1700,8 @@ impl ConversationView {
                         active.sync_generating_indicator(cx);
                     });
                 }
+                let thread = thread.clone();
+                self.announce_learned_preference(*index, &thread, cx);
             }
             AcpThreadEvent::EntriesRemoved(range) => {
                 if let Some(active) = self.thread_view(&session_id) {
@@ -2892,6 +2924,76 @@ impl ConversationView {
             &self.code_span_resolver,
             cx,
         )
+    }
+
+    /// When shepherd records a preference about the person, says so with a
+    /// toast that can undo it: the tool adapts in the open, never silently.
+    fn announce_learned_preference(
+        &mut self,
+        index: usize,
+        thread: &Entity<AcpThread>,
+        cx: &mut Context<Self>,
+    ) {
+        let thread_ref = thread.read(cx);
+        let Some(acp_thread::AgentThreadEntry::ToolCall(call)) = thread_ref.entries().get(index)
+        else {
+            return;
+        };
+        if call.tool_name.as_deref() != Some("project_memory")
+            || !matches!(call.status, acp_thread::ToolCallStatus::Completed)
+        {
+            return;
+        }
+        let Some(input) = call.raw_input.as_ref() else {
+            return;
+        };
+        let field = |name: &str| {
+            input
+                .get(name)
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_ascii_lowercase())
+        };
+        if field("file").as_deref() != Some("preferences") || field("action").as_deref() != Some("add") {
+            return;
+        }
+        let Some(entry) = input
+            .get("text")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+        else {
+            return;
+        };
+        if !self.announced_preferences.insert(call.id.clone()) {
+            return;
+        }
+        let Some(root) = thread_ref
+            .project()
+            .read(cx)
+            .visible_worktrees(cx)
+            .next()
+            .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+        else {
+            return;
+        };
+        let Some(workspace) = self.workspace.upgrade() else {
+            return;
+        };
+        let preview: String = entry.lines().next().unwrap_or_default().chars().take(90).collect();
+        let path = noah_trust::project_files::path(&root, noah_trust::project_files::PREFERENCES);
+        workspace.update(cx, |workspace, cx| {
+            struct LearnedPreferenceToast;
+            workspace.show_toast(
+                workspace::Toast::new(
+                    workspace::notifications::NotificationId::unique::<LearnedPreferenceToast>(),
+                    format!("learned: {preview}"),
+                )
+                .on_click("undo", move |_, _| forget_preference(&path, &entry))
+                .autohide(),
+                cx,
+            );
+        });
     }
 
     fn notify_with_sound(
