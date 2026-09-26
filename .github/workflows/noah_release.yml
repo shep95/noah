@@ -1,0 +1,112 @@
+name: noah release
+
+# Every push to main becomes a release that installed copies of noah pick up
+# on their own: the Linux packages and the Windows installer are built, the
+# fast tests gate them, and the website gets the files and a signed manifest.
+#
+# Secrets this needs:
+#   NOAH_RELEASE_SIGNING_KEY  the release key, PEM text (script/generate-release-key)
+#   UNLOCKET_TOKEN            a token that can push to shep95/unlocket
+# Without them the build still runs and uploads its installers as artifacts;
+# only the publish step is skipped.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
+
+concurrency:
+  group: noah-release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build number
+        # The commit time, which noah's updater compares and every artifact
+        # of this run shares.
+        run: echo "NOAH_BUILD=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: noah-release-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: noah-release-
+
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          script/linux
+          sudo apt-get install -y nsis
+
+      - name: llvm-mingw (Windows cross compiler)
+        run: |
+          gh release download --repo mstorsjo/llvm-mingw \
+            --pattern '*-ucrt-ubuntu-22.04-x86_64.tar.xz' --dir /tmp/llvm-mingw
+          mkdir -p /opt/llvm-mingw
+          tar -xJf /tmp/llvm-mingw/*.tar.xz -C /opt/llvm-mingw --strip-components=1
+          echo "/opt/llvm-mingw/bin" >> "$GITHUB_PATH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Tests that gate a release
+        # The crates whose behavior a release must not regress and that run
+        # in minutes: trust, device security, search, theme, chat and add-ons.
+        run: |
+          cargo test --release -p noah_trust -p noah_device -p web_search_providers \
+            -p theme -p asherin_chat -p noah_addons
+
+      - name: Linux packages
+        run: script/build-linux-package
+
+      - name: Windows installer
+        run: script/build-windows-cross
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noah-${{ env.NOAH_BUILD }}
+          path: |
+            dist/noah-linux-x86_64.tar.xz
+            dist/noah-linux-amd64.deb
+            dist/noah-windows-x86_64.exe
+          retention-days: 30
+
+      - name: Website checkout
+        if: ${{ secrets.UNLOCKET_TOKEN != '' && secrets.NOAH_RELEASE_SIGNING_KEY != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: shep95/unlocket
+          ref: claude/quirky-hamilton-0poy3x
+          token: ${{ secrets.UNLOCKET_TOKEN }}
+          path: website
+
+      - name: Publish the downloads and the signed manifest
+        if: ${{ secrets.UNLOCKET_TOKEN != '' && secrets.NOAH_RELEASE_SIGNING_KEY != '' }}
+        env:
+          NOAH_RELEASE_SIGNING_KEY: ${{ secrets.NOAH_RELEASE_SIGNING_KEY }}
+        run: |
+          key="$(mktemp)"
+          printf '%s\n' "$NOAH_RELEASE_SIGNING_KEY" > "$key"
+          NOAH_RELEASE_SIGNING_KEY_FILE="$key" script/publish-downloads website
+          rm -f "$key"
+          cd website
+          git config user.name "noah release"
+          git config user.email "release@noah.asherin.com"
+          git add public/downloads lib/site.ts
+          git commit -m "Publish noah build ${NOAH_BUILD} from ${GITHUB_SHA::7}" || exit 0
+          git push

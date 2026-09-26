@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Puts the installers in dist/ on the website: copies them into its
+# public/downloads, refreshes their .sha256 files and the sizes and checksums
+# in lib/site.ts, and writes the signed manifest noah's updater reads.
+#
+# Usage: NOAH_RELEASE_SIGNING_KEY_FILE=<key.pem> script/publish-downloads <website-checkout> [public-base-url]
+#   e.g. script/publish-downloads ../unlocket https://noah.asherin.com/downloads
+# NOAH_BUILD must be the build number the installers were built with, so the
+# manifest and the binaries agree; the release scripts stamp the commit time.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+site="${1:?website checkout}"
+base_url="${2:-https://noah.asherin.com/downloads}"
+downloads="$site/public/downloads"
+: "${NOAH_BUILD:?set NOAH_BUILD to the build number the installers carry}"
+
+installers=(noah-windows-x86_64.exe noah-linux-amd64.deb noah-linux-x86_64.tar.xz)
+for file in "${installers[@]}"; do
+    if [[ -f "dist/$file" ]]; then
+        cp "dist/$file" "$downloads/$file"
+    fi
+done
+(
+    cd "$downloads"
+    for file in "${installers[@]}" asherin-eye.tar.gz; do
+        [[ -f "$file" ]] && sha256sum "$file" > "$file.sha256"
+    done
+)
+
+# lib/site.ts lists each installer with its size and checksum; keep them true.
+python3 - "$site/lib/site.ts" "${installers[@]}" <<'PY'
+import hashlib, os, re, sys
+path, names = sys.argv[1], sys.argv[2:]
+text = open(path).read()
+downloads = os.path.join(os.path.dirname(path), "..", "public", "downloads")
+for name in names:
+    full = os.path.join(downloads, name)
+    if not os.path.exists(full):
+        continue
+    digest = hashlib.sha256(open(full, "rb").read()).hexdigest()
+    size = f"{round(os.path.getsize(full) / 1_000_000)} MB"
+    pattern = re.compile(
+        r"(file: '" + re.escape(name) + r"',\n(?:.*\n){1,3}?\s*size: ')[^']*"
+        r"(',\n(?:.*\n){0,2}?\s*sha256: ')[0-9a-f]{64}(')"
+    )
+    text, count = pattern.subn(lambda m: m.group(1) + size + m.group(2) + digest + m.group(3), text)
+    if count != 1:
+        raise SystemExit(f"{name}: expected one installer entry in lib/site.ts, found {count}")
+open(path, "w").write(text)
+PY
+
+script/write-release-manifest "$downloads" "$base_url"
