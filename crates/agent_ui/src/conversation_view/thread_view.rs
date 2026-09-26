@@ -12539,7 +12539,6 @@ impl Render for ThreadView {
         let list_state = self.list_state.clone();
 
         let conversation = v_flex()
-            .children(self.render_chat_tabs(cx))
             .when(self.resumed_without_history, |this| {
                 this.child(Self::render_resume_notice(cx))
             })

@@ -11,7 +11,7 @@ use editor::{Editor, EditorEvent};
 use std::time::Duration;
 
 use gpui::{
-    Action, Animation, AnimationExt as _, AnyElement, App, Context, Entity, EventEmitter,
+    Action, Animation, AnimationExt as _, AnyElement, App, Context, Entity, EntityId, EventEmitter,
     FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels, Subscription, Task, WeakEntity,
     Window, ease_out_quint, px, relative,
 };
@@ -87,6 +87,10 @@ pub struct ChatTreePanel {
     tabs: Vec<ChatTab>,
     /// Recently closed tabs, newest last, for reopening.
     closed_tabs: Vec<acp::SessionId>,
+    /// Watches the window until its shepherd panel arrives.
+    _agent_panel_watch: Option<Subscription>,
+    /// Watches the conversation on screen, keyed by its entity.
+    _active_view_watch: Option<(EntityId, Subscription)>,
     _load: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -121,6 +125,8 @@ impl ChatTreePanel {
             observing_agent_panel: false,
             tabs: Vec::new(),
             closed_tabs: Vec::new(),
+            _agent_panel_watch: None,
+            _active_view_watch: None,
             _load: None,
             _subscriptions: subscriptions,
         };
@@ -154,13 +160,21 @@ impl ChatTreePanel {
         if self.observing_agent_panel {
             return;
         }
-        let Some(panel) = self
-            .workspace
-            .upgrade()
-            .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
-        else {
+        let Some(workspace) = self.workspace.upgrade() else {
             return;
         };
+        let Some(panel) = workspace.read(cx).panel::<AgentPanel>(cx) else {
+            // The shepherd panel can join the chat window after this tree
+            // has loaded; look again whenever the window changes, or a new
+            // chat would get no tab until the tree next reloads.
+            if self._agent_panel_watch.is_none() {
+                self._agent_panel_watch = Some(
+                    cx.observe(&workspace, |this, _, cx| this.observe_agent_panel(cx)),
+                );
+            }
+            return;
+        };
+        self._agent_panel_watch = None;
         self.observing_agent_panel = true;
         self._subscriptions.push(cx.observe(&panel, |this, _, cx| {
             this.track_active_tab(cx);
@@ -608,16 +622,51 @@ fn active_session_in(workspace: &Workspace, cx: &App) -> Option<acp::SessionId> 
 
 impl ChatTreePanel {
     fn track_active_tab(&mut self, cx: &mut Context<Self>) {
+        self.watch_active_view(cx);
         let Some(active) = self.active_session(cx) else {
             return;
         };
-        if !self.tabs.iter().any(|tab| tab.id == active) {
-            self.tabs.push(ChatTab {
-                id: active.clone(),
-                pinned: false,
-            });
+        if self.tabs.iter().any(|tab| tab.id == active) {
+            return;
         }
+        self.tabs.push(ChatTab {
+            id: active.clone(),
+            pinned: false,
+        });
         self.closed_tabs.retain(|id| *id != active);
+        cx.notify();
+        // The strip is drawn by the shepherd panel, which reads this panel
+        // but does not observe it; without a nudge the new tab shows up one
+        // render late, after whatever next happens to redraw the chat.
+        if let Some(panel) = self
+            .workspace
+            .upgrade()
+            .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
+        {
+            panel.update(cx, |_, cx| cx.notify());
+        }
+    }
+
+    /// A conversation loaded from storage, like a reopened tab, learns its
+    /// session only once it has loaded, and it tells no one but itself; the
+    /// shepherd panel has already announced the switch by then. Watching
+    /// the conversation on screen is what gives it its tab.
+    fn watch_active_view(&mut self, cx: &mut Context<Self>) {
+        let view = self
+            .workspace
+            .upgrade()
+            .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
+            .and_then(|panel| panel.read(cx).active_conversation_view().cloned());
+        let watched = self._active_view_watch.as_ref().map(|(id, _)| *id);
+        if watched == view.as_ref().map(|view| view.entity_id()) {
+            return;
+        }
+        self._active_view_watch = view.map(|view| {
+            (
+                view.entity_id(),
+                cx.observe(&view, |this, _, cx| this.track_active_tab(cx)),
+            )
+        });
     }
 
     fn tab_title(&self, id: &acp::SessionId) -> (SharedString, ConversationKind) {

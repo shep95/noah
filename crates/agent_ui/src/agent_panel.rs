@@ -6446,6 +6446,21 @@ impl AgentPanel {
         }
     }
 
+    /// asherin.chat's tabs, under the toolbar and above everything else in
+    /// the panel, so they sit above the onboarding card rather than below it.
+    fn render_chat_tabs(&self, cx: &App) -> Option<AnyElement> {
+        let workspace = self.workspace.upgrade()?;
+        let workspace = workspace.read(cx);
+        if !crate::asherin_chat::is_chat_workspace(workspace, cx) {
+            return None;
+        }
+        let tree = workspace.panel::<crate::asherin_chat_tree::ChatTreePanel>(cx)?;
+        let active = self
+            .active_conversation_view()
+            .and_then(|view| view.read(cx).root_session_id.clone());
+        crate::asherin_chat_tree::ChatTreePanel::render_tab_strip(&tree, active.as_ref(), cx)
+    }
+
     fn render_new_user_onboarding(
         &mut self,
         _window: &mut Window,
@@ -6701,6 +6716,7 @@ impl Render for AgentPanel {
                 }
             }))
             .child(self.render_toolbar(window, cx))
+            .children(self.render_chat_tabs(cx))
             .children(self.render_new_user_onboarding(window, cx))
             .map(|parent| match self.visible_surface() {
                 VisibleSurface::Uninitialized
