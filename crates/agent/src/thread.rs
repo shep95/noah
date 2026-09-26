@@ -2275,6 +2275,31 @@ impl Thread {
             && worktrees.all(|worktree| worktree.read(cx).abs_path().as_ref() == chat_directory)
     }
 
+    /// The tools asherin.search offers: enough to write python programs, run
+    /// them, and read what they produced. Built-in web search, the browser
+    /// and fetching are deliberately absent; there, python is how you look.
+    pub const SEARCH_CONSOLE_TOOLS: &'static [&'static str] = &[
+        TerminalTool::NAME,
+        "edit_file",
+        "write_file",
+        "create_directory",
+        "read_file",
+        "list_directory",
+        "find_path",
+        "grep",
+        "ask_user",
+    ];
+
+    /// Whether this thread runs in asherin.search's folder. There, python is
+    /// the only search instrument: shepherd writes and runs programs that
+    /// look things up, and reads what they bring back.
+    pub fn is_search_project(project: &Entity<Project>, cx: &App) -> bool {
+        let search_directory = paths::search_directory();
+        let mut worktrees = project.read(cx).visible_worktrees(cx).peekable();
+        worktrees.peek().is_some()
+            && worktrees.all(|worktree| worktree.read(cx).abs_path().as_ref() == search_directory)
+    }
+
     pub fn chat_agent(&self) -> Option<&str> {
         self.chat_agent.as_deref()
     }
@@ -2300,6 +2325,9 @@ impl Thread {
     ) -> (AgentProfileId, bool) {
         if Self::is_chat_project(project, cx) {
             return (AgentProfileId(builtin_profiles::CHAT.into()), false);
+        }
+        if Self::is_search_project(project, cx) {
+            return (AgentProfileId(builtin_profiles::WRITE.into()), false);
         }
         let is_write_or_ask = profile_id.as_str() == builtin_profiles::WRITE
             || profile_id.as_str() == builtin_profiles::ASK;
@@ -4390,8 +4418,15 @@ impl Thread {
         // In asherin.chat the chat profile's tools apply whatever profile is
         // selected, so chat can't edit files or run commands.
         let chat_profile = AgentProfileId(builtin_profiles::CHAT.into());
+        // In asherin.search the write profile applies, narrowed below to the
+        // tools that write and run python, so the console works whatever
+        // profile is selected and can search no other way.
+        let write_profile = AgentProfileId(builtin_profiles::WRITE.into());
+        let is_search = Self::is_search_project(&self.project, cx);
         let profile_id = if Self::is_chat_project(&self.project, cx) {
             &chat_profile
+        } else if is_search {
+            &write_profile
         } else {
             &self.profile_id
         };
@@ -4446,6 +4481,12 @@ impl Thread {
                 }
             })
             .filter(|(tool_name, _)| crate::tools::tool_feature_flag_enabled(tool_name, cx))
+            .filter(|(tool_name, _)| {
+                !is_search
+                    || Self::SEARCH_CONSOLE_TOOLS
+                        .iter()
+                        .any(|allowed| provider_compatible_tool_name(allowed) == tool_name.as_ref())
+            })
             .collect::<BTreeMap<_, _>>();
 
         let mut context_server_tools = Vec::new();
