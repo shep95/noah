@@ -479,6 +479,27 @@ fn main() {
 
     app.run(move |cx| {
         cx.set_global(app_db);
+        // NOAH_KEY_DEBUG=1 logs every keystroke with the element that had
+        // focus and the key contexts it was dispatched through, for chasing
+        // shortcuts that stop working after a layout change.
+        if std::env::var_os("NOAH_KEY_DEBUG").is_some() {
+            cx.observe_keystrokes(|event, window, cx| {
+                let focused = window.focused(cx).map(|handle| format!("{handle:?}"));
+                let contexts: Vec<String> = event
+                    .context_stack
+                    .iter()
+                    .map(|context| format!("{context:?}"))
+                    .collect();
+                log::info!(
+                    "keystroke {} action={:?} focused={:?} contexts={:?}",
+                    event.keystroke,
+                    event.action.as_ref().map(|action| action.name()),
+                    focused,
+                    contexts
+                );
+            })
+            .detach();
+        }
         let db_trusted_paths = match workspace::WorkspaceDb::global(cx).fetch_trusted_worktrees() {
             Ok(trusted_paths) => trusted_paths,
             Err(e) => {
