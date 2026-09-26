@@ -1718,6 +1718,12 @@ impl ConversationView {
                 self.load_subagent_session(subagent_session_id.clone(), session_id, window, cx)
             }
             AcpThreadEvent::ToolAuthorizationRequested(_) => {
+                workspace::Attention::set(
+                    cx,
+                    workspace::AttentionKind::WaitingOnYou,
+                    session_id.0.to_string(),
+                    true,
+                );
                 self.notify_with_sound(
                     "Waiting for tool confirmation",
                     IconName::Info,
@@ -1726,8 +1732,21 @@ impl ConversationView {
                     cx,
                 );
             }
-            AcpThreadEvent::ToolAuthorizationReceived(_) => {}
+            AcpThreadEvent::ToolAuthorizationReceived(_) => {
+                workspace::Attention::set(
+                    cx,
+                    workspace::AttentionKind::WaitingOnYou,
+                    session_id.0.to_string(),
+                    false,
+                );
+            }
             AcpThreadEvent::ElicitationRequested(_) => {
+                workspace::Attention::set(
+                    cx,
+                    workspace::AttentionKind::WaitingOnYou,
+                    session_id.0.to_string(),
+                    true,
+                );
                 self.notify_with_sound(
                     "Waiting for input",
                     IconName::Info,
@@ -1736,7 +1755,14 @@ impl ConversationView {
                     cx,
                 );
             }
-            AcpThreadEvent::ElicitationResponded(_) => {}
+            AcpThreadEvent::ElicitationResponded(_) => {
+                workspace::Attention::set(
+                    cx,
+                    workspace::AttentionKind::WaitingOnYou,
+                    session_id.0.to_string(),
+                    false,
+                );
+            }
             AcpThreadEvent::Retry(retry) => {
                 if let Some(active) = self.thread_view(&session_id) {
                     active.update(cx, |active, _cx| {
@@ -1766,6 +1792,14 @@ impl ConversationView {
                         });
                     }
                     return;
+                }
+                // A turn that ended on its own settles whatever this thread
+                // was waiting for; a flagged claim is settled by the handoff.
+                for kind in [
+                    workspace::AttentionKind::WaitingOnYou,
+                    workspace::AttentionKind::FailedRun,
+                ] {
+                    workspace::Attention::set(cx, kind, session_id.0.to_string(), false);
                 }
 
                 let sent_queued_message = if let Some(active) = self.root_thread_view() {
@@ -1826,6 +1860,12 @@ impl ConversationView {
                     });
                 }
                 if !is_subagent {
+                    workspace::Attention::set(
+                        cx,
+                        workspace::AttentionKind::WaitingOnYou,
+                        session_id.0.to_string(),
+                        true,
+                    );
                     let model_or_agent_name = self.current_model_name(cx);
                     let notification_message =
                         format!("{} refused to respond to this request", model_or_agent_name);
@@ -1853,6 +1893,12 @@ impl ConversationView {
                     });
                 }
                 if !is_subagent {
+                    workspace::Attention::set(
+                        cx,
+                        workspace::AttentionKind::FailedRun,
+                        session_id.0.to_string(),
+                        true,
+                    );
                     self.notify_with_sound(
                         "Agent stopped due to an error",
                         IconName::Warning,

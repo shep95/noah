@@ -64,6 +64,17 @@ actions!(
         /// Opens asherin.eye, your own editable copy of the ADAM globe, and
         /// starts it in the browser room.
         OpenAsherinEye,
+        /// Opens asherin.board, a whiteboard you and shepherd draw on.
+        OpenAsherinBoard,
+        /// Shows or hides the notepad: a small window of its own you can
+        /// drag anywhere, onto any screen, and size as you like. It saves itself.
+        ToggleNotes,
+        /// Makes a new project folder and opens shepherd in it, so a prompt
+        /// can become software without opening a project first.
+        StartProjectFromPrompt,
+        /// Pins the open project's app to the rail as a tab of its own,
+        /// kept on this device: its .noah/app.json address, or its index.html.
+        PinProjectAsTab,
         /// Turns on or off whether noah's colors follow the background image.
         ToggleBackgroundColors,
         /// Shows the open file (HTML, SVG, PDF or an image) in the browser

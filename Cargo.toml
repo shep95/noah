@@ -151,7 +151,9 @@ members = [
     "crates/net",
     "crates/node_runtime",
     "crates/noah_addons",
+    "crates/noah_board",
     "crates/noah_capture",
+    "crates/noah_notes",
     "crates/noah_device",
     "crates/noah_i18n",
     "crates/noah_trust",
@@ -430,7 +432,9 @@ multi_buffer = { path = "crates/multi_buffer" }
 net = { path = "crates/net" }
 node_runtime = { path = "crates/node_runtime" }
 noah_addons = { path = "crates/noah_addons" }
+noah_board = { path = "crates/noah_board" }
 noah_capture = { path = "crates/noah_capture" }
+noah_notes = { path = "crates/noah_notes" }
 noah_device = { path = "crates/noah_device" }
 noah_i18n = { path = "crates/noah_i18n" }
 noah_trust = { path = "crates/noah_trust" }

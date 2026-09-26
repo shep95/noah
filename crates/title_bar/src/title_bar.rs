@@ -334,6 +334,7 @@ impl Render for TitleBar {
                                     title_bar
                                         .children(self.render_project_host(cx))
                                         .child(self.render_project_name(project_name, window, cx))
+                                        .children(self.render_attention(cx))
                                 })
                                 .when_some(
                                     repository.filter(|_| is_git_enabled),
@@ -493,6 +494,9 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.observe(&user_store, |_a, _, cx| cx.notify()));
+        subscriptions.push(cx.observe(&workspace::Attention::global(cx), |_, _, cx| {
+            cx.notify()
+        }));
         if let Some(workspace_entity) = workspace.weak_handle().upgrade() {
             subscriptions.push(cx.subscribe(
                 &workspace_entity,
@@ -789,6 +793,38 @@ impl TitleBar {
                             })
                             .log_err();
                     })
+                })
+                .into_any_element(),
+        )
+    }
+
+    /// What waits on the person across every shepherd thread, as one count.
+    /// Only a decision waiting earns the accent; failed runs and flagged
+    /// claims stay in the mist. Nothing is shown when nothing waits.
+    fn render_attention(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let attention = workspace::Attention::global(cx);
+        let attention = attention.read(cx);
+        let count = attention.count();
+        if count == 0 {
+            return None;
+        }
+        let breakdown = attention.breakdown();
+        let waiting = breakdown
+            .iter()
+            .any(|(kind, _)| *kind == workspace::AttentionKind::WaitingOnYou);
+        let summary: SharedString = breakdown
+            .iter()
+            .map(|(kind, count)| kind.label(*count))
+            .collect::<Vec<_>>()
+            .join(" · ")
+            .into();
+        Some(
+            Button::new("attention", count.to_string())
+                .label_size(LabelSize::Small)
+                .color(if waiting { Color::Success } else { Color::Muted })
+                .tooltip(Tooltip::text(summary))
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(Box::new(workspace::EnterShepherdRoom), cx)
                 })
                 .into_any_element(),
         )

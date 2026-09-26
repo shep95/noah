@@ -38,6 +38,9 @@ use crate::{AgentInitialContent, AgentPanel, ConversationView};
 
 const PAGES_GUIDE: &str = include_str!("../../../assets/shepherd/pages_guide.md");
 const SEARCH_GUIDE: &str = include_str!("../../../assets/shepherd/search_guide.md");
+const BOARD_GUIDE: &str = include_str!("../../../assets/shepherd/board_guide.md");
+const PROMPT_PROJECT_GUIDE: &str =
+    include_str!("../../../assets/shepherd/prompt_project_guide.md");
 
 actions!(
     asherin_chat,
@@ -90,10 +93,23 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &zed_actions::OpenAsherinSearch, cx| {
         open_room(paths::search_directory(), Some(SEARCH_GUIDE), None, cx)
     });
+    cx.on_action(|_: &zed_actions::OpenAsherinBoard, cx| {
+        open_room(
+            paths::board_directory(),
+            Some(BOARD_GUIDE),
+            Some(Box::new(|workspace, _panel, window, cx| {
+                noah_board::open_in(workspace, paths::board_directory(), window, cx);
+            })),
+            cx,
+        )
+    });
     cx.observe_new(|workspace: &mut Workspace, window, cx| {
         let Some(window) = window else {
             return;
         };
+        workspace.register_action(|workspace, _: &zed_actions::StartProjectFromPrompt, window, cx| {
+            start_project_from_prompt(workspace, window, cx);
+        });
         workspace.register_action(|workspace, _: &ToggleTree, window, cx| {
             toggle_tree(workspace, window, cx);
         });
@@ -128,6 +144,91 @@ pub fn init(cx: &mut App) {
 
 pub(crate) fn is_chat_workspace(workspace: &Workspace, cx: &App) -> bool {
     agent::Thread::is_chat_project(workspace.project(), cx)
+}
+
+/// The next free `untitled-N` under `base`, created.
+fn next_untitled_folder(base: &Path) -> anyhow::Result<PathBuf> {
+    std::fs::create_dir_all(base)?;
+    for index in 1..10_000 {
+        let candidate = base.join(format!("untitled-{index}"));
+        if !candidate.exists() {
+            std::fs::create_dir(&candidate)?;
+            return Ok(candidate);
+        }
+    }
+    anyhow::bail!("too many untitled projects in {}", base.display())
+}
+
+/// The welcome page's way in for someone with an idea and no folder: makes
+/// a project under ~/noah-projects, opens it in this window, and starts a
+/// shepherd thread there with the composer waiting for the prompt.
+fn start_project_from_prompt(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    let folder = match next_untitled_folder(&paths::prompt_projects_directory()) {
+        Ok(folder) => folder,
+        Err(error) => {
+            workspace.show_toast(
+                Toast::new(
+                    NotificationId::named("prompt-project".into()),
+                    format!("couldn't make a project folder: {error:#}"),
+                ),
+                cx,
+            );
+            return;
+        }
+    };
+    if let Err(error) = std::fs::write(folder.join("AGENTS.md"), PROMPT_PROJECT_GUIDE) {
+        log::error!("couldn't write the project guide in {}: {error}", folder.display());
+    }
+    let project = workspace.project().clone();
+    // A folder noah just made is the person's own; opening it trusted keeps
+    // shepherd's tools available from the first message.
+    if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
+        let worktree_store = project.read(cx).worktree_store();
+        trusted_worktrees.update(cx, |trusted_worktrees, cx| {
+            trusted_worktrees.trust(
+                &worktree_store,
+                HashSet::from_iter([PathTrust::AbsPath(folder.clone())]),
+                cx,
+            );
+        });
+    }
+    let added = project.update(cx, |project, cx| {
+        project.find_or_create_worktree(&folder, true, cx)
+    });
+    cx.spawn_in(window, async move |workspace, cx| {
+        added.await?;
+        workspace.update_in(cx, |workspace, window, cx| {
+            if let Some(panel) = workspace.focus_panel::<AgentPanel>(window, cx) {
+                panel.update(cx, |panel, cx| {
+                    panel.new_thread_with_content(
+                        AgentInitialContent::ContentBlock {
+                            blocks: Vec::new(),
+                            auto_submit: false,
+                        },
+                        window,
+                        cx,
+                    );
+                });
+            }
+            workspace.show_toast(
+                Toast::new(
+                    NotificationId::named("prompt-project".into()),
+                    format!(
+                        "your project lives in {}. tell shepherd what to build.",
+                        folder.display()
+                    ),
+                )
+                .autohide(),
+                cx,
+            );
+        })?;
+        anyhow::Ok(())
+    })
+    .detach_and_log_err(cx);
 }
 
 fn active_thread_view(workspace: &Workspace, cx: &App) -> Option<Entity<ThreadView>> {
@@ -1011,4 +1112,19 @@ pub(crate) fn draft_chat_agent(
         }
     })
     .detach();
+}
+
+#[cfg(test)]
+mod prompt_project_tests {
+    use super::next_untitled_folder;
+
+    #[test]
+    fn untitled_folders_count_up_and_are_created() {
+        let base = tempfile::tempdir().expect("a temp dir");
+        let first = next_untitled_folder(base.path()).expect("first");
+        let second = next_untitled_folder(base.path()).expect("second");
+        assert_eq!(first, base.path().join("untitled-1"));
+        assert_eq!(second, base.path().join("untitled-2"));
+        assert!(first.is_dir() && second.is_dir());
+    }
 }

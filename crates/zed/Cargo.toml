@@ -64,6 +64,7 @@ required-features = ["visual-tests"]
 
 [dependencies]
 noah_i18n.workspace = true
+noah_notes.workspace = true
 acp_thread.workspace = true
 acp_tools.workspace = true
 action_log = { workspace = true, optional = true }

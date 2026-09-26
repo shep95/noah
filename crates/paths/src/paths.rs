@@ -158,6 +158,21 @@ pub fn search_directory() -> PathBuf {
     home_dir().join(".noah").join("search")
 }
 
+/// asherin.board's home: the whiteboard file and the pictures placed on it.
+pub fn board_directory() -> PathBuf {
+    home_dir().join(".noah").join("board")
+}
+
+/// The notepad's text, plain markdown the person can open anywhere.
+pub fn notes_file() -> PathBuf {
+    home_dir().join(".noah").join("notes.md")
+}
+
+/// Where projects started from a prompt on the welcome page are made.
+pub fn prompt_projects_directory() -> PathBuf {
+    home_dir().join("noah-projects")
+}
+
 /// asherin.chat's home: the folder chat threads run in when they aren't tied
 /// to a project, holding the chat's global memory.
 pub fn chat_directory() -> PathBuf {

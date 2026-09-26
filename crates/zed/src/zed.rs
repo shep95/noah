@@ -234,6 +234,8 @@ pub fn init(cx: &mut App) {
         });
     }
 
+    noah_notes::init(cx);
+
     cx.on_action(|_: &zed_actions::OpenLicenses, cx| {
         with_active_or_new_workspace(cx, |workspace, window, cx| {
             open_bundled_file(

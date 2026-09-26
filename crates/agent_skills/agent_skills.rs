@@ -693,12 +693,18 @@ pub fn read_skill_body_from_content(
 
 /// Content of the built-in `create-skill` SKILL.md, embedded at compile time.
 const CREATE_SKILL_CONTENT: &str = include_str!("builtin/create-skill/SKILL.md");
+/// How shepherd audits a codebase for security flaws: surface, proof, patch, report.
+const SECURITY_AUDIT_CONTENT: &str = include_str!("builtin/security-audit/SKILL.md");
 
 /// Returns the set of skills that are compiled into the Zed binary.
 pub fn builtin_skills() -> Vec<Skill> {
     let mut skills = Vec::new();
-    if let Ok(skill) = parse_builtin_skill("create-skill", CREATE_SKILL_CONTENT) {
-        skills.push(skill);
+    // The contents are compiled in, so a parse failure is a programming error
+    // that `every_builtin_skill_parses` catches; here it only costs the skill.
+    for (name, content) in BUILTIN_SKILL_ENTRIES {
+        if let Ok(skill) = parse_builtin_skill(name, content) {
+            skills.push(skill);
+        }
     }
     skills
 }
@@ -727,7 +733,10 @@ fn parse_builtin_skill(name: &str, content: &'static str) -> Result<Skill> {
 
 /// All built-in skills as `(name, raw_content)` pairs. Used by
 /// `builtin_skill_content` to serve the full SKILL.md without disk I/O.
-const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[("create-skill", CREATE_SKILL_CONTENT)];
+const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[
+    ("create-skill", CREATE_SKILL_CONTENT),
+    ("security-audit", SECURITY_AUDIT_CONTENT),
+];
 
 /// Look up the full embedded content of a built-in skill by its
 /// synthetic file path. Returns `None` if the path doesn't match any
@@ -853,6 +862,21 @@ mod tests {
     use super::*;
     use fs::FakeFs;
     use gpui::TestAppContext;
+
+    #[test]
+    fn every_builtin_skill_parses() {
+        let skills = builtin_skills();
+        let names: Vec<&str> = skills.iter().map(|skill| skill.name.as_str()).collect();
+        assert_eq!(names, vec!["create-skill", "security-audit"]);
+        for skill in &skills {
+            assert!(
+                builtin_skill_content(&skill.skill_file_path).is_some(),
+                "{} has no embedded content",
+                skill.name
+            );
+            assert!(!skill.disable_model_invocation);
+        }
+    }
 
     #[test]
     fn test_skill_source_precedence_is_total_and_ordered() {

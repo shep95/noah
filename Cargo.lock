@@ -550,6 +550,7 @@ dependencies = [
  "markdown",
  "menu",
  "multi_buffer",
+ "noah_board",
  "noah_i18n",
  "noah_trust",
  "notifications",
@@ -11576,6 +11577,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "noah_board"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "gpui",
+ "image",
+ "log",
+ "paths",
+ "serde",
+ "serde_json",
+ "settings",
+ "tempfile",
+ "theme_settings",
+ "ui",
+ "util",
+ "workspace",
+]
+
+[[package]]
 name = "noah_capture"
 version = "0.1.0"
 dependencies = [
@@ -11620,6 +11641,28 @@ dependencies = [
  "gpui",
  "settings",
  "sys-locale",
+]
+
+[[package]]
+name = "noah_notes"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "editor",
+ "gpui",
+ "language",
+ "log",
+ "multi_buffer",
+ "paths",
+ "release_channel",
+ "serde",
+ "serde_json",
+ "settings",
+ "theme",
+ "ui",
+ "util",
+ "workspace",
+ "zed_actions",
 ]
 
 [[package]]
@@ -23203,6 +23246,7 @@ dependencies = [
  "mimalloc",
  "miniprofiler_ui",
  "noah_i18n",
+ "noah_notes",
  "node_runtime",
  "notifications",
  "onboarding",

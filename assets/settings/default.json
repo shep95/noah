@@ -64,6 +64,9 @@
   "ui_font_features": {
     // Disable ligatures:
     "calt": false,
+    // Tabular numerals, so counts and times in the UI line up and don't
+    // jitter as they change.
+    "tnum": true,
   },
   // The weight of the UI font in standard CSS units from 100 to 900.
   "ui_font_weight": 300,

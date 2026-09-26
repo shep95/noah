@@ -159,6 +159,11 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
             workspace.toggle_screen_recording(window, cx)
         }),
     )
+    .on_action(
+        cx.listener(|workspace, _: &noah_capture::ToggleCameraInRecordings, _window, cx| {
+            workspace.toggle_camera_in_recordings(cx)
+        }),
+    )
 }
 
 struct CaptureNotification;
@@ -195,6 +200,7 @@ fn bundled_backgrounds(cx: &App) -> Vec<(String, String)> {
 fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
     let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
     let recording = noah_capture::is_recording(cx);
+    let camera = noah_capture::camera_wanted(cx);
     ContextMenu::build(window, cx, move |menu, _window, cx| {
         let check_for_updates = cx.build_action("auto_update::Check", None).ok();
         let menu = menu
@@ -251,6 +257,15 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                 if recording { "stop recording" } else { "record the screen" },
                 Box::new(noah_capture::ToggleScreenRecording),
             )
+            .toggleable_entry(
+                "your camera in recordings",
+                camera,
+                IconPosition::Start,
+                Some(Box::new(noah_capture::ToggleCameraInRecordings)),
+                |window, cx| {
+                    window.dispatch_action(Box::new(noah_capture::ToggleCameraInRecordings), cx)
+                },
+            )
             .action("keyboard shortcuts", Box::new(zed_actions::OpenKeymap))
             .action("view logs", Box::new(crate::OpenLog))
             .separator()
@@ -265,6 +280,18 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
 }
 
 impl Workspace {
+    fn toggle_camera_in_recordings(&mut self, cx: &mut Context<Self>) {
+        let message = match noah_capture::toggle_camera(cx) {
+            Ok(true) => {
+                "your camera joins the next recording, as a small rounded window in the corner"
+                    .to_string()
+            }
+            Ok(false) => "recordings are the screen only again".to_string(),
+            Err(error) => format!("couldn't turn the camera on: {error:#}"),
+        };
+        self.show_capture_toast(message, None, cx);
+    }
+
     fn take_screenshot(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let task = noah_capture::take_screenshot(window, cx);
         cx.spawn(async move |workspace, cx| {
@@ -539,6 +566,36 @@ impl Workspace {
             )
             .child(
                 h_flex().w_full().justify_center().child(
+                    IconButton::new("notes", IconName::Notepad)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action(
+                                "notes: a pad of your own, drag it anywhere",
+                                &zed_actions::ToggleNotes,
+                                cx,
+                            )
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::ToggleNotes), cx)
+                        }),
+                ),
+            )
+            .child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("asherin-board", IconName::Blocks)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("asherin.board", &zed_actions::OpenAsherinBoard, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenAsherinBoard), cx)
+                        }),
+                ),
+            )
+            .child(
+                h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-eye", IconName::Eye)
                         .icon_size(IconSize::Small)
                         .icon_color(Color::Muted)
@@ -605,6 +662,27 @@ impl Workspace {
                             workspace.toggle_screen_recording(window, cx)
                         })),
                     )
+                    .child({
+                        let camera = noah_capture::camera_wanted(cx);
+                        IconButton::new("camera-bubble", IconName::Person)
+                            .icon_size(IconSize::Small)
+                            .icon_color(if camera { Color::Default } else { Color::Muted })
+                            .toggle_state(camera)
+                            .tooltip(move |_window, cx| {
+                                Tooltip::for_action(
+                                    if camera {
+                                        "your camera is in recordings, as a rounded window in the corner"
+                                    } else {
+                                        "add your camera to recordings (needs ffmpeg)"
+                                    },
+                                    &noah_capture::ToggleCameraInRecordings,
+                                    cx,
+                                )
+                            })
+                            .on_click(cx.listener(|workspace, _, _window, cx| {
+                                workspace.toggle_camera_in_recordings(cx)
+                            }))
+                    })
             })
             .child(
                 div().pb_3().child(

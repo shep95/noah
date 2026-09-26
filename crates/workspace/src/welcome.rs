@@ -375,6 +375,40 @@ impl WelcomePage {
             )
     }
 
+    /// The way in for someone with an idea and no folder yet: one click makes
+    /// a project and puts shepherd in it, and the prompt goes to shepherd.
+    fn render_prompt_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let color = cx.theme().colors();
+        v_flex()
+            .w_full()
+            .p_3()
+            .gap_1()
+            .rounded_md()
+            .border_1()
+            .border_color(color.border_variant)
+            .child(Label::new(noah_i18n::t(cx, "turn a prompt into software")))
+            .child(
+                Label::new(noah_i18n::t(
+                    cx,
+                    "no project yet? say what you want built. noah makes a folder for it and shepherd starts from your words.",
+                ))
+                .size(LabelSize::Small)
+                .color(Color::Muted)
+                .mb_1(),
+            )
+            .child(
+                Button::new("start-from-prompt", noah_i18n::t(cx, "talk to shepherd"))
+                    .full_width()
+                    .style(ButtonStyle::Outlined)
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(
+                            zed_actions::StartProjectFromPrompt.boxed_clone(),
+                            cx,
+                        );
+                    }),
+            )
+    }
+
     fn render_recent_project_section(
         &self,
         recent_projects: Vec<impl IntoElement>,
@@ -486,6 +520,7 @@ impl Render for WelcomePage {
                                 ),
                             ),
                     )
+                    .when(ai_enabled, |this| this.child(self.render_prompt_card(cx)))
                     .child(first_section.render(Default::default(), &self.focus_handle))
                     .child(second_section)
                     .when(ai_enabled && !showing_recent_projects, |this| {

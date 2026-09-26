@@ -70,6 +70,51 @@ fn store(apps: Vec<RailApp>, cx: &mut App) {
     .detach_and_log_err(cx);
 }
 
+/// Where a project's own app lives, for pinning it to the rail. `.noah/app.json`
+/// (`{"name": "…", "url": "…"}`, the url an address or a path relative to the
+/// project) wins; otherwise the first `index.html` in the usual places, named
+/// after the project folder. Everything stays on this device.
+pub fn app_for_project(root: &std::path::Path) -> Option<RailApp> {
+    let project_name = root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| root.display().to_string());
+    if let Ok(bytes) = std::fs::read(root.join(".noah").join("app.json"))
+        && let Some(declared) = serde_json::from_slice::<RailApp>(&bytes).log_err()
+    {
+        let url = if declared.url.contains("://") {
+            declared.url
+        } else {
+            url::Url::from_file_path(root.join(&declared.url))
+                .ok()?
+                .to_string()
+        };
+        let name = if declared.name.trim().is_empty() {
+            project_name
+        } else {
+            declared.name
+        };
+        return Some(RailApp { name, url });
+    }
+    const ENTRY_POINTS: [&str; 6] = [
+        "index.html",
+        "dist/index.html",
+        "build/index.html",
+        "public/index.html",
+        "out/index.html",
+        "site/index.html",
+    ];
+    ENTRY_POINTS.iter().find_map(|candidate| {
+        let path = root.join(candidate);
+        path.is_file().then(|| {
+            url::Url::from_file_path(&path).ok().map(|url| RailApp {
+                name: project_name.clone(),
+                url: url.to_string(),
+            })
+        })?
+    })
+}
+
 /// A short name for an address: the file name for local pages, the host
 /// (with its port, so two dev servers stay apart) for everything else.
 pub fn name_for_url(url: &str) -> String {
@@ -93,6 +138,31 @@ pub fn name_for_url(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_a_projects_app() {
+        let root = tempfile::tempdir().expect("a temp dir");
+        assert_eq!(app_for_project(root.path()), None);
+
+        std::fs::create_dir_all(root.path().join("dist")).expect("dist");
+        std::fs::write(root.path().join("dist/index.html"), "<p>hi</p>").expect("index");
+        let found = app_for_project(root.path()).expect("the dist page");
+        assert!(found.url.starts_with("file://") && found.url.ends_with("/dist/index.html"));
+        assert_eq!(
+            found.name,
+            root.path().file_name().unwrap().to_string_lossy()
+        );
+
+        std::fs::create_dir_all(root.path().join(".noah")).expect(".noah");
+        std::fs::write(
+            root.path().join(".noah/app.json"),
+            r#"{"name": "my shop", "url": "http://localhost:5173"}"#,
+        )
+        .expect("app.json");
+        let declared = app_for_project(root.path()).expect("the declared app");
+        assert_eq!(declared.name, "my shop");
+        assert_eq!(declared.url, "http://localhost:5173");
+    }
 
     #[test]
     fn names_read_well() {

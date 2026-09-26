@@ -5951,7 +5951,27 @@ impl ThreadView {
         self.handoff = std::fs::read_to_string(&path)
             .ok()
             .and_then(|json| serde_json::from_str(&json).ok());
+        let flagged = self.handoff.as_ref().is_some_and(|bundle| {
+            bundle.claims.iter().any(|claim| {
+                !matches!(
+                    bundle.grounding(claim),
+                    noah_trust::evidence::Grounding::Grounded
+                )
+            })
+        });
+        self.set_flagged_claims(flagged, cx);
         cx.notify();
+    }
+
+    /// Counts this thread's unverified claims in the title bar until the
+    /// person accepts the handoff or asks for revisions.
+    fn set_flagged_claims(&self, flagged: bool, cx: &mut App) {
+        workspace::Attention::set(
+            cx,
+            workspace::AttentionKind::FlaggedClaim,
+            self.session_id.0.to_string(),
+            flagged,
+        );
     }
 
     fn render_handoff_card(&self, cx: &Context<Self>) -> Option<AnyElement> {
@@ -12998,10 +13018,12 @@ impl Render for ThreadView {
             }))
             .on_action(cx.listener(|this, _: &crate::AcceptHandoff, _, cx| {
                 this.handoff = None;
+                this.set_flagged_claims(false, cx);
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &crate::RequestRevisions, window, cx| {
                 this.handoff = None;
+                this.set_flagged_claims(false, cx);
                 this.message_editor.update(cx, |editor, cx| {
                     editor.set_text("please revise: ", window, cx);
                     editor.focus_handle(cx).focus(window, cx);

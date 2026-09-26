@@ -22,6 +22,9 @@ actions!(
         TakeScreenshot,
         /// Starts or stops recording the noah window.
         ToggleScreenRecording,
+        /// Turns on or off your camera in recordings, shown as a small
+        /// rounded rectangle in the corner. Needs ffmpeg on this machine.
+        ToggleCameraInRecordings,
     ]
 );
 
@@ -57,6 +60,8 @@ struct CaptureState {
     /// Starting a recording is asynchronous; a second toggle meanwhile must
     /// not start another one.
     starting: bool,
+    /// Whether recordings should carry the camera bubble.
+    camera_wanted: bool,
 }
 
 impl Global for CaptureState {}
@@ -66,6 +71,8 @@ struct Recording {
     path: PathBuf,
     #[cfg(not(target_os = "macos"))]
     session: Session,
+    #[cfg(not(target_os = "macos"))]
+    camera: Option<camera::CameraFeed>,
     #[cfg(target_os = "macos")]
     child: std::process::Child,
 }
@@ -73,6 +80,26 @@ struct Recording {
 pub fn is_recording(cx: &App) -> bool {
     cx.try_global::<CaptureState>()
         .is_some_and(|state| state.recording.is_some())
+}
+
+/// Whether the next recording will include the camera bubble.
+pub fn camera_wanted(cx: &App) -> bool {
+    cx.try_global::<CaptureState>()
+        .is_some_and(|state| state.camera_wanted)
+}
+
+/// Turns the camera bubble on or off for recordings that start after this.
+/// Returns what it is now, or an error when nothing on this machine can read
+/// a camera.
+pub fn toggle_camera(cx: &mut App) -> Result<bool> {
+    let state = cx.default_global::<CaptureState>();
+    if !state.camera_wanted {
+        camera::check_available()?;
+    }
+    state.camera_wanted = !state.camera_wanted;
+    let wanted = state.camera_wanted;
+    cx.refresh_windows();
+    Ok(wanted)
 }
 
 pub fn recording_elapsed(cx: &App) -> Option<Duration> {
@@ -205,14 +232,31 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
     #[cfg(not(target_os = "macos"))]
     {
         let path = directory.join(format!("noah {}.avi", timestamp()));
+        // The camera starts first so its first frames are ready when the
+        // screen frames begin; a camera that fails to open fails the
+        // recording rather than silently leaving the bubble out.
+        let camera = if cx.default_global::<CaptureState>().camera_wanted {
+            match camera::CameraFeed::start() {
+                Ok(feed) => Some(feed),
+                Err(error) => return Task::ready(Err(error)),
+            }
+        } else {
+            None
+        };
+        let camera_frames = camera.as_ref().map(|feed| feed.latest());
         #[cfg(target_os = "linux")]
         let start = match x11::window_id(window) {
-            Some(window_id) => Task::ready(x11::start_recording(path.clone(), window_id)),
+            Some(window_id) => Task::ready(x11::start_recording(
+                path.clone(),
+                window_id,
+                camera_frames,
+            )),
             None => {
                 let start = platform::start_recording(
                     path.clone(),
                     window_rect(window, cx),
                     window_display(window, cx),
+                    camera_frames,
                     cx,
                 );
                 cx.spawn(async move |_| start.await.map(Session::Scap))
@@ -221,23 +265,33 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
         #[cfg(target_os = "windows")]
         let start = {
             let start = platform::start_recording(
-                    path.clone(),
-                    window_rect(window, cx),
-                    window_display(window, cx),
-                    cx,
-                );
+                path.clone(),
+                window_rect(window, cx),
+                window_display(window, cx),
+                camera_frames,
+                cx,
+            );
             cx.spawn(async move |_| start.await.map(Session::Scap))
         };
         cx.default_global::<CaptureState>().starting = true;
         cx.spawn(async move |cx| {
             let session = start.await;
             cx.update(|cx| cx.default_global::<CaptureState>().starting = false);
-            let session = session?;
+            let session = match session {
+                Ok(session) => session,
+                Err(error) => {
+                    if let Some(camera) = camera {
+                        camera.stop();
+                    }
+                    return Err(error);
+                }
+            };
             cx.update(|cx| {
                 cx.default_global::<CaptureState>().recording = Some(Recording {
                     started: Instant::now(),
                     path,
                     session,
+                    camera,
                 });
                 schedule_automatic_stop(cx);
                 cx.refresh_windows();
@@ -274,10 +328,234 @@ fn stop_recording(cx: &mut App) -> Task<Result<Option<PathBuf>>> {
     let finished = platform_mac::stop_recording(recording.child, cx);
     #[cfg(not(target_os = "macos"))]
     let finished = recording.session.finish(duration, cx);
+    #[cfg(not(target_os = "macos"))]
+    if let Some(camera) = recording.camera {
+        camera.stop();
+    }
     cx.background_spawn(async move {
         finished.await?;
         Ok(Some(convert_to_mp4(&path).unwrap_or(path)))
     })
+}
+
+/// A live camera picture, read through ffmpeg so no camera library ships with
+/// noah, drawn into recordings as a rounded rectangle in the lower right.
+#[cfg(not(target_os = "macos"))]
+mod camera {
+    use super::*;
+    use std::io::Read as _;
+    use std::sync::{Arc, Mutex};
+
+    /// The newest decoded camera frame, shared with the recording encoder.
+    pub(super) type LatestFrame = Arc<Mutex<Option<image::RgbImage>>>;
+
+    const CAPTURE_SIZE: &str = "640x480";
+    const CAPTURE_RATE: &str = "15";
+
+    pub(super) struct CameraFeed {
+        child: std::process::Child,
+        latest: LatestFrame,
+        reader: Option<std::thread::JoinHandle<()>>,
+    }
+
+    fn ffmpeg() -> Result<PathBuf> {
+        which::which("ffmpeg").map_err(|_| {
+            anyhow!("the camera bubble needs ffmpeg on this machine; install it and try again")
+        })
+    }
+
+    /// The first camera the system knows about, as ffmpeg names it.
+    fn device(ffmpeg: &Path) -> Result<Vec<String>> {
+        #[cfg(target_os = "linux")]
+        {
+            let device = (0..10)
+                .map(|index| format!("/dev/video{index}"))
+                .find(|path| Path::new(path).exists())
+                .ok_or_else(|| anyhow!("no camera was found (nothing at /dev/video0)"))?;
+            let _ = ffmpeg;
+            Ok(vec!["-f".into(), "v4l2".into(), "-i".into(), device])
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let output = gpui_util::new_std_command(ffmpeg)
+                .args(["-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"])
+                .output()
+                .context("couldn't ask ffmpeg for the cameras")?;
+            let listing = String::from_utf8_lossy(&output.stderr);
+            let name = listing
+                .lines()
+                .filter(|line| line.contains("(video)"))
+                .find_map(|line| {
+                    let start = line.find('"')? + 1;
+                    let end = line[start..].find('"')? + start;
+                    Some(line[start..end].to_string())
+                })
+                .ok_or_else(|| anyhow!("no camera was found"))?;
+            Ok(vec!["-f".into(), "dshow".into(), "-i".into(), format!("video={name}")])
+        }
+    }
+
+    pub(super) fn check_available() -> Result<()> {
+        let ffmpeg = ffmpeg()?;
+        device(&ffmpeg).map(|_| ())
+    }
+
+    impl CameraFeed {
+        pub(super) fn start() -> Result<Self> {
+            let ffmpeg = ffmpeg()?;
+            let input = device(&ffmpeg)?;
+            let mut child = gpui_util::new_std_command(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error"])
+                .args(["-framerate", CAPTURE_RATE, "-video_size", CAPTURE_SIZE])
+                .args(&input)
+                .args(["-f", "mjpeg", "-q:v", "5", "pipe:1"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .context("couldn't start ffmpeg for the camera")?;
+            let mut stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| anyhow!("ffmpeg gave no camera output"))?;
+            let latest: LatestFrame = Arc::new(Mutex::new(None));
+            let reader = std::thread::Builder::new()
+                .name("noah-camera".into())
+                .spawn({
+                    let latest = latest.clone();
+                    move || {
+                        let mut buffer = Vec::new();
+                        let mut chunk = [0u8; 16 * 1024];
+                        loop {
+                            let read = match stdout.read(&mut chunk) {
+                                Ok(0) | Err(_) => break,
+                                Ok(read) => read,
+                            };
+                            buffer.extend_from_slice(&chunk[..read]);
+                            while let Some(frame) = take_jpeg(&mut buffer) {
+                                if let Ok(decoded) = image::load_from_memory_with_format(
+                                    &frame,
+                                    image::ImageFormat::Jpeg,
+                                ) {
+                                    if let Ok(mut latest) = latest.lock() {
+                                        *latest = Some(decoded.to_rgb8());
+                                    }
+                                }
+                            }
+                            // A stalled decoder must not grow the buffer forever.
+                            if buffer.len() > 8 * 1024 * 1024 {
+                                buffer.clear();
+                            }
+                        }
+                    }
+                })
+                .context("couldn't start reading the camera")?;
+            Ok(Self {
+                child,
+                latest,
+                reader: Some(reader),
+            })
+        }
+
+        pub(super) fn latest(&self) -> LatestFrame {
+            self.latest.clone()
+        }
+
+        pub(super) fn stop(mut self) {
+            self.child.kill().ok();
+            self.child.wait().ok();
+            if let Some(reader) = self.reader.take() {
+                reader.join().ok();
+            }
+        }
+    }
+
+    /// Removes and returns the first whole JPEG (start marker to end marker)
+    /// from the front of `buffer`, if one has arrived.
+    pub(super) fn take_jpeg(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
+        let start = buffer.windows(2).position(|pair| pair == [0xFF, 0xD8])?;
+        let end = buffer[start + 2..]
+            .windows(2)
+            .position(|pair| pair == [0xFF, 0xD9])?
+            + start
+            + 4;
+        let frame = buffer[start..end].to_vec();
+        buffer.drain(..end);
+        Some(frame)
+    }
+
+    /// Draws `camera` over the lower-right corner of `frame` as a rounded
+    /// rectangle about a quarter of the frame wide, with soft corners.
+    pub(super) fn overlay(frame: &mut image::RgbImage, camera: &image::RgbImage) {
+        let (frame_width, frame_height) = frame.dimensions();
+        if frame_width < 160 || frame_height < 120 || camera.width() == 0 || camera.height() == 0 {
+            return;
+        }
+        let bubble_width = (frame_width as f32 * 0.24).max(120.0).round() as u32;
+        let bubble_height = (bubble_width as f32 * camera.height() as f32 / camera.width() as f32)
+            .round()
+            .max(1.0) as u32;
+        let bubble_height = bubble_height.min(frame_height / 2);
+        let margin = (frame_width as f32 * 0.02).round() as u32;
+        let left = frame_width.saturating_sub(bubble_width + margin);
+        let top = frame_height.saturating_sub(bubble_height + margin);
+        let resized = image::imageops::resize(
+            camera,
+            bubble_width,
+            bubble_height,
+            image::imageops::FilterType::Triangle,
+        );
+        let radius = (bubble_height as f32 * 0.14).max(4.0);
+        for y in 0..bubble_height {
+            for x in 0..bubble_width {
+                let coverage = rounded_rect_coverage(
+                    x as f32 + 0.5,
+                    y as f32 + 0.5,
+                    bubble_width as f32,
+                    bubble_height as f32,
+                    radius,
+                );
+                if coverage <= 0.0 {
+                    continue;
+                }
+                let (target_x, target_y) = (left + x, top + y);
+                if target_x >= frame_width || target_y >= frame_height {
+                    continue;
+                }
+                let source = resized.get_pixel(x, y).0;
+                let target = frame.get_pixel_mut(target_x, target_y);
+                for channel in 0..3 {
+                    let blended = source[channel] as f32 * coverage
+                        + target.0[channel] as f32 * (1.0 - coverage);
+                    target.0[channel] = blended.round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+    }
+
+    /// How much of a pixel centred at (x, y) lies inside a rounded rectangle
+    /// of the given size: 1 inside, 0 outside, in between along the corner.
+    pub(super) fn rounded_rect_coverage(x: f32, y: f32, width: f32, height: f32, radius: f32) -> f32 {
+        let corner_x = if x < radius {
+            radius - x
+        } else if x > width - radius {
+            x - (width - radius)
+        } else {
+            0.0
+        };
+        let corner_y = if y < radius {
+            radius - y
+        } else if y > height - radius {
+            y - (height - radius)
+        } else {
+            0.0
+        };
+        if corner_x == 0.0 || corner_y == 0.0 {
+            return 1.0;
+        }
+        let distance = (corner_x * corner_x + corner_y * corner_y).sqrt();
+        (radius - distance + 0.5).clamp(0.0, 1.0)
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -488,6 +766,7 @@ mod platform {
         path: PathBuf,
         rect: CropRect,
         display: Option<u32>,
+        camera: Option<camera::LatestFrame>,
         cx: &mut App,
     ) -> Task<Result<RecordingSession>> {
         cx.spawn(async move |cx| {
@@ -529,7 +808,7 @@ mod platform {
                                     return Ok(());
                                 };
                                 let (width, height) = writer.dimensions();
-                                let image = if (image.width(), image.height()) == (width, height) {
+                                let mut image = if (image.width(), image.height()) == (width, height) {
                                     image
                                 } else {
                                     image::imageops::resize(
@@ -539,6 +818,12 @@ mod platform {
                                         image::imageops::FilterType::Triangle,
                                     )
                                 };
+                                if let Some(camera) = &camera
+                                    && let Ok(latest) = camera.lock()
+                                    && let Some(picture) = latest.as_ref()
+                                {
+                                    camera::overlay(&mut image, picture);
+                                }
                                 let mut jpeg = Vec::new();
                                 image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 82)
                                     .encode_image(&image)?;
@@ -657,7 +942,11 @@ mod x11 {
         }
     }
 
-    pub(super) fn start_recording(path: PathBuf, window: u32) -> Result<Session> {
+    pub(super) fn start_recording(
+        path: PathBuf,
+        window: u32,
+        camera: Option<camera::LatestFrame>,
+    ) -> Result<Session> {
         let grabber = Grabber::connect(window)?;
         let first = grabber.grab()?;
         let stop = Arc::new(AtomicBool::new(false));
@@ -675,7 +964,7 @@ mod x11 {
                             Some(image) => image,
                             None => grabber.grab()?,
                         };
-                        let image = if (image.width(), image.height()) == (width, height) {
+                        let mut image = if (image.width(), image.height()) == (width, height) {
                             image
                         } else {
                             image::imageops::resize(
@@ -685,6 +974,12 @@ mod x11 {
                                 image::imageops::FilterType::Triangle,
                             )
                         };
+                        if let Some(camera) = &camera
+                            && let Ok(latest) = camera.lock()
+                            && let Some(picture) = latest.as_ref()
+                        {
+                            camera::overlay(&mut image, picture);
+                        }
                         let mut jpeg = Vec::new();
                         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 82)
                             .encode_image(&image)?;
@@ -779,6 +1074,34 @@ mod tests {
         assert_eq!(image.dimensions(), (2, 2));
         assert_eq!(image.get_pixel(0, 0).0, [20, 10, 1]);
         assert_eq!(image.get_pixel(1, 1).0, [20, 10, 5]);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn splits_jpegs_out_of_the_camera_stream() {
+        let mut buffer = vec![0x00, 0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9, 0xFF, 0xD8, 4];
+        assert_eq!(camera::take_jpeg(&mut buffer), Some(vec![0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9]));
+        assert_eq!(camera::take_jpeg(&mut buffer), None);
+        assert_eq!(buffer, vec![0xFF, 0xD8, 4]);
+        buffer.extend_from_slice(&[0xFF, 0xD9]);
+        assert_eq!(camera::take_jpeg(&mut buffer), Some(vec![0xFF, 0xD8, 4, 0xFF, 0xD9]));
+        assert!(buffer.is_empty());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn the_camera_bubble_sits_in_the_corner_with_round_corners() {
+        let mut frame = image::RgbImage::from_pixel(400, 300, image::Rgb([0, 0, 0]));
+        let camera = image::RgbImage::from_pixel(64, 48, image::Rgb([255, 255, 255]));
+        camera::overlay(&mut frame, &camera);
+        // 24% of 400 is 96 wide, 72 tall, 8px in from the lower right.
+        let (left, top) = (400 - 96 - 8, 300 - 72 - 8);
+        assert_eq!(frame.get_pixel(left + 48, top + 36).0, [255, 255, 255]);
+        assert_eq!(frame.get_pixel(left, top).0, [0, 0, 0], "the corner is cut round");
+        assert_eq!(frame.get_pixel(left + 48, top).0, [255, 255, 255], "the edge is square");
+        assert_eq!(frame.get_pixel(10, 10).0, [0, 0, 0]);
+        assert_eq!(camera::rounded_rect_coverage(50.0, 50.0, 100.0, 100.0, 10.0), 1.0);
+        assert_eq!(camera::rounded_rect_coverage(0.5, 0.5, 100.0, 100.0, 10.0), 0.0);
     }
 
     #[test]

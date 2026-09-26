@@ -4793,6 +4793,40 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Pins the open project's app to the rail as a tab kept on this device:
+    /// the address in its `.noah/app.json`, else its `index.html` as a file url.
+    fn pin_project_as_tab(
+        &mut self,
+        _: &zed_actions::PinProjectAsTab,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        struct PinProjectToast;
+        let roots: Vec<PathBuf> = self
+            .project
+            .read(cx)
+            .visible_worktrees(cx)
+            .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+            .collect();
+        let pinned = roots
+            .iter()
+            .find_map(|root| crate::rail_apps::app_for_project(root));
+        let message = match pinned {
+            Some(app) => {
+                let message = format!("pinned {} to the rail", app.name);
+                crate::rail_apps::pin(app, cx);
+                message
+            }
+            None => "nothing to pin yet: put an index.html at the project root, or write \
+                     .noah/app.json with a name and a url (a dev server address or a file)"
+                .to_string(),
+        };
+        self.show_toast(
+            Toast::new(NotificationId::unique::<PinProjectToast>(), message).autohide(),
+            cx,
+        );
+    }
+
     fn toggle_all_docks(
         &mut self,
         _: &ToggleAllDocks,
@@ -8375,6 +8409,7 @@ impl Workspace {
             )
             .on_action(cx.listener(Self::toggle_all_docks))
             .on_action(cx.listener(Self::toggle_quiet_mode))
+            .on_action(cx.listener(Self::pin_project_as_tab))
             .on_action(cx.listener(
                 |workspace: &mut Workspace, _: &ClearAllNotifications, _, cx| {
                     workspace.clear_all_notifications(cx);
