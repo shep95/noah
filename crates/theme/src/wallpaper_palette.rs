@@ -122,19 +122,10 @@ pub fn sample_palette(rgba: &[u8]) -> WallpaperPalette {
     }
 }
 
-/// The mid tone of the bundled wallpaper (`assets/images/noah/wallpaper.jpg`)
-/// as [`sample_palette`] measures it. The noah theme was tuned against that
-/// image, so adapting to another wallpaper is a shift from this tint to the new
-/// image's tint.
-const BUNDLED_WALLPAPER_TINT: Rgb = Rgb {
-    r: 90,
-    g: 114,
-    b: 105,
-};
-
-/// Theme keys whose color carries meaning (errors, warnings, git states, the
-/// approval accent) keep their hue, so a red wallpaper cannot make an error
-/// look like success.
+/// Theme keys whose color carries meaning (errors, warnings, git states,
+/// program output in the terminal, collaborators' colors) keep their hue, so a
+/// red wallpaper cannot make an error look like success or a failing test
+/// print in green.
 const SEMANTIC_KEY_PREFIXES: &[&str] = &[
     "error",
     "warning",
@@ -145,93 +136,155 @@ const SEMANTIC_KEY_PREFIXES: &[&str] = &[
     "conflict",
     "renamed",
     "version_control.",
+    "terminal.ansi.",
+    "players",
 ];
 
+/// At or above this saturation a theme color is a colored role (a syntax
+/// color), whose hue is what tells one token from another, rather than a
+/// neutral (a layer, a border, the text) that takes on the wallpaper's cast.
+const COLORED_ROLE_SATURATION: f32 = 0.2;
+
+/// However vivid the wallpaper, the neutrals stay neutral: the layers remain
+/// blacks and the text stays near white.
+const MAX_NEUTRAL_SATURATION: f32 = 0.2;
+
+/// How strongly the bundled theme's neutrals are tinted, measured as the
+/// saturation of the bundled wallpaper's mid tone. A wallpaper twice as
+/// saturated tints them twice as strongly, up to [`MAX_NEUTRAL_SATURATION`].
+const BUNDLED_WALLPAPER_SATURATION: f32 = 0.118;
+
+/// Below this saturation a wallpaper is monochrome and its hue is noise, so
+/// the neutrals go grey with it instead of turning toward that hue.
+const MONOCHROME_SATURATION: f32 = 0.08;
+
+/// Below this saturation the wallpaper's most colorful pixel is too grey to
+/// lend the accent a color, and the accent keeps the one it was designed with.
+const MIN_ACCENT_SOURCE_SATURATION: f32 = 0.25;
+
 /// Re-tints a theme family (the bundled noah theme, as JSON) toward the colors
-/// of `palette`. Every color is rotated by the hue difference between the
-/// bundled wallpaper and the new one and its saturation scaled to match, while
-/// its luminance is held fixed, so layering, alpha and text contrast stay
-/// exactly as designed. Semantic colors are left alone.
+/// of `palette`, following shepherd's interface rules: dark layers, one accent.
+///
+/// Neutrals take the wallpaper's hue, with their saturation capped so they
+/// stay blacks and near-whites. The accent (every color equal to the theme's
+/// `text.accent`) takes the color of the wallpaper's most colorful pixel.
+/// Colored roles and semantic colors keep their hue, because their hue is
+/// their meaning. Every color keeps its luminance, so layering, alpha and text
+/// contrast stay exactly as designed.
 pub fn adaptive_theme_json(template: &str, palette: &WallpaperPalette) -> anyhow::Result<String> {
     let mut theme_family: serde_json::Value = serde_json::from_str(template)?;
-    let shift = TintShift::between(BUNDLED_WALLPAPER_TINT, palette.mid);
     let themes = theme_family
         .get_mut("themes")
         .and_then(|themes| themes.as_array_mut())
         .ok_or_else(|| anyhow::anyhow!("theme family has no themes"))?;
     for theme in themes {
-        if let Some(style) = theme.get_mut("style").and_then(|style| style.as_object_mut()) {
-            for (key, value) in style.iter_mut() {
-                if !SEMANTIC_KEY_PREFIXES
-                    .iter()
-                    .any(|prefix| key.starts_with(prefix))
-                {
-                    retint_value(value, &shift);
-                }
+        let Some(style) = theme.get_mut("style").and_then(|style| style.as_object_mut()) else {
+            continue;
+        };
+        let accent = style
+            .get("text.accent")
+            .and_then(|accent| accent.as_str())
+            .and_then(parse_hex_color)
+            .map(|(color, _)| color);
+        let retint = Retint::new(palette, accent);
+        for (key, value) in style.iter_mut() {
+            if !SEMANTIC_KEY_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix))
+            {
+                retint_value(value, &retint);
             }
         }
     }
     Ok(serde_json::to_string(&theme_family)?)
 }
 
-struct TintShift {
-    hue_degrees: f32,
-    saturation_scale: f32,
+struct Retint {
+    /// The hue the neutrals turn to, or `None` for a monochrome wallpaper.
+    neutral_hue: Option<f32>,
+    /// Multiplies a neutral's saturation, before the cap.
+    neutral_saturation_scale: f32,
+    /// The saturation every neutral is held under on a monochrome wallpaper.
+    monochrome_saturation: f32,
+    /// The theme's accent, and the hue and saturation it becomes, if the
+    /// wallpaper has a color to give it.
+    accent: Option<(Rgb, f32, f32)>,
 }
 
-impl TintShift {
-    fn between(from: Rgb, to: Rgb) -> Self {
-        let (from_hue, from_saturation, _) = rgb_to_hsl(from);
-        let (to_hue, to_saturation, _) = rgb_to_hsl(to);
-        let saturation_scale = if from_saturation > 0.01 {
-            // Capped so a vivid wallpaper tints the chrome without turning the
-            // near-black layers into saturated color.
-            (to_saturation / from_saturation).clamp(0.0, 2.5)
-        } else {
-            1.0
-        };
+impl Retint {
+    fn new(palette: &WallpaperPalette, accent: Option<Rgb>) -> Self {
+        let (mid_hue, mid_saturation, _) = rgb_to_hsl(palette.mid);
+        let (accent_hue, accent_saturation, _) = rgb_to_hsl(palette.accent);
+        let accent = accent.and_then(|accent| {
+            (accent_saturation >= MIN_ACCENT_SOURCE_SATURATION).then(|| {
+                // The accent keeps its designed luminance, which is light, and a
+                // light color reads as pastel unless it is fairly saturated; the
+                // floor keeps it clearly apart from the text.
+                (accent, accent_hue, (accent_saturation * 1.2).clamp(0.5, 0.7))
+            })
+        });
         Self {
-            hue_degrees: to_hue - from_hue,
-            saturation_scale,
+            neutral_hue: (mid_saturation >= MONOCHROME_SATURATION).then_some(mid_hue),
+            neutral_saturation_scale: (mid_saturation / BUNDLED_WALLPAPER_SATURATION).min(1.6),
+            monochrome_saturation: mid_saturation,
+            accent,
         }
     }
 
     fn apply(&self, color: Rgb) -> Rgb {
-        let target_luminance = relative_luminance(color);
-        let (hue, saturation, _) = rgb_to_hsl(color);
-        let hue = (hue + self.hue_degrees).rem_euclid(360.0);
-        let saturation = (saturation * self.saturation_scale).min(1.0);
-        // Lightness is solved for rather than copied: the same HSL lightness is
-        // darker in blue than in green, and holding luminance is what keeps
-        // every contrast ratio of the original theme.
-        let (mut low, mut high) = (0.0f32, 1.0f32);
-        for _ in 0..24 {
-            let lightness = (low + high) / 2.0;
-            if relative_luminance(hsl_to_rgb(hue, saturation, lightness)) < target_luminance {
-                low = lightness;
-            } else {
-                high = lightness;
-            }
+        if let Some((accent, hue, saturation)) = self.accent
+            && color == accent
+        {
+            return with_hue_and_saturation(color, hue, saturation);
         }
-        hsl_to_rgb(hue, saturation, (low + high) / 2.0)
+        let (hue, saturation, _) = rgb_to_hsl(color);
+        if saturation >= COLORED_ROLE_SATURATION {
+            return color;
+        }
+        match self.neutral_hue {
+            Some(neutral_hue) => with_hue_and_saturation(
+                color,
+                neutral_hue,
+                (saturation * self.neutral_saturation_scale).min(MAX_NEUTRAL_SATURATION),
+            ),
+            None => with_hue_and_saturation(color, hue, saturation.min(self.monochrome_saturation)),
+        }
     }
 }
 
-fn retint_value(value: &mut serde_json::Value, shift: &TintShift) {
+/// Gives `color` a new hue and saturation at the same luminance.
+fn with_hue_and_saturation(color: Rgb, hue: f32, saturation: f32) -> Rgb {
+    let target_luminance = relative_luminance(color);
+    // Lightness is solved for rather than copied: the same HSL lightness is
+    // darker in blue than in green, and holding luminance is what keeps every
+    // contrast ratio of the original theme.
+    let (mut low, mut high) = (0.0f32, 1.0f32);
+    for _ in 0..24 {
+        let lightness = (low + high) / 2.0;
+        if relative_luminance(hsl_to_rgb(hue, saturation, lightness)) < target_luminance {
+            low = lightness;
+        } else {
+            high = lightness;
+        }
+    }
+    hsl_to_rgb(hue, saturation, (low + high) / 2.0)
+}
+
+fn retint_value(value: &mut serde_json::Value, retint: &Retint) {
     match value {
         serde_json::Value::String(text) => {
             if let Some((color, alpha)) = parse_hex_color(text) {
-                *text = hex_color(shift.apply(color), alpha);
+                *text = hex_color(retint.apply(color), alpha);
             }
         }
         serde_json::Value::Array(items) => {
             for item in items {
-                retint_value(item, shift);
+                retint_value(item, retint);
             }
         }
         serde_json::Value::Object(map) => {
             for item in map.values_mut() {
-                retint_value(item, shift);
+                retint_value(item, retint);
             }
         }
         _ => {}
@@ -402,20 +455,73 @@ mod tests {
         }
     }
 
+    fn syntax_color(json: &serde_json::Value, name: &str) -> Rgb {
+        json["themes"][0]["style"]["syntax"][name]["color"]
+            .as_str()
+            .and_then(parse_hex_color)
+            .map(|(color, _)| color)
+            .expect("syntax color")
+    }
+
+    fn hue_distance(first: f32, second: f32) -> f32 {
+        let distance = (first - second).rem_euclid(360.0);
+        distance.min(360.0 - distance)
+    }
+
     #[test]
-    fn bundled_tint_leaves_theme_unchanged() {
-        let adapted = adaptive_theme_json(NOAH_THEME, &palette_with_mid(BUNDLED_WALLPAPER_TINT))
-            .expect("adapts");
+    fn warm_wallpaper_warms_neutrals_and_accent_without_turning_text_pink() {
+        // The halo wallpaper's measured mid tone and most colorful pixel.
+        let palette = WallpaperPalette {
+            dark: Rgb { r: 12, g: 10, b: 8 },
+            mid: Rgb { r: 97, g: 79, b: 63 },
+            light: Rgb { r: 200, g: 180, b: 150 },
+            accent: Rgb { r: 107, g: 71, b: 39 },
+        };
+        let adapted = adaptive_theme_json(NOAH_THEME, &palette).expect("adapts");
         let original: serde_json::Value = serde_json::from_str(NOAH_THEME).expect("json");
         let adapted: serde_json::Value = serde_json::from_str(&adapted).expect("json");
-        for key in ["background", "editor.background", "text", "border"] {
-            let (before, before_alpha) = style_color(&original, key);
-            let (after, after_alpha) = style_color(&adapted, key);
-            assert_eq!(before_alpha, after_alpha, "{key}");
-            for (a, b) in [(before.r, after.r), (before.g, after.g), (before.b, after.b)] {
-                assert!(a.abs_diff(b) <= 2, "{key}: {before:?} -> {after:?}");
-            }
+        let (mid_hue, _, _) = rgb_to_hsl(palette.mid);
+        let (accent_source_hue, _, _) = rgb_to_hsl(palette.accent);
+
+        for key in ["text", "text.muted", "background", "elevated_surface.background"] {
+            let (color, _) = style_color(&adapted, key);
+            let (hue, saturation, _) = rgb_to_hsl(color);
+            assert!(hue_distance(hue, mid_hue) < 20.0, "{key}: {color:?}");
+            assert!(saturation <= MAX_NEUTRAL_SATURATION + 0.02, "{key}: {color:?}");
         }
+
+        let (accent, _) = style_color(&adapted, "text.accent");
+        let (accent_hue, accent_saturation, _) = rgb_to_hsl(accent);
+        assert!(hue_distance(accent_hue, accent_source_hue) < 10.0, "{accent:?}");
+        assert!(accent_saturation >= 0.45, "{accent:?}");
+        assert_eq!(style_color(&adapted, "icon.accent").0, accent);
+
+        for name in ["keyword", "string", "function"] {
+            assert_eq!(syntax_color(&original, name), syntax_color(&adapted, name), "{name}");
+        }
+        for key in ["terminal.ansi.red", "terminal.ansi.green"] {
+            assert_eq!(style_color(&original, key), style_color(&adapted, key), "{key}");
+        }
+    }
+
+    #[test]
+    fn monochrome_wallpaper_greys_the_neutrals_but_keeps_the_accent() {
+        let grey = Rgb {
+            r: 98,
+            g: 98,
+            b: 98,
+        };
+        let adapted = adaptive_theme_json(NOAH_THEME, &palette_with_mid(grey)).expect("adapts");
+        let original: serde_json::Value = serde_json::from_str(NOAH_THEME).expect("json");
+        let adapted: serde_json::Value = serde_json::from_str(&adapted).expect("json");
+
+        for key in ["text", "background", "border.focused"] {
+            let (color, _) = style_color(&adapted, key);
+            let (_, saturation, _) = rgb_to_hsl(color);
+            assert!(saturation < 0.01, "{key}: {color:?}");
+        }
+        assert_eq!(style_color(&original, "text.accent"), style_color(&adapted, "text.accent"));
+        assert_eq!(syntax_color(&original, "keyword"), syntax_color(&adapted, "keyword"));
     }
 
     #[test]
