@@ -1,0 +1,22 @@
+name: noah probe
+
+# The smallest possible job, to tell whether this account can start a
+# GitHub Actions runner at all. Safe to delete once a real workflow has run.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "a linux runner started"
+  mac:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "a mac runner started"
+          uname -m
+          xcodebuild -version
