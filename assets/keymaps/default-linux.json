@@ -1714,4 +1714,11 @@
       "tab": "agent::SharpenPrompt"
     }
   },
+  {
+    "context": "AcpThread && handoff > MessageEditor > Editor",
+    "bindings": {
+      "enter": "agent::AcceptHandoff",
+      "r": "agent::RequestRevisions"
+    }
+  },
 ]

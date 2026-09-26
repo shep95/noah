@@ -221,6 +221,11 @@ actions!(
         /// Has shepherd rewrite the draft in the message box into a clearer
         /// prompt, left there for you to review.
         SharpenPrompt,
+        /// Accepts the finished thread's handoff card.
+        AcceptHandoff,
+        /// Asks shepherd for revisions from the handoff card: the composer is
+        /// started for you.
+        RequestRevisions,
         /// Toggles the menu to create new agent threads.
         ToggleNewThreadMenu,
         /// Toggles the options menu for agent settings and preferences.

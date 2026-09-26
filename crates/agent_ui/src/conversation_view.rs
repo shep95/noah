@@ -1781,6 +1781,9 @@ impl ConversationView {
                         cx,
                     );
                 }
+                if !is_subagent && let Some(view) = self.thread_view(&session_id) {
+                    view.update(cx, |view, cx| view.show_handoff_if_finished(cx));
+                }
             }
             AcpThreadEvent::Refusal => {
                 let error = ThreadError::Refusal;

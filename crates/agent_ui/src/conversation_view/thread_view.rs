@@ -594,6 +594,9 @@ pub struct ThreadView {
     /// an empty thread. `None` until measured, or when it has none here.
     held_up: Option<(usize, usize)>,
     _held_up_load: Option<Task<()>>,
+    /// The evidence bundle the last turn ended with, shown as a handoff card
+    /// until the person accepts it or asks for revisions.
+    handoff: Option<noah_trust::evidence::Bundle>,
     pub(crate) chat_room: chat_room::ChatRoomState,
     #[cfg(feature = "audio")]
     voice: VoiceState,
@@ -1021,6 +1024,7 @@ impl ThreadView {
             sharpening: None,
             held_up: None,
             _held_up_load: None,
+            handoff: None,
             chat_room: Default::default(),
             #[cfg(feature = "audio")]
             voice: VoiceState::default(),
@@ -5704,6 +5708,140 @@ impl ThreadView {
             })
             .ok();
         }));
+    }
+
+    /// When the turn that just finished saved an evidence bundle, shows it as
+    /// the handoff card: what changed, which claims are backed, what wasn't
+    /// tested. Called by the conversation when the thread stops.
+    pub(crate) fn show_handoff_if_finished(&mut self, cx: &mut Context<Self>) {
+        self.handoff = None;
+        let thread = self.thread.read(cx);
+        let mut bundle_id = None;
+        for entry in thread.entries().iter().rev() {
+            match entry {
+                acp_thread::AgentThreadEntry::UserMessage(..) => break,
+                acp_thread::AgentThreadEntry::ToolCall(call)
+                    if call.tool_name.as_deref() == Some("evidence")
+                        && matches!(call.status, acp_thread::ToolCallStatus::Completed) =>
+                {
+                    // The tool answers "saved <path>/.noah/evidence/<id>.md".
+                    let output = call
+                        .raw_output
+                        .as_ref()
+                        .map(|output| output.to_string())
+                        .unwrap_or_default();
+                    bundle_id = output.find(".noah/evidence/").and_then(|start| {
+                        let rest = &output[start + ".noah/evidence/".len()..];
+                        let end = rest.find(".md")?;
+                        Some(rest[..end].to_string())
+                    });
+                    break;
+                }
+                _ => continue,
+            }
+        }
+        let Some(bundle_id) = bundle_id else {
+            cx.notify();
+            return;
+        };
+        let Some(root) = thread
+            .project()
+            .read(cx)
+            .visible_worktrees(cx)
+            .next()
+            .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+        else {
+            return;
+        };
+        let path = noah_trust::project_files::path(&root, noah_trust::project_files::EVIDENCE)
+            .join(format!("{bundle_id}.json"));
+        self.handoff = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok());
+        cx.notify();
+    }
+
+    fn render_handoff_card(&self, cx: &Context<Self>) -> Option<AnyElement> {
+        let bundle = self.handoff.as_ref()?;
+        let colors = cx.theme().colors();
+        let line = |text: String, color: Color| Label::new(text).size(LabelSize::Small).color(color);
+        let heading = |text: &str| Label::new(text.to_string()).size(LabelSize::XSmall).color(Color::Muted);
+        let changes: Vec<String> = if bundle.behavior_changes.is_empty() {
+            vec![bundle.summary.clone()]
+        } else {
+            bundle.behavior_changes.clone()
+        };
+        let claims: Vec<(bool, String)> = bundle
+            .claims
+            .iter()
+            .map(|claim| {
+                let grounded = matches!(bundle.grounding(claim), noah_trust::evidence::Grounding::Grounded);
+                (grounded, claim.text.clone())
+            })
+            .collect();
+        let composer_empty = self.message_editor.read(cx).is_empty(cx);
+        Some(
+            v_flex()
+                .mx_3()
+                .mb_2()
+                .p_3()
+                .gap_2()
+                .border_1()
+                .border_color(colors.border)
+                .rounded_md()
+                .bg(colors.elevated_surface_background)
+                .child(Label::new(bundle.title.clone()).size(LabelSize::Default))
+                .child(heading("behavior changed"))
+                .children(changes.into_iter().map(|change| line(change, Color::Default)))
+                .when(!claims.is_empty(), |this| {
+                    this.child(heading("claims")).children(claims.into_iter().map(|(grounded, text)| {
+                        line(
+                            format!("{} {text}", if grounded { "✓" } else { "✗" }),
+                            if grounded { Color::Success } else { Color::Warning },
+                        )
+                    }))
+                })
+                .when(!bundle.not_verified.is_empty(), |this| {
+                    this.child(heading("not tested")).children(
+                        bundle
+                            .not_verified
+                            .iter()
+                            .map(|item| line(item.clone(), Color::Muted)),
+                    )
+                })
+                .child(
+                    h_flex()
+                        .pt_1()
+                        .gap_3()
+                        .child(
+                            Button::new("accept-handoff", "accept")
+                                .style(ButtonStyle::Filled)
+                                .label_size(LabelSize::Small)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.handoff = None;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("request-revisions", "ask for revisions")
+                                .style(ButtonStyle::Subtle)
+                                .label_size(LabelSize::Small)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    window.dispatch_action(Box::new(crate::RequestRevisions), cx);
+                                    this.handoff.take();
+                                    cx.notify();
+                                })),
+                        )
+                        .when(composer_empty, |this| {
+                            this.child(
+                                Label::new("enter accepts · r asks for revisions")
+                                    .size(LabelSize::XSmall)
+                                    .color(Color::Muted),
+                            )
+                        }),
+                )
+                .into_any_element(),
+        )
     }
 
     /// The headline number on an empty thread: how shepherd's work in this
@@ -12652,11 +12790,28 @@ impl Render for ThreadView {
                 if self.is_chat_room(cx) {
                     context.add("asherin_chat");
                 }
+                // enter and r answer the handoff card only while the composer
+                // is empty; once the person types, keys are theirs again.
+                if self.handoff.is_some() && self.message_editor.read(cx).is_empty(cx) {
+                    context.add("handoff");
+                }
                 context
             })
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &crate::SharpenPrompt, window, cx| {
                 this.sharpen_prompt(window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &crate::AcceptHandoff, _, cx| {
+                this.handoff = None;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &crate::RequestRevisions, window, cx| {
+                this.handoff = None;
+                this.message_editor.update(cx, |editor, cx| {
+                    editor.set_text("please revise: ", window, cx);
+                    editor.focus_handle(cx).focus(window, cx);
+                });
+                cx.notify();
             }))
             .on_action(cx.listener(|this, _: &menu::Cancel, _, cx| {
                 if this.parent_session_id.is_none() {
@@ -12964,6 +13119,7 @@ impl Render for ThreadView {
                 |this, bar| this.child(bar),
             )
             .child(conversation)
+            .children(self.render_handoff_card(cx))
             .children(self.render_multi_root_callout(cx))
             .children(self.render_activity_bar(window, cx))
             .when(self.show_external_source_prompt_warning, |this| {
