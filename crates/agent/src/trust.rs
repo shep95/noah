@@ -1192,9 +1192,12 @@ impl ToolGate {
     }
 
     /// Combines the settings decision with the capability file and taint
-    /// tracking. A deny from either settings or the file wins; otherwise the
-    /// file's allow and ask override settings patterns; and while untrusted
-    /// content is in the thread, risky calls ask even when allowed.
+    /// tracking. A deny from either settings or the file wins, and the file's
+    /// ask turns an allowed call into a question. The file's allow never lifts
+    /// a question the person's own settings ask: the file arrives with the
+    /// repository, so a cloned project could otherwise grant itself commands.
+    /// While untrusted content is in the thread, risky calls ask even when
+    /// allowed.
     pub fn decide(&self, settings: crate::ToolPermissionDecision) -> crate::ToolPermissionDecision {
         use crate::ToolPermissionDecision;
         if let ToolPermissionDecision::Deny(_) = settings {
@@ -1204,7 +1207,6 @@ impl ToolGate {
             return ToolPermissionDecision::Deny(reason);
         }
         let decision = match self.file_verdict() {
-            Some(permissions::Verdict::Allow) => ToolPermissionDecision::Allow,
             Some(permissions::Verdict::Ask(_)) => ToolPermissionDecision::Confirm,
             _ => settings,
         };
@@ -1255,9 +1257,12 @@ mod tests {
     const FILE: &str = "network: [github.com]\nterminal: {allow: ['cargo test*'], ask: ['git push*'], deny: ['rm -rf *']}\nsecrets: [STRIPE_TEST_KEY]\n";
 
     #[test]
-    fn capability_file_overrides_settings_but_deny_wins() {
+    fn capability_file_can_only_tighten_settings() {
         use crate::ToolPermissionDecision::{Allow, Confirm, Deny};
-        assert_eq!(gate("terminal", "cargo test -p x", FILE, false).decide(Confirm), Allow);
+        // The repository's own file can't lift a question the person's
+        // settings ask, or a cloned project could grant itself commands.
+        assert_eq!(gate("terminal", "cargo test -p x", FILE, false).decide(Confirm), Confirm);
+        assert_eq!(gate("terminal", "cargo test -p x", FILE, false).decide(Allow), Allow);
         assert_eq!(gate("terminal", "git push origin", FILE, false).decide(Allow), Confirm);
         assert!(matches!(gate("terminal", "rm -rf build", FILE, false).decide(Allow), Deny(_)));
         assert!(matches!(
@@ -1276,7 +1281,7 @@ mod tests {
             gate("terminal", "curl -u $STRIPE_LIVE_KEY: https://api.stripe.com", FILE, false).decide(Allow),
             Deny(reason) if reason.contains("STRIPE_LIVE_KEY")
         ));
-        assert_eq!(gate("fetch", "https://api.github.com/x", FILE, false).decide(Confirm), Allow);
+        assert_eq!(gate("fetch", "https://api.github.com/x", FILE, false).decide(Confirm), Confirm);
         assert!(matches!(gate("fetch", "https://example.com", FILE, false).decide(Allow), Deny(_)));
         assert_eq!(gate("read_file", "src/main.rs", FILE, false).decide(Allow), Allow);
     }
