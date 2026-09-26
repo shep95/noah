@@ -121,6 +121,7 @@ pub fn init(cx: &mut App) {
         });
         crate::asherin_chat_tree::register_tab_actions(workspace);
         crate::asherin_chat_tree::attach_to_chat_room(workspace, window, cx);
+        crate::asherin_search::attach(workspace, window, cx);
     })
     .detach();
 }
@@ -194,7 +195,7 @@ pub(crate) fn extend_thread_menu(
     }
 }
 
-fn is_room_workspace(workspace: &Workspace, folder: &PathBuf, cx: &App) -> bool {
+pub(crate) fn is_room_workspace(workspace: &Workspace, folder: &PathBuf, cx: &App) -> bool {
     workspace
         .project()
         .read(cx)

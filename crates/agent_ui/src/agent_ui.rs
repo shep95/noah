@@ -22,6 +22,7 @@ mod mention_set;
 pub mod mission_control;
 mod asherin_chat;
 mod asherin_chat_tree;
+mod asherin_search;
 mod message_editor;
 mod mode_selector;
 mod model_selector;
