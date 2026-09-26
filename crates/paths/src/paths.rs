@@ -118,6 +118,12 @@ pub fn set_custom_data_dir(dir: &str) -> &'static PathBuf {
     })
 }
 
+/// The file that replaces shepherd's built-in brain when the person supplies
+/// their own. Absent by default; noah never writes the built-in one here.
+pub fn shepherd_brain_file() -> PathBuf {
+    config_dir().join("shepherd_brain.txt")
+}
+
 /// Returns the path to the configuration directory used by Zed.
 pub fn config_dir() -> &'static PathBuf {
     CONFIG_DIR.get_or_init(|| {

@@ -46,6 +46,11 @@ actions!(
         OpenSettingsFile,
         /// Picks an image to use as noah's background.
         ChooseBackgroundImage,
+        /// Picks a text file to use as shepherd's brain in place of the
+        /// built-in one. It applies to new conversations.
+        ReplaceShepherdBrain,
+        /// Puts shepherd's built-in brain back, removing your replacement.
+        UseBuiltInShepherdBrain,
         /// Opens asherin.chat, where you think with shepherd outside any project.
         OpenAsherinChat,
         /// Opens asherin.pages, where shepherd makes documents, books and slideshows.

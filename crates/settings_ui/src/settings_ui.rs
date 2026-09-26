@@ -471,6 +471,12 @@ pub fn init(cx: &mut App) {
             .register_action(|_, action: &zed_actions::UseBundledBackground, window, cx| {
                 use_bundled_wallpaper(action.name.clone(), window, cx);
             })
+            .register_action(|_, _: &zed_actions::ReplaceShepherdBrain, window, cx| {
+                replace_shepherd_brain(window, cx);
+            })
+            .register_action(|_, _: &zed_actions::UseBuiltInShepherdBrain, window, cx| {
+                use_built_in_shepherd_brain(window, cx);
+            })
             .register_action(|_, action: &OpenSettingsAt, window, cx| {
                 let window_handle = window.window_handle().downcast::<MultiWorkspace>();
                 open_settings_editor_at_target(
@@ -4691,6 +4697,104 @@ fn open_user_settings_in_workspace(
             window.activate_window();
             cx.notify();
         })
+    })
+    .detach();
+}
+
+/// The largest text accepted as shepherd's brain. The built-in one is about
+/// 200 KB; anything far past this is a wrong pick, and it all goes into every
+/// prompt.
+const MAX_BRAIN_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Asks for a text file and makes it shepherd's brain in place of the
+/// built-in one, by copying it to the file shepherd reads first. Only new
+/// conversations pick it up: a running one keeps the brain it started with.
+pub(crate) fn replace_shepherd_brain(window: &mut Window, cx: &mut App) {
+    let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: Some("Use as shepherd's brain".into()),
+    });
+    window
+        .spawn(cx, async move |cx| {
+            let installed: Result<Option<PathBuf>> = async {
+                let Some(source) = chosen.await??.and_then(|mut paths| paths.pop()) else {
+                    return Ok(None);
+                };
+                cx.background_spawn(async move { install_brain_file(&source) })
+                    .await
+                    .map(Some)
+            }
+            .await;
+            let (title, detail) = match installed {
+                Ok(None) => return Ok(()),
+                Ok(Some(path)) => (
+                    "shepherd now thinks with your brain file",
+                    format!(
+                        "it is kept at {}. new conversations use it; edit it there any time, or \
+                         run \"use built-in shepherd brain\" to go back.",
+                        path.display()
+                    ),
+                ),
+                Err(error) => ("noah couldn't use that file as shepherd's brain", format!("{error:#}")),
+            };
+            let answer = cx.update(|window, cx| {
+                window.prompt(gpui::PromptLevel::Info, title, Some(&detail), &["ok"], cx)
+            })?;
+            answer.await.log_err();
+            Ok(())
+        })
+        .detach_and_log_err(cx);
+}
+
+fn install_brain_file(source: &std::path::Path) -> Result<PathBuf> {
+    let metadata = std::fs::metadata(source)
+        .with_context(|| format!("couldn't read {}", source.display()))?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_BRAIN_BYTES {
+        anyhow::bail!("choose a text file smaller than 4 MB");
+    }
+    let text = std::fs::read_to_string(source)
+        .with_context(|| format!("{} isn't a plain text file", source.display()))?;
+    if text.trim().is_empty() {
+        anyhow::bail!("that file is empty");
+    }
+    let destination = paths::shepherd_brain_file();
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("couldn't create {}", parent.display()))?;
+    }
+    // Written whole to a sibling and renamed over, so a conversation starting
+    // mid-copy reads either the old brain or the new one, never half of one.
+    let partial = destination.with_extension("txt.partial");
+    std::fs::write(&partial, text)
+        .with_context(|| format!("couldn't write {}", partial.display()))?;
+    std::fs::rename(&partial, &destination)
+        .with_context(|| format!("couldn't put {} in place", destination.display()))?;
+    Ok(destination)
+}
+
+/// Removes the person's brain file, so shepherd is back on the built-in one
+/// for new conversations.
+pub(crate) fn use_built_in_shepherd_brain(window: &mut Window, cx: &mut App) {
+    let path = paths::shepherd_brain_file();
+    let (title, detail) = match std::fs::remove_file(&path) {
+        Ok(()) => (
+            "shepherd is back on its built-in brain",
+            "new conversations use it. your file was removed.".to_string(),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
+            "shepherd already uses its built-in brain",
+            "there was no replacement file to remove.".to_string(),
+        ),
+        Err(error) => (
+            "noah couldn't remove your brain file",
+            format!("{}: {error}", path.display()),
+        ),
+    };
+    let answer = window.prompt(gpui::PromptLevel::Info, title, Some(&detail), &["ok"], cx);
+    cx.spawn(async move |_| {
+        answer.await.log_err();
     })
     .detach();
 }

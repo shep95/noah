@@ -1219,6 +1219,10 @@ impl ConversationView {
                         }
 
                         this.root_session_id = Some(root_session_id.clone());
+                        // Observers keyed on the session (asherin.chat's tabs)
+                        // learn it from this notify; nothing else here fires one
+                        // before the first message arrives.
+                        cx.notify();
                         let request_elicitation_subscription =
                             Self::request_elicitation_subscription(&connection, cx);
                         this.set_server_state(

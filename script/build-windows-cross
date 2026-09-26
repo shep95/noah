@@ -36,6 +36,18 @@ export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 export CARGO_PROFILE_RELEASE_DEBUG=false
 
+# rquickjs-sys (the add-on sandbox) ships pregenerated bindings per target and
+# has none for gnullvm, though gnullvm and gnu share the mingw x86_64 ABI, so
+# the gnu bindings are the right ones. Its build script reads the file from
+# the crate source by target name; provide it there when it is missing.
+for sys_crate in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/rquickjs-sys-*/; do
+    gnu_bindings="$sys_crate/src/bindings/x86_64-pc-windows-gnu.rs"
+    gnullvm_bindings="$sys_crate/src/bindings/$TARGET.rs"
+    if [[ -f "$gnu_bindings" && ! -f "$gnullvm_bindings" ]]; then
+        cp "$gnu_bindings" "$gnullvm_bindings"
+    fi
+done
+
 cargo build --release -p zed -p cli --target "$TARGET"
 
 stage="$(mktemp -d)"

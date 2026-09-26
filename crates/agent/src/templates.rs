@@ -102,6 +102,22 @@ impl Template for SystemPromptTemplate<'_> {
 /// source of behavioral rules, so replacing this one file replaces the agent.
 const BRAIN: &str = include_str!("../../../assets/shepherd/shepherd_brain.txt");
 
+/// The brain shepherd thinks with: the person's own file when they have put
+/// one at [`paths::shepherd_brain_file`], otherwise the one built into noah.
+/// The built-in text never leaves the binary, so replacing it is the only way
+/// to change it. Read on every render, so an edit to the file reaches the
+/// next conversation without a restart.
+pub fn brain_text() -> std::borrow::Cow<'static, str> {
+    brain_text_from(&paths::shepherd_brain_file())
+}
+
+fn brain_text_from(replacement: &std::path::Path) -> std::borrow::Cow<'static, str> {
+    match std::fs::read_to_string(replacement) {
+        Ok(text) if !text.trim().is_empty() => std::borrow::Cow::Owned(text),
+        _ => std::borrow::Cow::Borrowed(BRAIN),
+    }
+}
+
 // A helper rather than a partial: partials are parsed as templates, so any
 // `{{` in the brain text would be interpreted instead of sent verbatim.
 fn brain(
@@ -111,8 +127,27 @@ fn brain(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    out.write(BRAIN.trim_end())?;
+    out.write(brain_text().trim_end())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod brain_tests {
+    use super::{BRAIN, brain_text_from};
+
+    #[test]
+    fn a_replacement_file_stands_in_for_the_built_in_brain() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let file = directory.path().join("shepherd_brain.txt");
+
+        assert_eq!(brain_text_from(&file), BRAIN, "no file: built in");
+
+        std::fs::write(&file, "   \n").expect("write");
+        assert_eq!(brain_text_from(&file), BRAIN, "blank file: built in");
+
+        std::fs::write(&file, "you are a careful reviewer.\n").expect("write");
+        assert_eq!(brain_text_from(&file), "you are a careful reviewer.\n");
+    }
 }
 
 /// Handlebars helper for checking if an item is in a list
