@@ -3805,7 +3805,7 @@ impl Thread {
                 .flat_map(|message| {
                     message.content.iter().filter_map(|content| match content {
                         AgentMessageContent::ToolUse(tool_use) => Some((
-                            tool_use.name.as_ref(),
+                            &*tool_use.name,
                             &tool_use.input,
                             message
                                 .tool_results

@@ -534,15 +534,15 @@ mod tests {
         let folder = directory.path().join(FOLDER_NAME);
         let url = "https://noah.asherin.com/downloads/asherin-eye.tar.gz";
         let checksum = sha256_hex(&tarball);
-        let install =
+        let attempt =
             |url: &str, sha256: &str| smol::block_on(install(&http, url, sha256, &folder, |_| {}));
 
-        let error = install(url, &"00".repeat(32)).expect_err("a checksum mismatch is refused");
+        let error = attempt(url, &"00".repeat(32)).expect_err("a checksum mismatch is refused");
         assert!(error.to_string().contains("doesn't match"), "{error}");
         assert!(!folder.exists(), "nothing is installed");
         assert!(!directory.path().join(".asherin.eye-download").exists());
 
-        let error = install(
+        let error = attempt(
             "https://noah.asherin.com/downloads/missing.tar.gz",
             &checksum,
         )
@@ -550,13 +550,13 @@ mod tests {
         assert!(error.to_string().contains("404"), "{error}");
         assert!(!folder.exists());
 
-        install(url, &checksum.to_uppercase()).expect("installs");
+        attempt(url, &checksum.to_uppercase()).expect("installs");
         assert!(folder.join("package.json").is_file());
         assert!(folder.join("AGENTS.md").is_file());
         assert!(!directory.path().join(".asherin.eye-download").exists());
 
         std::fs::write(folder.join("package.json"), "edited").expect("write");
-        let error = install(url, &checksum).expect_err("an existing copy is never replaced");
+        let error = attempt(url, &checksum).expect_err("an existing copy is never replaced");
         assert!(error.to_string().contains("already exists"), "{error}");
         assert_eq!(
             std::fs::read_to_string(folder.join("package.json"))
