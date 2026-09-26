@@ -956,26 +956,36 @@ name = "asherin_eye"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-compression",
- "async-tar",
+ "asherin_eye_install",
  "auto_update",
  "collections",
  "futures 0.3.34",
  "gpui",
- "http_client",
  "log",
  "node_runtime",
  "paths",
  "project",
  "release_channel",
- "sha2",
- "smol",
  "task",
- "tempfile",
  "util",
  "which",
  "workspace",
  "zed_actions",
+]
+
+[[package]]
+name = "asherin_eye_install"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-compression",
+ "async-tar",
+ "futures 0.3.34",
+ "http_client",
+ "log",
+ "sha2",
+ "smol",
+ "tempfile",
 ]
 
 [[package]]

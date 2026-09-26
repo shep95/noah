@@ -15,6 +15,7 @@ members = [
     "crates/anthropic",
     "crates/asherin_chat",
     "crates/asherin_eye",
+    "crates/asherin_eye_install",
     "crates/askpass",
     "crates/assets",
     "crates/audio",
@@ -300,6 +301,7 @@ ai_onboarding = { path = "crates/ai_onboarding" }
 anthropic = { path = "crates/anthropic" }
 asherin_chat = { path = "crates/asherin_chat" }
 asherin_eye = { path = "crates/asherin_eye" }
+asherin_eye_install = { path = "crates/asherin_eye_install" }
 askpass = { path = "crates/askpass" }
 assets = { path = "crates/assets" }
 audio = { path = "crates/audio" }
