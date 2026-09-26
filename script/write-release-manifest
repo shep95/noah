@@ -41,6 +41,8 @@ for pair in \
     "windows-x86_64:noah-windows-x86_64.exe" \
     "linux-x86_64:noah-linux-x86_64.tar.xz" \
     "linux-aarch64:noah-linux-aarch64.tar.xz" \
+    "macos-aarch64:noah-mac-aarch64.dmg" \
+    "macos-x86_64:noah-mac-x86_64.dmg" \
     "asherin-eye:asherin-eye.tar.gz"; do
     file="${pair#*:}"
     [[ -f "$directory/$file" ]] || continue

@@ -686,6 +686,17 @@ impl AutoUpdater {
                 noah_release::DOWNLOAD_PAGE
             ))
         })?;
+        // A macOS disk image is published for people to install by hand;
+        // noah can't yet swap itself out from one, so say so before
+        // downloading it.
+        if OS == "macos" {
+            return Err(ManualUpdateNeeded(format!(
+                "noah {} is out; install it from {}",
+                manifest.version,
+                noah_release::DOWNLOAD_PAGE
+            ))
+            .into());
+        }
         let fetched_release_data = ReleaseAsset {
             version: manifest.version.clone(),
             url: asset.url.clone(),

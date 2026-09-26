@@ -1,14 +1,16 @@
 name: noah release
 
 # Every push to main becomes a release that installed copies of noah pick up
-# on their own: the Linux packages and the Windows installer are built, the
-# fast tests gate them, and the website gets the files and a signed manifest.
+# on their own. Three builds run side by side: the Linux packages and the
+# Windows installer on one Linux runner, and a macOS disk image on each of
+# an Apple Silicon and an Intel runner. A last job gathers them, signs the
+# manifest and pushes the files to the website.
 #
 # Secrets this needs:
 #   NOAH_RELEASE_SIGNING_KEY  the release key, PEM text (script/generate-release-key)
 #   UNLOCKET_TOKEN            a token that can push to shep95/unlocket
-# Without them the build still runs and uploads its installers as artifacts;
-# only the publish step is skipped.
+# Without them the builds still run and upload their installers as
+# artifacts; only the publish job is skipped.
 
 on:
   workflow_dispatch: {}
@@ -23,9 +25,15 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  ZED_RELEASE_CHANNEL: stable
+  RELEASE_CHANNEL: stable
+  ZED_BUNDLE: "true"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_RELEASE_DEBUG: "false"
 
 jobs:
-  release:
+  linux-windows:
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     steps:
@@ -79,26 +87,101 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: noah-${{ env.NOAH_BUILD }}
+          name: noah-linux-windows
           path: |
             dist/noah-linux-x86_64.tar.xz
             dist/noah-linux-amd64.deb
             dist/noah-windows-x86_64.exe
           retention-days: 30
 
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            arch: aarch64
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build number
+        run: echo "NOAH_BUILD=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: noah-mac-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: noah-mac-${{ matrix.arch }}-
+
+      - name: Disk image (unsigned)
+        # Without Apple signing secrets the bundle is signed ad hoc; the
+        # download page tells people how to open it the first time.
+        run: script/bundle-mac ${{ matrix.target }}
+
+      - name: Collect the disk image
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/noah-${{ matrix.arch }}.dmg dist/noah-mac-${{ matrix.arch }}.dmg
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noah-mac-${{ matrix.arch }}
+          path: dist/noah-mac-${{ matrix.arch }}.dmg
+          retention-days: 30
+
+  publish:
+    needs: [linux-windows, mac]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      # `secrets` cannot be read in a step's `if`, so their presence is
+      # carried through the environment.
+      UNLOCKET_TOKEN: ${{ secrets.UNLOCKET_TOKEN }}
+      NOAH_RELEASE_SIGNING_KEY: ${{ secrets.NOAH_RELEASE_SIGNING_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build number
+        run: echo "NOAH_BUILD=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: What was built
+        run: ls -la dist
+
+      - name: Without publishing secrets
+        if: ${{ env.UNLOCKET_TOKEN == '' || env.NOAH_RELEASE_SIGNING_KEY == '' }}
+        run: |
+          echo "UNLOCKET_TOKEN or NOAH_RELEASE_SIGNING_KEY is not set, so the installers stay as"
+          echo "artifacts of this run. Add both secrets and rerun to publish them to the website."
+
       - name: Website checkout
-        if: ${{ secrets.UNLOCKET_TOKEN != '' && secrets.NOAH_RELEASE_SIGNING_KEY != '' }}
+        if: ${{ env.UNLOCKET_TOKEN != '' && env.NOAH_RELEASE_SIGNING_KEY != '' }}
         uses: actions/checkout@v4
         with:
           repository: shep95/unlocket
-          ref: claude/quirky-hamilton-0poy3x
+          ref: main
           token: ${{ secrets.UNLOCKET_TOKEN }}
           path: website
 
       - name: Publish the downloads and the signed manifest
-        if: ${{ secrets.UNLOCKET_TOKEN != '' && secrets.NOAH_RELEASE_SIGNING_KEY != '' }}
-        env:
-          NOAH_RELEASE_SIGNING_KEY: ${{ secrets.NOAH_RELEASE_SIGNING_KEY }}
+        if: ${{ env.UNLOCKET_TOKEN != '' && env.NOAH_RELEASE_SIGNING_KEY != '' }}
         run: |
           key="$(mktemp)"
           printf '%s\n' "$NOAH_RELEASE_SIGNING_KEY" > "$key"

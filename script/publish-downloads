@@ -15,7 +15,7 @@ base_url="${2:-https://noah.asherin.com/downloads}"
 downloads="$site/public/downloads"
 : "${NOAH_BUILD:?set NOAH_BUILD to the build number the installers carry}"
 
-installers=(noah-windows-x86_64.exe noah-linux-amd64.deb noah-linux-x86_64.tar.xz)
+installers=(noah-windows-x86_64.exe noah-linux-amd64.deb noah-linux-x86_64.tar.xz noah-mac-aarch64.dmg noah-mac-x86_64.dmg)
 for file in "${installers[@]}"; do
     if [[ -f "dist/$file" ]]; then
         cp "dist/$file" "$downloads/$file"
