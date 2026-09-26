@@ -2760,6 +2760,29 @@ impl AcpThread {
         false
     }
 
+    /// Whether the agent backed this turn with evidence: an `evidence` or
+    /// `verify` call that finished since the person last wrote. What noah
+    /// says on finishing depends on it, so a result without proof is not
+    /// announced as if it had some.
+    pub fn recorded_evidence_since_last_user_message(&self) -> bool {
+        for entry in self.entries.iter().rev() {
+            match entry {
+                AgentThreadEntry::UserMessage(..) => return false,
+                AgentThreadEntry::ToolCall(call)
+                    if call
+                        .tool_name
+                        .as_deref()
+                        .is_some_and(|name| name == "evidence" || name == "verify")
+                        && matches!(call.status, ToolCallStatus::Completed) =>
+                {
+                    return true;
+                }
+                _ => continue,
+            }
+        }
+        false
+    }
+
     pub fn handle_session_update(
         &mut self,
         update: acp::SessionUpdate,

@@ -608,6 +608,18 @@ pub enum AcpServerViewEvent {
 
 impl EventEmitter<AcpServerViewEvent> for ConversationView {}
 
+/// The state a notification announces, which picks its sound: one sound per
+/// state rather than per event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Notice {
+    /// shepherd stopped for the person: a confirmation, a question, an error.
+    WaitingOnYou,
+    /// shepherd finished and its claims carry evidence.
+    FinishedWithEvidence,
+    /// shepherd finished with nothing to back its claims; no sound.
+    FinishedWithoutEvidence,
+}
+
 pub struct ConversationView {
     agent: Rc<dyn AgentServer>,
     connection_store: Entity<AgentConnectionStore>,
@@ -1674,11 +1686,23 @@ impl ConversationView {
                 self.load_subagent_session(subagent_session_id.clone(), session_id, window, cx)
             }
             AcpThreadEvent::ToolAuthorizationRequested(_) => {
-                self.notify_with_sound("Waiting for tool confirmation", IconName::Info, window, cx);
+                self.notify_with_sound(
+                    "Waiting for tool confirmation",
+                    IconName::Info,
+                    Notice::WaitingOnYou,
+                    window,
+                    cx,
+                );
             }
             AcpThreadEvent::ToolAuthorizationReceived(_) => {}
             AcpThreadEvent::ElicitationRequested(_) => {
-                self.notify_with_sound("Waiting for input", IconName::Info, window, cx);
+                self.notify_with_sound(
+                    "Waiting for input",
+                    IconName::Info,
+                    Notice::WaitingOnYou,
+                    window,
+                    cx,
+                );
             }
             AcpThreadEvent::ElicitationResponded(_) => {}
             AcpThreadEvent::Retry(retry) => {
@@ -1738,6 +1762,13 @@ impl ConversationView {
                 // next turn starts.
                 if !sent_queued_message {
                     let used_tools = thread.read(cx).used_tools_since_last_user_message();
+                    // The sound says whether to trust the result: a finish
+                    // backed by evidence has a tone, one without has none.
+                    let notice = if thread.read(cx).recorded_evidence_since_last_user_message() {
+                        Notice::FinishedWithEvidence
+                    } else {
+                        Notice::FinishedWithoutEvidence
+                    };
                     self.notify_with_sound(
                         if used_tools {
                             "Finished running tools"
@@ -1745,6 +1776,7 @@ impl ConversationView {
                             "New message"
                         },
                         IconName::ZedAssistant,
+                        notice,
                         window,
                         cx,
                     );
@@ -1762,7 +1794,13 @@ impl ConversationView {
                     let model_or_agent_name = self.current_model_name(cx);
                     let notification_message =
                         format!("{} refused to respond to this request", model_or_agent_name);
-                    self.notify_with_sound(&notification_message, IconName::Warning, window, cx);
+                    self.notify_with_sound(
+                        &notification_message,
+                        IconName::Warning,
+                        Notice::WaitingOnYou,
+                        window,
+                        cx,
+                    );
                 }
             }
             AcpThreadEvent::Error => {
@@ -1783,6 +1821,7 @@ impl ConversationView {
                     self.notify_with_sound(
                         "Agent stopped due to an error",
                         IconName::Warning,
+                        Notice::WaitingOnYou,
                         window,
                         cx,
                     );
@@ -2856,11 +2895,15 @@ impl ConversationView {
         &mut self,
         caption: impl Into<SharedString>,
         icon: IconName,
+        notice: Notice,
+        // (the state the notification announces; see `play_notification_sound`)
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         #[cfg(feature = "audio")]
-        self.play_notification_sound(window, cx);
+        self.play_notification_sound(notice, window, cx);
+        #[cfg(not(feature = "audio"))]
+        let _ = notice;
         self.show_notification(caption, icon, window, cx);
     }
 
@@ -2904,7 +2947,15 @@ impl ConversationView {
     }
 
     #[cfg(feature = "audio")]
-    fn play_notification_sound(&self, window: &Window, cx: &mut Context<Self>) {
+    fn play_notification_sound(&self, notice: Notice, window: &Window, cx: &mut Context<Self>) {
+        // One sound per state, not per event: a low tone when shepherd needs
+        // the person, a soft one when it finished with evidence, and nothing
+        // when it finished without, so the sound itself says what to trust.
+        let sound = match notice {
+            Notice::WaitingOnYou => Sound::AgentWaiting,
+            Notice::FinishedWithEvidence => Sound::AgentDoneVerified,
+            Notice::FinishedWithoutEvidence => return,
+        };
         let visible = window.is_window_active()
             && if let Some(mw) = window.root::<MultiWorkspace>().flatten() {
                 self.is_visible(&mw, cx)
@@ -2915,7 +2966,7 @@ impl ConversationView {
             };
         let settings = AgentSettings::get_global(cx);
         if settings.play_sound_when_agent_done.should_play(visible) {
-            Audio::play_sound(Sound::AgentDone, cx);
+            Audio::play_sound(sound, cx);
         }
     }
 

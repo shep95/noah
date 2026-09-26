@@ -28,6 +28,10 @@ pub enum Sound {
     StartScreenshare,
     StopScreenshare,
     AgentDone,
+    /// shepherd finished and its claims carry evidence: a soft, resolved tone.
+    AgentDoneVerified,
+    /// shepherd is waiting on the person: a low tone.
+    AgentWaiting,
 }
 
 impl Sound {
@@ -41,6 +45,8 @@ impl Sound {
             Self::StartScreenshare => "start_screenshare",
             Self::StopScreenshare => "stop_screenshare",
             Self::AgentDone => "agent_done",
+            Self::AgentDoneVerified => "agent_done_verified",
+            Self::AgentWaiting => "agent_waiting",
         }
     }
 }
