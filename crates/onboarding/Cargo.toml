@@ -17,6 +17,7 @@ doctest = false
 default = []
 
 [dependencies]
+which.workspace = true
 editor.workspace = true
 anyhow.workspace = true
 client.workspace = true

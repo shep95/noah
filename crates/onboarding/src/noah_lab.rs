@@ -181,6 +181,9 @@ pub struct NoahLab {
     focus_handle: FocusHandle,
     name_editor: Entity<Editor>,
     status: Option<SharedString>,
+    /// Extensions are Rust compiled to wasm, which needs rustup; without it
+    /// the lab leads with skills and themes and offers the toolchain instead.
+    has_rustup: bool,
 }
 
 impl NoahLab {
@@ -195,6 +198,7 @@ impl NoahLab {
             focus_handle: cx.focus_handle(),
             name_editor,
             status: None,
+            has_rustup: which::which("rustup").is_ok(),
         }
     }
 
@@ -402,14 +406,27 @@ impl Render for NoahLab {
                         |this, window, cx| this.start(Starter::Theme, window, cx),
                         cx,
                     ))
-                    .child(self.render_row(
-                        "lab-extension",
-                        IconName::Code,
-                        "an extension",
-                        "languages, language servers, tools for shepherd. rust, compiled to wasm",
-                        |this, window, cx| this.start(Starter::Extension, window, cx),
-                        cx,
-                    ))
+                    .map(|this| {
+                        if self.has_rustup {
+                            this.child(self.render_row(
+                                "lab-extension",
+                                IconName::Code,
+                                "an extension",
+                                "languages, language servers, tools for shepherd. rust, compiled to wasm",
+                                |this, window, cx| this.start(Starter::Extension, window, cx),
+                                cx,
+                            ))
+                        } else {
+                            this.child(self.render_row(
+                                "lab-rustup",
+                                IconName::Code,
+                                "extensions need rust",
+                                "install rustup and extensions appear here; skills and themes need nothing",
+                                |_, _, cx| cx.open_url("https://rustup.rs"),
+                                cx,
+                            ))
+                        }
+                    })
                     .child(Divider::horizontal().color(DividerColor::BorderVariant))
                     .child(self.render_row(
                         "lab-install",
