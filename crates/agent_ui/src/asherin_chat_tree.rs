@@ -773,13 +773,17 @@ impl ChatTreePanel {
             }
             self.open_session(id, window, cx);
             cx.notify();
-            if let Some(panel) = self
-                .workspace
-                .upgrade()
-                .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
-            {
-                panel.update(cx, |_, cx| cx.notify());
-            }
+            // This runs inside the workspace's own update (it is a workspace
+            // action), so the panel is looked up once that update is over.
+            cx.defer_in(window, |this, _, cx| {
+                if let Some(panel) = this
+                    .workspace
+                    .upgrade()
+                    .and_then(|workspace| workspace.read(cx).panel::<AgentPanel>(cx))
+                {
+                    panel.update(cx, |_, cx| cx.notify());
+                }
+            });
         }
     }
 
