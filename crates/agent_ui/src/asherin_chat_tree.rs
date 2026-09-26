@@ -104,18 +104,19 @@ impl ChatTreePanel {
             _load: None,
             _subscriptions: subscriptions,
         };
-        // The panel is built while its workspace is being updated, and the
-        // first load reads that workspace, so it waits for the update to end.
-        cx.defer_in(window, |panel, _window, cx| panel.reload(cx));
+        panel.reload(cx);
         panel
     }
 
     fn reload(&mut self, cx: &mut Context<Self>) {
-        self.observe_agent_panel(cx);
         let rows = chat_tree::list_chat_conversations(cx);
         self._load = Some(cx.spawn(async move |this, cx| {
             let conversations = rows.await.log_err().unwrap_or_default();
             this.update(cx, |this, cx| {
+                // Reading the workspace waits until here: reload also runs
+                // while the workspace is mid-update (adding or activating
+                // this panel), where reading it would panic.
+                this.observe_agent_panel(cx);
                 this.conversations = conversations
                     .into_iter()
                     .map(|conversation| (conversation.id.clone(), conversation))

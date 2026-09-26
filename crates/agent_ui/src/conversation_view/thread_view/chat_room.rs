@@ -8,8 +8,7 @@ use agent::ChatConversation;
 use agent::chat_tree;
 use asherin_chat::tree::ConversationKind;
 use asherin_chat::{BranchPoint, SlashCommand};
-use ui::{ContextMenu, PopoverMenu, Tooltip, prelude::*};
-use util::ResultExt as _;
+use ui::{ContextMenu, PopoverMenu, Tooltip};
 use util::path_list::PathList;
 
 use super::*;
