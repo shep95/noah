@@ -66,8 +66,8 @@ actions!(
         OpenAsherinEye,
         /// Opens asherin.board, a whiteboard you and shepherd draw on.
         OpenAsherinBoard,
-        /// Shows or hides the notepad: a small window of its own you can
-        /// drag anywhere, onto any screen, and size as you like. It saves itself.
+        /// Shows or hides the notepad: a pad that floats over noah's window,
+        /// which you can drag anywhere and size as you like. It saves itself.
         ToggleNotes,
         /// Makes a new project folder and opens shepherd in it, so a prompt
         /// can become software without opening a project first.

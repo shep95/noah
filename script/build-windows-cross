@@ -60,6 +60,8 @@ cp "target/$TARGET/release/cli.exe" "$stage/bin/noah.exe"
 llvm-strip "$stage/noah.exe" "$stage/bin/noah.exe"
 # shepherd's browser: noah looks for agent-browser.exe beside noah.exe.
 script/fetch-agent-browser win32-x64 "$stage/agent-browser.exe"
+# asherin.eye's source ships in the installer, so the room needs no download.
+script/fetch-asherin-eye "$stage/asherin-eye.tar.gz"
 
 # ConPTY gives the integrated terminal full functionality. crates/zed/build.rs
 # fetches it only on Windows hosts, so fetch the same package here.

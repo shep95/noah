@@ -15,19 +15,18 @@ use asherin_eye_install::{
     FOLDER_NAME, InstallStep, dev_server_port, npm_environment, port_answers,
 };
 use auto_update::noah_release;
-use collections::{HashMap, HashSet};
+use collections::HashMap;
 use futures::channel::oneshot;
 use gpui::{
-    App, AppContext as _, AsyncWindowContext, Focusable as _, Global, SharedString, TaskExt as _,
-    WeakEntity,
+    App, AppContext as _, AsyncWindowContext, Context, Focusable as _, Global, SharedString,
+    TaskExt as _, WeakEntity, Window,
 };
 use node_runtime::NodeRuntime;
-use project::trusted_worktrees::{PathTrust, TrustedWorktrees};
 use release_channel::ReleaseChannel;
 use task::{HideStrategy, RevealStrategy, RevealTarget, Shell, SpawnInTerminal, TaskId};
 use util::ResultExt as _;
 use workspace::{
-    AppState, MultiWorkspace, OpenMode, OpenOptions, Workspace,
+    AppState, MultiWorkspace, Workspace,
     notifications::{
         NotificationId, dismiss_app_notification, show_app_notification,
         simple_message_notification::MessageNotification,
@@ -153,44 +152,20 @@ fn focus_open_room(folder: &Path, cx: &mut App) -> bool {
 }
 
 fn open_room_window(folder: PathBuf, cx: &mut App) {
-    let Some(app_state) = AppState::try_global(cx) else {
-        return;
-    };
-    workspace::open_new(
-        OpenOptions {
-            open_mode: OpenMode::NewWindow,
-            ..OpenOptions::default()
-        },
-        app_state,
-        cx,
-        move |workspace, window, cx| {
-            let project = workspace.project().clone();
-            // noah put the folder there itself, so it opens trusted rather
-            // than in Restricted Mode, where shepherd could neither edit nor
-            // run anything.
-            if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
-                let worktree_store = project.read(cx).worktree_store();
-                trusted_worktrees.update(cx, |trusted_worktrees, cx| {
-                    trusted_worktrees.trust(
-                        &worktree_store,
-                        HashSet::from_iter([PathTrust::AbsPath(folder.clone())]),
-                        cx,
-                    );
-                });
-            }
-            project
-                .update(cx, |project, cx| {
-                    project.find_or_create_worktree(&folder, true, cx)
+    // asherin.eye is a workspace in the window the person is using, not a
+    // window of its own; the browser room fills it once the server is up.
+    let init: Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send> =
+        Box::new({
+            let folder = folder.clone();
+            move |_workspace, window, cx| {
+                cx.spawn_in(window, async move |workspace, cx| {
+                    let result = show_or_start_server(workspace, folder, cx).await;
+                    report(result, cx);
                 })
-                .detach_and_log_err(cx);
-            cx.spawn_in(window, async move |workspace, cx| {
-                let result = show_or_start_server(workspace, folder, cx).await;
-                report(result, cx);
-            })
-            .detach();
-        },
-    )
-    .detach_and_log_err(cx);
+                .detach();
+            }
+        });
+    workspace::open_noah_folder_in_active_window(folder, init, cx).detach_and_log_err(cx);
 }
 
 fn install(folder: PathBuf, cx: &mut App) {
@@ -203,8 +178,7 @@ fn install(folder: PathBuf, cx: &mut App) {
     let release_channel = ReleaseChannel::try_global(cx);
     cx.spawn(async move |cx| {
         let result = async {
-            let asset = noah_release::fetch_asherin_eye_asset(&http, release_channel).await?;
-            asherin_eye_install::install(&http, &asset.url, &asset.sha256, &folder, |step| {
+            let report = |step: InstallStep| {
                 let message = match step {
                     InstallStep::Downloading { percent } => {
                         format!("downloading asherin.eye… {percent}%")
@@ -212,8 +186,14 @@ fn install(folder: PathBuf, cx: &mut App) {
                     InstallStep::Unpacking => "unpacking asherin.eye…".to_string(),
                 };
                 cx.update(|cx| show_status(message, cx));
-            })
-            .await
+            };
+            // The installer ships ADAM's source; the download is only for a
+            // copy of noah that somehow lacks it.
+            if let Some(tarball) = asherin_eye_install::bundled_tarball() {
+                return asherin_eye_install::install_from_tarball(&tarball, &folder, report).await;
+            }
+            let asset = noah_release::fetch_asherin_eye_asset(&http, release_channel).await?;
+            asherin_eye_install::install(&http, &asset.url, &asset.sha256, &folder, report).await
         }
         .await;
         cx.update(|cx| {

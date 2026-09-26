@@ -1585,8 +1585,34 @@ struct DispatchingKeystrokes {
 /// In some way, is a counterpart of a window, as the [`WindowHandle`] could be downcast into `Workspace`.
 ///
 /// A `Workspace` usually consists of 1 or more projects, a central pane group, 3 docks and a status bar.
-/// The `Workspace` owns everybody's state and serves as a default, "global context",
-/// that can be used to register a global action to be triggered from any place in the window.
+/// Opens one of noah's own folders as a workspace in the window the person is
+/// using (the active one, else the first), never in a new window. `init` runs
+/// in that workspace once it exists, or at once when it is already open.
+pub fn open_noah_folder_in_active_window(
+    folder: PathBuf,
+    init: Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send>,
+    cx: &mut App,
+) -> Task<Result<Entity<Workspace>>> {
+    let active = cx
+        .active_window()
+        .and_then(|window| window.downcast::<MultiWorkspace>());
+    let window = active.or_else(|| {
+        cx.windows()
+            .into_iter()
+            .find_map(|window| window.downcast::<MultiWorkspace>())
+    });
+    let Some(window) = window else {
+        return Task::ready(Err(anyhow!("noah has no window to open the room in")));
+    };
+    match window.update(cx, |multi_workspace, window, cx| {
+        window.activate_window();
+        multi_workspace.open_noah_folder(folder, init, window, cx)
+    }) {
+        Ok(task) => task,
+        Err(error) => Task::ready(Err(error)),
+    }
+}
+
 /// What needs the person, across every window: decisions waiting on them,
 /// failed runs, flagged claims and budget warnings, as one count in the
 /// title bar. Zero means walk away.
@@ -1703,11 +1729,15 @@ impl QuietMode {
     }
 }
 
+/// The `Workspace` owns everybody's state and serves as a default, "global context",
+/// that can be used to register a global action to be triggered from any place in the window.
 pub struct Workspace {
     weak_self: WeakEntity<Self>,
     workspace_actions: Vec<Box<dyn Fn(Div, &Workspace, &mut Window, &mut Context<Self>) -> Div>>,
     zoomed: Option<AnyWeakView>,
     previous_dock_drag_coordinates: Option<Point<Pixels>>,
+    /// A view drawn over everything in this workspace, such as the notepad.
+    floating_view: Option<(&'static str, AnyView)>,
     zoomed_position: Option<DockPosition>,
     maximized_pane: Option<WeakEntity<Pane>>,
     center: PaneGroup,
@@ -2212,6 +2242,7 @@ impl Workspace {
             zoomed_position: None,
             maximized_pane: None,
             previous_dock_drag_coordinates: None,
+            floating_view: None,
             center,
             panes: vec![center_pane.clone()],
             panes_by_item: Default::default(),
@@ -8834,6 +8865,12 @@ impl Workspace {
         if self.zoomed_position == Some(position) {
             return None;
         }
+        if self
+            .room_center_override(cx)
+            .is_some_and(|(filled, _)| filled == position)
+        {
+            return None;
+        }
 
         let leader_border = dock.read(cx).active_panel().and_then(|panel| {
             let pane = panel.pane(cx)?;
@@ -9075,13 +9112,90 @@ impl Workspace {
                 this.track_focus(&self.region_focus_handles.editor)
             })
             .size_full()
-            .child(self.center.render(
-                self.zoomed.as_ref(),
-                self.maximized_pane.as_ref(),
-                render_cx,
-                window,
-                cx,
-            ))
+            .map(|this| match self.room_center_override(cx) {
+                Some((_, view)) => this.child(div().size_full().child(view)),
+                None => this.child(self.center.render(
+                    self.zoomed.as_ref(),
+                    self.maximized_pane.as_ref(),
+                    render_cx,
+                    window,
+                    cx,
+                )),
+            })
+    }
+
+    /// The folder of one of noah's own rooms this workspace shows
+    /// (asherin.chat, the board, asherin.eye...), if it is one.
+    pub fn noah_room_folder(&self, cx: &App) -> Option<PathBuf> {
+        let own = paths::home_dir().join(".noah");
+        let eye = paths::home_dir().join("noah-lab").join("asherin.eye");
+        self.project.read(cx).visible_worktrees(cx).find_map(|worktree| {
+            let path = worktree.read(cx).abs_path();
+            (path.starts_with(&own) || path.as_ref() == eye.as_path()).then(|| path.to_path_buf())
+        })
+    }
+
+    /// A room that fills the window: the panel that is the room is drawn
+    /// where the editor panes would be, and its dock is not drawn at all, so
+    /// the browser, mission control, the device room, and shepherd in
+    /// asherin.chat, search and pages stand alone rather than beside a file.
+    fn room_center_override(&self, cx: &App) -> Option<(DockPosition, AnyView)> {
+        if self.zoomed.is_some() {
+            return None;
+        }
+        let conversation_room = self
+            .noah_room_folder(cx)
+            .is_some_and(|folder| {
+                [paths::chat_directory(), paths::search_directory(), paths::pages_directory()]
+                    .contains(&folder)
+            });
+        for dock in self.all_docks() {
+            let dock = dock.read(cx);
+            if !dock.is_open() {
+                continue;
+            }
+            let Some(panel) = dock.visible_panel() else {
+                continue;
+            };
+            let fills = matches!(
+                panel.persistent_name(),
+                "BrowserPanel" | "MissionControlPanel" | "DevicePanel"
+            ) || (conversation_room && panel.persistent_name() == "AgentPanel");
+            if fills {
+                return Some((dock.position(), panel.to_any()));
+            }
+        }
+        None
+    }
+
+    /// Shows `view` over the workspace under `name`, or hides it when it is
+    /// the one showing.
+    pub fn toggle_floating_view(
+        &mut self,
+        name: &'static str,
+        make: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> AnyView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.floating_view.as_ref().is_some_and(|(shown, _)| *shown == name) {
+            self.floating_view = None;
+        } else {
+            let view = make(self, window, cx);
+            self.floating_view = Some((name, view));
+        }
+        cx.notify();
+    }
+
+    /// Hides the floating view shown under `name`, if it is the one showing.
+    pub fn hide_floating_view(&mut self, name: &'static str, cx: &mut Context<Self>) {
+        if self.floating_view_name() == Some(name) {
+            self.floating_view = None;
+            cx.notify();
+        }
+    }
+
+    pub fn floating_view_name(&self) -> Option<&'static str> {
+        self.floating_view.as_ref().map(|(name, _)| *name)
     }
 
     pub fn for_window(window: &Window, cx: &App) -> Option<Entity<Workspace>> {
@@ -10231,7 +10345,8 @@ impl Render for Workspace {
                                     None => div.top_2().bottom_2().left_2().right_2().border_1(),
                                 })
                             }))
-                            .children(self.render_notifications(window, cx)),
+                            .children(self.render_notifications(window, cx))
+                            .children(self.floating_view.as_ref().map(|(_, view)| view.clone())),
                             ),
                     )
                     .when(self.status_bar_visible(cx), |parent| {

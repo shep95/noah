@@ -82,6 +82,54 @@ pub async fn install(
     result
 }
 
+/// Unpacks a tarball already on this machine (the copy noah's installer
+/// ships) as `folder`, so the first open of asherin.eye needs no network.
+/// An existing folder is the person's edited copy, so it is never replaced.
+pub async fn install_from_tarball(
+    tarball: &Path,
+    folder: &Path,
+    mut on_step: impl FnMut(InstallStep),
+) -> Result<()> {
+    ensure!(
+        !folder.exists(),
+        "{} already exists, so noah left it as it is",
+        folder.display()
+    );
+    let lab = folder
+        .parent()
+        .context("asherin.eye's folder has no parent folder")?;
+    let staging = lab.join(".asherin.eye-unpack");
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)
+            .with_context(|| format!("couldn't clear {}", staging.display()))?;
+    }
+    std::fs::create_dir_all(&staging)
+        .with_context(|| format!("couldn't create {}", staging.display()))?;
+    let result = async {
+        on_step(InstallStep::Unpacking);
+        extract_tarball(tarball, &staging).await?;
+        move_into_place(&staging.join(FOLDER_NAME), folder)
+    }
+    .await;
+    if let Err(error) = std::fs::remove_dir_all(&staging) {
+        log::error!("couldn't remove {}: {error}", staging.display());
+    }
+    result
+}
+
+/// The tarball noah's installer put beside the editor, when it did: in the
+/// same folder as the editor (Linux, Windows), or in Resources (macOS).
+pub fn bundled_tarball() -> Option<PathBuf> {
+    let directory = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    [
+        directory.join("asherin-eye.tar.gz"),
+        directory.join("../libexec/asherin-eye.tar.gz"),
+        directory.join("../Resources/asherin-eye.tar.gz"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
+}
+
 async fn download(
     http: &HttpClientWithUrl,
     url: &str,

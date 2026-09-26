@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Puts asherin-eye.tar.gz, the ADAM source noah ships inside its installers,
+# at the given path: copied from a website checkout when NOAH_WEBSITE_DIR
+# points at one, otherwise downloaded from the site and checked against the
+# checksum in its signed release manifest.
+#
+# Usage: script/fetch-asherin-eye <destination-file>
+set -euo pipefail
+destination="${1:?destination file}"
+mkdir -p "$(dirname "$destination")"
+
+if [[ -n "${NOAH_WEBSITE_DIR:-}" && -f "$NOAH_WEBSITE_DIR/public/downloads/asherin-eye.tar.gz" ]]; then
+    cp "$NOAH_WEBSITE_DIR/public/downloads/asherin-eye.tar.gz" "$destination"
+    exit 0
+fi
+
+base_url="${NOAH_DOWNLOADS_URL:-https://noah.asherin.com/downloads}"
+expected="$(curl -fsSL "$base_url/latest.json" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["assets"]["asherin-eye"]["sha256"])')"
+curl -fsSL -o "$destination.partial" "$base_url/asherin-eye.tar.gz"
+actual="$(sha256sum "$destination.partial" | cut -d' ' -f1)"
+if [[ "$actual" != "$expected" ]]; then
+    rm -f "$destination.partial"
+    echo "asherin-eye.tar.gz from $base_url doesn't match the manifest ($actual != $expected)" >&2
+    exit 1
+fi
+mv "$destination.partial" "$destination"

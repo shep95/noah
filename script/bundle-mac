@@ -207,6 +207,8 @@ function sign_app_binaries() {
         *) browser_platform=darwin-x64 ;;
     esac
     script/fetch-agent-browser "${browser_platform}" "${app_path}/Contents/MacOS/agent-browser"
+    # asherin.eye's source ships in the bundle, so the room needs no download.
+    script/fetch-asherin-eye "${app_path}/Contents/Resources/asherin-eye.tar.gz"
     mv "${app_path}/Contents/MacOS/agent-browser-LICENSE" "${app_path}/Contents/Resources/agent-browser-LICENSE"
 
     # Note: The app identifier for our development builds is the same as the app identifier for nightly.

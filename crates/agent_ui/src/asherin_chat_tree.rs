@@ -61,13 +61,33 @@ pub(crate) fn attach_to_chat_room(
 }
 
 fn add_tree_panel(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
+    // Like a chat app: the conversations down one side, the conversation
+    // filling the rest. shepherd's panel fills the centre in asherin.chat, so
+    // the tree takes whichever side that panel's dock is not on.
+    let agent_side = workspace
+        .all_docks()
+        .into_iter()
+        .find(|dock| {
+            dock.read(cx)
+                .panel_index_for_persistent_name("AgentPanel", cx)
+                .is_some()
+        })
+        .map(|dock| dock.read(cx).position());
+    let tree_side = match agent_side {
+        Some(DockPosition::Left) => DockPosition::Right,
+        _ => DockPosition::Left,
+    };
     let weak_workspace = workspace.weak_handle();
-    let panel = cx.new(|cx| ChatTreePanel::new(weak_workspace, window, cx));
+    let panel = cx.new(|cx| {
+        let mut panel = ChatTreePanel::new(weak_workspace, window, cx);
+        panel.position = tree_side;
+        panel
+    });
     workspace.add_panel(panel, window, cx);
-    // ctrl-b toggles the left dock, so the tree is the panel it shows.
-    workspace.left_dock().update(cx, |dock, cx| {
+    workspace.dock_at_position(tree_side).update(cx, |dock, cx| {
         if let Some(index) = dock.panel_index_for_type::<ChatTreePanel>() {
             dock.activate_panel(index, window, cx);
+            dock.set_open(true, window, cx);
         }
     });
 }

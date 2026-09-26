@@ -372,6 +372,28 @@ impl Workspace {
     /// Opens `room` and closes every other one. Entering the room you are
     /// already in, or the writing room, returns focus to the code.
     pub fn enter_room(&mut self, room: Room, window: &mut Window, cx: &mut Context<Self>) {
+        // In one of noah's own rooms (asherin.chat, the board...) the code
+        // rooms belong to the person's project, so they lead back to it:
+        // the project workspace this window showed last, in this window.
+        let code_room = matches!(
+            room,
+            Room::Write | Room::Files | Room::Changes | Room::Terminal
+        );
+        if code_room && self.noah_room_folder(cx).is_some() {
+            let Some(multi_workspace) = window.root::<crate::MultiWorkspace>().flatten() else {
+                return;
+            };
+            let project = multi_workspace.read(cx).most_recent_workspace_where(cx, |workspace, cx| {
+                workspace.noah_room_folder(cx).is_none()
+            });
+            if let Some(project) = project {
+                multi_workspace.update(cx, |multi_workspace, cx| {
+                    multi_workspace.activate(project.clone(), None, window, cx);
+                });
+                project.update(cx, |project, cx| project.enter_room(room, window, cx));
+                return;
+            }
+        }
         let already_here = self.active_room(cx) == room;
         self.close_all_docks(window, cx);
         let Some(panel_name) = room.panel_name().filter(|_| !already_here) else {
@@ -413,6 +435,14 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let active_room = self.active_room(cx);
+        let room_folder = self.noah_room_folder(cx);
+        let in_noah_room = room_folder.is_some();
+        let is_this_room = |folder: std::path::PathBuf| room_folder.as_deref() == Some(folder.as_path());
+        let chat_here = is_this_room(paths::chat_directory());
+        let pages_here = is_this_room(paths::pages_directory());
+        let search_here = is_this_room(paths::search_directory());
+        let board_here = is_this_room(paths::board_directory());
+        let eye_here = is_this_room(paths::home_dir().join("noah-lab").join("asherin.eye"));
         let colors = cx.theme().colors();
         let status = cx.theme().status();
 
@@ -430,7 +460,9 @@ impl Workspace {
             .border_r_1()
             .border_color(colors.border_variant)
             .children(Room::ALL.into_iter().map(|room| {
-                let is_active = room == active_room;
+                let is_active = room == active_room
+                    && (!in_noah_room
+                        || matches!(room, Room::Browser | Room::Mission | Room::Device));
                 let badge = self.room_badge(room, window, cx);
                 // Only a decision waiting on the person earns the accent; work in
                 // progress and counts stay in the neutral mist.
@@ -529,7 +561,8 @@ impl Workspace {
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-chat", IconName::Chat)
                         .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
+                        .icon_color(if chat_here { Color::Default } else { Color::Muted })
+                        .toggle_state(chat_here)
                         .tooltip(|_window, cx| {
                             Tooltip::for_action("asherin.chat", &zed_actions::OpenAsherinChat, cx)
                         })
@@ -542,7 +575,8 @@ impl Workspace {
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-pages", IconName::FileDoc)
                         .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
+                        .icon_color(if pages_here { Color::Default } else { Color::Muted })
+                        .toggle_state(pages_here)
                         .tooltip(|_window, cx| {
                             Tooltip::for_action("asherin.pages", &zed_actions::OpenAsherinPages, cx)
                         })
@@ -555,7 +589,8 @@ impl Workspace {
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-search", IconName::MagnifyingGlass)
                         .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
+                        .icon_color(if search_here { Color::Default } else { Color::Muted })
+                        .toggle_state(search_here)
                         .tooltip(|_window, cx| {
                             Tooltip::for_action("asherin.search", &zed_actions::OpenAsherinSearch, cx)
                         })
@@ -585,7 +620,8 @@ impl Workspace {
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-board", IconName::Blocks)
                         .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
+                        .icon_color(if board_here { Color::Default } else { Color::Muted })
+                        .toggle_state(board_here)
                         .tooltip(|_window, cx| {
                             Tooltip::for_action("asherin.board", &zed_actions::OpenAsherinBoard, cx)
                         })
@@ -598,7 +634,8 @@ impl Workspace {
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-eye", IconName::Eye)
                         .icon_size(IconSize::Small)
-                        .icon_color(Color::Muted)
+                        .icon_color(if eye_here { Color::Default } else { Color::Muted })
+                        .toggle_state(eye_here)
                         .tooltip(|_window, cx| {
                             Tooltip::for_action("asherin.eye", &zed_actions::OpenAsherinEye, cx)
                         })

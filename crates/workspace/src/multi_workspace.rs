@@ -7,6 +7,8 @@ use gpui::{
     WindowId, actions, deferred, px,
 };
 pub use project::ProjectGroupKey;
+use collections::HashSet;
+use project::trusted_worktrees::{PathTrust, TrustedWorktrees};
 use project::{DisableAiSettings, Project};
 use remote::RemoteConnectionOptions;
 use settings::Settings;
@@ -868,6 +870,72 @@ impl MultiWorkspace {
             .filter_map(|held| Some((held.activated_at?, &held.workspace)))
             .max_by_key(|(activated_at, _)| *activated_at)
             .map(|(_, workspace)| workspace.clone())
+    }
+
+    /// The workspace shown most recently among those `keep` accepts.
+    pub fn most_recent_workspace_where(
+        &self,
+        cx: &App,
+        keep: impl Fn(&Workspace, &App) -> bool,
+    ) -> Option<Entity<Workspace>> {
+        self.held
+            .iter()
+            .filter(|held| keep(held.workspace.read(cx), cx))
+            .filter_map(|held| Some((held.activated_at?, &held.workspace)))
+            .max_by_key(|(activated_at, _)| *activated_at)
+            .map(|(_, workspace)| workspace.clone())
+    }
+
+    /// Shows one of noah's own folders (asherin.chat, the board, asherin.eye)
+    /// as a workspace in this window, beside the person's project rather than
+    /// in a window of its own, making it if it isn't open yet. The folder is
+    /// noah's, so it opens trusted rather than in Restricted Mode, where
+    /// shepherd would have no tools.
+    pub fn open_noah_folder(
+        &mut self,
+        folder: PathBuf,
+        init: Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Task<Result<Entity<Workspace>>> {
+        let existing = self.workspaces().find(|workspace| {
+            workspace
+                .read(cx)
+                .project()
+                .read(cx)
+                .visible_worktrees(cx)
+                .any(|worktree| worktree.read(cx).abs_path().as_ref() == folder.as_path())
+        });
+        if let Some(workspace) = existing.cloned() {
+            self.activate(workspace.clone(), None, window, cx);
+            workspace.update(cx, |workspace, cx| init(workspace, window, cx));
+            return Task::ready(Ok(workspace));
+        }
+        let paths = PathList::new(std::slice::from_ref(&folder));
+        let trust_and_init: Box<
+            dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send,
+        > = Box::new(move |workspace, window, cx| {
+            if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
+                let worktree_store = workspace.project().read(cx).worktree_store();
+                trusted_worktrees.update(cx, |trusted_worktrees, cx| {
+                    trusted_worktrees.trust(
+                        &worktree_store,
+                        HashSet::from_iter([PathTrust::AbsPath(folder.clone())]),
+                        cx,
+                    );
+                });
+            }
+            init(workspace, window, cx);
+        });
+        self.find_or_create_local_workspace(
+            paths,
+            None,
+            Some(trust_and_init),
+            OpenMode::Activate,
+            None,
+            window,
+            cx,
+        )
     }
 
     pub fn group_state_by_key(&self, key: &ProjectGroupKey) -> Option<&ProjectGroupState> {

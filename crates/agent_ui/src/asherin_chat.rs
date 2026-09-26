@@ -30,7 +30,7 @@ use ui::{ContextMenu, ListItem, ListItemSpacing, prelude::*};
 use util::ResultExt as _;
 use workspace::notifications::NotificationId;
 use workspace::{
-    AppState, MultiWorkspace, OpenMode, OpenOptions, OpenVisible, Toast, Workspace, WorkspaceDb,
+    MultiWorkspace, OpenOptions, OpenVisible, Toast, Workspace, WorkspaceDb,
 };
 
 use crate::conversation_view::ThreadView;
@@ -98,6 +98,7 @@ pub fn init(cx: &mut App) {
             paths::board_directory(),
             Some(BOARD_GUIDE),
             Some(Box::new(|workspace, _panel, window, cx| {
+                workspace.close_all_docks(window, cx);
                 noah_board::open_in(workspace, paths::board_directory(), window, cx);
             })),
             cx,
@@ -318,37 +319,6 @@ pub(crate) fn open_room(
     then: Option<RoomReady>,
     cx: &mut App,
 ) {
-    let mut then = then;
-    for window in cx.windows() {
-        let Some(window) = window.downcast::<MultiWorkspace>() else {
-            continue;
-        };
-        let focused = window
-            .update(cx, |multi_workspace, window, cx| {
-                let Some(workspace) = multi_workspace
-                    .workspaces()
-                    .find(|workspace| is_room_workspace(workspace.read(cx), &folder, cx))
-                    .cloned()
-                else {
-                    return false;
-                };
-                window.activate_window();
-                workspace.update(cx, |workspace, cx| {
-                    let panel = workspace.focus_panel::<AgentPanel>(window, cx);
-                    if let (Some(panel), Some(then)) = (panel, then.take()) {
-                        then(workspace, panel, window, cx);
-                    }
-                });
-                true
-            })
-            .unwrap_or(false);
-        if focused {
-            return;
-        }
-    }
-    let Some(app_state) = AppState::try_global(cx) else {
-        return;
-    };
     if let Err(error) = std::fs::create_dir_all(&folder) {
         log::error!("couldn't create {}: {error}", folder.display());
         return;
@@ -361,34 +331,11 @@ pub(crate) fn open_room(
             log::error!("couldn't write {}: {error}", guide_path.display());
         }
     }
-    workspace::open_new(
-        OpenOptions {
-            open_mode: OpenMode::NewWindow,
-            ..OpenOptions::default()
-        },
-        app_state,
-        cx,
-        move |workspace, window, cx| {
-            let project = workspace.project().clone();
-            // The folder is noah's own, so it opens trusted rather than in
-            // Restricted Mode, where shepherd would have no tools.
-            if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
-                let worktree_store = project.read(cx).worktree_store();
-                trusted_worktrees.update(cx, |trusted_worktrees, cx| {
-                    trusted_worktrees.trust(
-                        &worktree_store,
-                        HashSet::from_iter([PathTrust::AbsPath(folder.clone())]),
-                        cx,
-                    );
-                });
-            }
-            project
-                .update(cx, |project, cx| {
-                    project.find_or_create_worktree(&folder, true, cx)
-                })
-                .detach_and_log_err(cx);
-            // Panels load after the window opens, so wait for shepherd's
-            // before showing it.
+    // The room is a workspace in the window the person is using, beside
+    // their project, never a window of its own. Panels load after the
+    // workspace opens, so shepherd's is awaited before it is shown.
+    let init: Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) + Send> =
+        Box::new(move |_workspace, window, cx| {
             cx.spawn_in(window, async move |workspace, cx| {
                 let mut then = then;
                 for _ in 0..100 {
@@ -414,9 +361,8 @@ pub(crate) fn open_room(
                 anyhow::Ok(())
             })
             .detach_and_log_err(cx);
-        },
-    )
-    .detach_and_log_err(cx);
+        });
+    workspace::open_noah_folder_in_active_window(folder, init, cx).detach_and_log_err(cx);
 }
 
 /// Bumped whenever a conversation's place in the tree changes in a way the
@@ -787,23 +733,21 @@ async fn with_project_panel<R: 'static>(
     let (window, workspace) = match existing {
         Some(found) => found,
         None => {
-            let app_state = cx
-                .update(|cx| AppState::try_global(cx))
-                .ok_or_else(|| anyhow::anyhow!("noah isn't ready to open projects"))?;
-            let opened = cx
+            // The project joins the window the person is already in, as a
+            // workspace of its own, instead of opening another window.
+            let workspace = cx
                 .update(|cx| {
-                    workspace::open_paths(
-                        std::slice::from_ref(&root),
-                        app_state,
-                        OpenOptions {
-                            open_mode: OpenMode::NewWindow,
-                            ..OpenOptions::default()
-                        },
+                    workspace::open_noah_folder_in_active_window(
+                        root.clone(),
+                        Box::new(|_, _, _| {}),
                         cx,
                     )
                 })
                 .await?;
-            (opened.window, opened.workspace)
+            let window = cx
+                .update(|cx| window_for_workspace(&workspace, cx))
+                .ok_or_else(|| anyhow::anyhow!("the project's window closed while it opened"))?;
+            (window, workspace)
         }
     };
     let mut then = Some(then);

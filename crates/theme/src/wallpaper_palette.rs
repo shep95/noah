@@ -147,7 +147,7 @@ const COLORED_ROLE_SATURATION: f32 = 0.2;
 
 /// However vivid the wallpaper, the neutrals stay neutral: the layers remain
 /// blacks and the text stays near white.
-const MAX_NEUTRAL_SATURATION: f32 = 0.2;
+const MAX_NEUTRAL_SATURATION: f32 = 0.1;
 
 /// How strongly the bundled theme's neutrals are tinted, measured as the
 /// saturation of the bundled wallpaper's mid tone. A wallpaper twice as
