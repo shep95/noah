@@ -353,6 +353,10 @@ pub struct AgentSettingsContent {
     /// A monthly spending limit in US dollars for paid models. noah warns at
     /// 80% and asks before going over. Unset means no limit.
     pub monthly_budget_usd: Option<f64>,
+    /// A spending limit in US dollars for each thread on paid models. A
+    /// thread that reaches it stops with a message saying so. Unset means no
+    /// limit.
+    pub thread_budget_usd: Option<f64>,
     /// Hosts shepherd's fetch and browser tools may reach, such as
     /// "docs.rs" or "*.github.com". Empty or unset allows every host.
     pub allowed_hosts: Option<Vec<String>>,

@@ -50,6 +50,9 @@ actions!(
         OpenAsherinChat,
         /// Opens asherin.pages, where shepherd makes documents, books and slideshows.
         OpenAsherinPages,
+        /// Opens asherin.eye, your own editable copy of the ADAM globe, and
+        /// starts it in the browser room.
+        OpenAsherinEye,
         /// Turns on or off whether noah's colors follow the background image.
         ToggleBackgroundColors,
         /// Shows the open file (HTML, SVG, PDF or an image) in the browser

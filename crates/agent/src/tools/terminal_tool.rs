@@ -731,7 +731,8 @@ async fn run_terminal_tool(
     // Secrets the person keeps in noah reach commands as environment
     // variables; shepherd only ever sees their names.
     let extra_env: Vec<acp::EnvVariable> = cx.update(|cx| {
-        crate::trust::brokered_secrets(cx)
+        let roots = crate::trust::project_roots(project.read(cx), cx);
+        crate::trust::brokered_secrets_for_project(&roots, cx)
             .into_iter()
             .map(|(name, value)| acp::EnvVariable::new(name, value))
             .collect()

@@ -351,6 +351,17 @@ impl AgentTool for ReadFileTool {
                     )
                 });
                 authorize.await.map_err(tool_content_err)?;
+                // A file outside the project wasn't written by the team, so
+                // its content counts as untrusted, like a web page.
+                if let Some(thread) = event_stream.thread_entity_id() {
+                    cx.update(|cx| {
+                        crate::trust::mark_untrusted(
+                            thread,
+                            format!("the file {} outside the project", canonical_target.display()),
+                            cx,
+                        )
+                    });
+                }
             }
 
             let file_path = input.path.clone();

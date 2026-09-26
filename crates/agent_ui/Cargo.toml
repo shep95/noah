@@ -29,6 +29,7 @@ unit-eval = []
 noah_i18n.workspace = true
 acp_thread.workspace = true
 noah_trust.workspace = true
+asherin_chat.workspace = true
 zed_credentials_provider.workspace = true
 action_log.workspace = true
 agent-client-protocol.workspace = true

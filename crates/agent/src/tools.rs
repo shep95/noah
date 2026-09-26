@@ -1,3 +1,4 @@
+mod addon_tool;
 mod apply_code_action_tool;
 mod ask_user_tool;
 mod browser_tool;
@@ -76,6 +77,7 @@ where
     }
 }
 
+pub use addon_tool::*;
 pub use apply_code_action_tool::*;
 pub use ask_user_tool::*;
 pub use browser_tool::*;
@@ -226,6 +228,7 @@ tools! {
     GetCodeActionsTool,
     GoToDefinitionTool,
     GrepTool,
+    ListAddonsTool,
     ListAgentsAndModelsTool,
     ListDirectoryTool,
     ModelFileTool,
@@ -233,6 +236,8 @@ tools! {
     ProjectMemoryTool,
     ReadFileTool,
     RenameTool,
+    RunAddonTool,
+    SaveAddonTool,
     SkillTool,
     SpawnAgentTool,
     TerminalTool,

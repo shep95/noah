@@ -1692,6 +1692,54 @@ impl AgentPanel {
         }
     }
 
+    /// Starts a new shepherd thread whose composer holds `content`, and
+    /// returns its view so the caller can wait for its session.
+    pub(crate) fn new_thread_with_content(
+        &mut self,
+        content: AgentInitialContent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<ConversationView> {
+        let thread = self.create_agent_thread_with_server(
+            Agent::NativeAgent,
+            None,
+            None,
+            None,
+            None,
+            Some(content),
+            None,
+            AgentThreadSource::AgentPanel,
+            window,
+            cx,
+        );
+        let conversation_view = thread.conversation_view.clone();
+        self.set_base_view(thread.into(), true, window, cx);
+        conversation_view
+    }
+
+    /// Opens a saved shepherd thread with `content` in its composer.
+    pub(crate) fn open_thread_with_content(
+        &mut self,
+        session_id: acp::SessionId,
+        work_dirs: Option<PathList>,
+        content: AgentInitialContent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let thread = self.create_agent_thread_with_server_for_external_session(
+            Agent::NativeAgent,
+            None,
+            session_id,
+            work_dirs,
+            None,
+            Some(content),
+            AgentThreadSource::AgentPanel,
+            window,
+            cx,
+        );
+        self.set_base_view(thread.into(), true, window, cx);
+    }
+
     fn external_thread_by_session(
         &mut self,
         agent: Agent,
@@ -5766,6 +5814,15 @@ impl AgentPanel {
                                             }
                                         }
                                     });
+                                }
+                                if let Some(thread_view) =
+                                    conversation_view.read(cx).root_thread_view()
+                                {
+                                    menu = crate::asherin_chat::extend_thread_menu(
+                                        menu,
+                                        thread_view,
+                                        cx,
+                                    );
                                 }
 
                                 menu = menu.separator();

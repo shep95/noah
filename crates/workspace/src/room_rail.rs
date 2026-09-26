@@ -524,6 +524,19 @@ impl Workspace {
                         }),
                 ),
             )
+            .child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("asherin-eye", IconName::Eye)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("asherin.eye", &zed_actions::OpenAsherinEye, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenAsherinEye), cx)
+                        }),
+                ),
+            )
             .child(div().flex_1())
             .child({
                 let recording = noah_capture::recording_elapsed(cx);

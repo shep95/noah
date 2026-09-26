@@ -217,6 +217,7 @@
   {
     "context": "AgentPanel",
     "bindings": {
+      "ctrl-b": "asherin_chat::ToggleTree",
       "ctrl-n": "agent::NewThread",
       "ctrl-alt-c": "agent::OpenSettings",
       "shift-alt-i": "agent::ToggleOptionsMenu",

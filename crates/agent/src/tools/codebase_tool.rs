@@ -131,7 +131,7 @@ impl AgentTool for CodebaseTool {
     fn run(
         self: Arc<Self>,
         input: ToolInput<Self::Input>,
-        _event_stream: ToolCallEventStream,
+        event_stream: ToolCallEventStream,
         cx: &mut App,
     ) -> Task<Result<Self::Output, Self::Output>> {
         let project = self.project.clone();
@@ -150,7 +150,18 @@ impl AgentTool for CodebaseTool {
                 CodebaseAction::Why => why(input, root, cx).await,
                 CodebaseAction::Tour => tour(root, cx).await,
                 CodebaseAction::Rules => Ok(cx.background_spawn(async move { rules(&root) }).await),
-                CodebaseAction::Plan => plan(input, root, cx).await,
+                CodebaseAction::Plan => {
+                    let tasks = input.tasks.len();
+                    let mut out = plan(input, root, cx).await?;
+                    if let Some(preview) = cx.update(|cx| {
+                        crate::trust::plan_cost_preview(event_stream.thread_entity_id(), tasks, cx)
+                    }) {
+                        out.push_str(&format!(
+                            "\n\nCost: {preview}. Tell the person this before starting the run."
+                        ));
+                    }
+                    Ok(out)
+                }
                 CodebaseAction::Packages => {
                     if offline {
                         return Err("noah is in offline mode, so registries can't be checked".to_string());

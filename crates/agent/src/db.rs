@@ -484,6 +484,40 @@ impl ThreadsDatabase {
             }
         }
 
+        // asherin.chat's conversation tree. A chat thread with no row here is
+        // a plain root conversation.
+        connection.exec(indoc! {"
+            CREATE TABLE IF NOT EXISTS chat_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('root','branch','side','handoff')),
+                parent_conversation_id TEXT REFERENCES chat_conversations(id) ON DELETE SET NULL,
+                parent_message_id TEXT,
+                agent_thread_id TEXT,
+                model TEXT,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                archived_at INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                inherited_message_count INTEGER NOT NULL DEFAULT 0,
+                agent TEXT,
+                project_path TEXT
+            )
+        "})?()
+        .map_err(|e| e.context("Failed to create chat_conversations table"))?;
+        connection.exec(indoc! {"
+            CREATE INDEX IF NOT EXISTS idx_chat_parent ON chat_conversations(parent_conversation_id)
+        "})?()?;
+        connection.exec(indoc! {"
+            CREATE TABLE IF NOT EXISTS chat_turn_costs (
+                thread_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                usd REAL NOT NULL,
+                PRIMARY KEY (thread_id, message_id)
+            )
+        "})?()
+        .map_err(|e| e.context("Failed to create chat_turn_costs table"))?;
+
         let db = Self {
             executor,
             connection: Arc::new(Mutex::new(connection)),
@@ -773,6 +807,222 @@ impl ThreadsDatabase {
             }
 
             Ok(())
+        })
+    }
+}
+
+/// A conversation's place in asherin.chat's tree. Messages stay in the
+/// conversation's own thread; this row only links it to where it came from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatConversation {
+    pub id: acp::SessionId,
+    pub title: SharedString,
+    pub kind: asherin_chat::tree::ConversationKind,
+    pub parent_conversation_id: Option<acp::SessionId>,
+    /// For a branch, the id of the last user message it inherited.
+    pub parent_message_id: Option<String>,
+    /// How many of the parent's messages a branch started with.
+    pub inherited_message_count: usize,
+    /// For side chats and hand-offs, the shepherd-room thread involved.
+    pub agent_thread_id: Option<acp::SessionId>,
+    pub model: Option<String>,
+    /// The custom chat agent the conversation uses.
+    pub agent: Option<String>,
+    /// For hand-offs, the project the shepherd-room thread runs in.
+    pub project_path: Option<PathBuf>,
+    pub pinned: bool,
+    pub archived_at: Option<i64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl ChatConversation {
+    pub fn new(
+        id: acp::SessionId,
+        title: SharedString,
+        kind: asherin_chat::tree::ConversationKind,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id,
+            title,
+            kind,
+            parent_conversation_id: None,
+            parent_message_id: None,
+            inherited_message_count: 0,
+            agent_thread_id: None,
+            model: None,
+            agent: None,
+            project_path: None,
+            pinned: false,
+            archived_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+type ChatConversationRow = (
+    (
+        Arc<str>,
+        String,
+        String,
+        Option<Arc<str>>,
+        Option<String>,
+        Option<Arc<str>>,
+        Option<String>,
+    ),
+    (bool, Option<i64>, i64, i64, i64, Option<String>, Option<String>),
+);
+
+const CHAT_CONVERSATION_COLUMNS: &str = "id, title, kind, parent_conversation_id, parent_message_id, agent_thread_id, model, pinned, archived_at, created_at, updated_at, inherited_message_count, agent, project_path";
+
+fn chat_conversation_to_row(conversation: &ChatConversation) -> ChatConversationRow {
+    (
+        (
+            conversation.id.0.clone(),
+            conversation.title.to_string(),
+            conversation.kind.as_str().to_string(),
+            conversation
+                .parent_conversation_id
+                .as_ref()
+                .map(|id| id.0.clone()),
+            conversation.parent_message_id.clone(),
+            conversation.agent_thread_id.as_ref().map(|id| id.0.clone()),
+            conversation.model.clone(),
+        ),
+        (
+            conversation.pinned,
+            conversation.archived_at,
+            conversation.created_at.timestamp_millis(),
+            conversation.updated_at.timestamp_millis(),
+            i64::try_from(conversation.inherited_message_count).unwrap_or(i64::MAX),
+            conversation.agent.clone(),
+            conversation
+                .project_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+        ),
+    )
+}
+
+fn chat_conversation_from_row(row: ChatConversationRow) -> Result<ChatConversation> {
+    let (
+        (id, title, kind, parent_conversation_id, parent_message_id, agent_thread_id, model),
+        (pinned, archived_at, created_at, updated_at, inherited_message_count, agent, project_path),
+    ) = row;
+    let kind = asherin_chat::tree::ConversationKind::parse(&kind)
+        .ok_or_else(|| anyhow::anyhow!("unknown chat conversation kind {kind:?}"))?;
+    let timestamp = |millis: i64| {
+        DateTime::<Utc>::from_timestamp_millis(millis)
+            .ok_or_else(|| anyhow::anyhow!("invalid timestamp {millis}"))
+    };
+    Ok(ChatConversation {
+        id: acp::SessionId::new(id),
+        title: title.into(),
+        kind,
+        parent_conversation_id: parent_conversation_id.map(acp::SessionId::new),
+        parent_message_id,
+        inherited_message_count: usize::try_from(inherited_message_count).unwrap_or(0),
+        agent_thread_id: agent_thread_id.map(acp::SessionId::new),
+        model,
+        agent,
+        project_path: project_path.map(PathBuf::from),
+        pinned,
+        archived_at,
+        created_at: timestamp(created_at)?,
+        updated_at: timestamp(updated_at)?,
+    })
+}
+
+impl ThreadsDatabase {
+    pub fn save_chat_conversation(&self, conversation: ChatConversation) -> Task<Result<()>> {
+        let connection = self.connection.clone();
+        self.executor.spawn(async move {
+            let connection = connection.lock();
+            let mut insert = connection.exec_bound::<ChatConversationRow>(&format!(
+                "INSERT INTO chat_conversations ({CHAT_CONVERSATION_COLUMNS})
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                 ON CONFLICT(id) DO UPDATE SET
+                     title = excluded.title,
+                     kind = excluded.kind,
+                     parent_conversation_id = excluded.parent_conversation_id,
+                     parent_message_id = excluded.parent_message_id,
+                     agent_thread_id = excluded.agent_thread_id,
+                     model = excluded.model,
+                     pinned = excluded.pinned,
+                     archived_at = excluded.archived_at,
+                     updated_at = excluded.updated_at,
+                     inherited_message_count = excluded.inherited_message_count,
+                     agent = excluded.agent,
+                     project_path = excluded.project_path"
+            ))?;
+            insert(chat_conversation_to_row(&conversation))?;
+            Ok(())
+        })
+    }
+
+    pub fn chat_conversation(
+        &self,
+        id: acp::SessionId,
+    ) -> Task<Result<Option<ChatConversation>>> {
+        let connection = self.connection.clone();
+        self.executor.spawn(async move {
+            let connection = connection.lock();
+            let mut select = connection.select_bound::<Arc<str>, ChatConversationRow>(&format!(
+                "SELECT {CHAT_CONVERSATION_COLUMNS} FROM chat_conversations WHERE id = ? LIMIT 1"
+            ))?;
+            select(id.0)?
+                .into_iter()
+                .next()
+                .map(chat_conversation_from_row)
+                .transpose()
+        })
+    }
+
+    /// Adds `usd` to what the turn started by `message_id` has cost.
+    pub fn add_chat_turn_cost(
+        &self,
+        thread_id: acp::SessionId,
+        message_id: String,
+        usd: f64,
+    ) -> Task<Result<()>> {
+        let connection = self.connection.clone();
+        self.executor.spawn(async move {
+            let connection = connection.lock();
+            let mut insert = connection.exec_bound::<(Arc<str>, String, f64)>(indoc! {"
+                INSERT INTO chat_turn_costs (thread_id, message_id, usd) VALUES (?1, ?2, ?3)
+                ON CONFLICT(thread_id, message_id) DO UPDATE SET usd = usd + excluded.usd
+            "})?;
+            insert((thread_id.0, message_id, usd))?;
+            Ok(())
+        })
+    }
+
+    /// What each turn of a chat conversation cost, by the id of the user
+    /// message that started it.
+    pub fn chat_turn_costs(&self, thread_id: acp::SessionId) -> Task<Result<Vec<(String, f64)>>> {
+        let connection = self.connection.clone();
+        self.executor.spawn(async move {
+            let connection = connection.lock();
+            let mut select = connection.select_bound::<Arc<str>, (String, f64)>(indoc! {"
+                SELECT message_id, usd FROM chat_turn_costs WHERE thread_id = ?
+            "})?;
+            select(thread_id.0)
+        })
+    }
+
+    pub fn list_chat_conversations(&self) -> Task<Result<Vec<ChatConversation>>> {
+        let connection = self.connection.clone();
+        self.executor.spawn(async move {
+            let connection = connection.lock();
+            let mut select = connection.select_bound::<(), ChatConversationRow>(&format!(
+                "SELECT {CHAT_CONVERSATION_COLUMNS} FROM chat_conversations"
+            ))?;
+            select(())?
+                .into_iter()
+                .map(chat_conversation_from_row)
+                .collect()
         })
     }
 }

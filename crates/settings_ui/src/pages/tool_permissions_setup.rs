@@ -1450,6 +1450,12 @@ mod tests {
             // tool calls inside the spawned thread, not the spawning itself.
             "create_thread",
             "spawn_agent",
+            // Saving an add-on always asks the person, whatever the settings
+            // say; running and listing add-ons only compute in noah's sandbox
+            // or read the add-on folders.
+            "save_addon",
+            "run_addon",
+            "list_addons",
         ];
 
         let tool_info_ids: Vec<&str> = TOOLS.iter().map(|t| t.id).collect();

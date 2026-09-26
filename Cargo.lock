@@ -253,6 +253,7 @@ dependencies = [
  "agent_settings",
  "agent_skills",
  "anyhow",
+ "asherin_chat",
  "async-channel 2.5.0",
  "async-io",
  "chrono",
@@ -286,6 +287,7 @@ dependencies = [
  "log",
  "lsp",
  "model_files",
+ "noah_addons",
  "noah_i18n",
  "noah_trust",
  "parking_lot",
@@ -503,6 +505,7 @@ dependencies = [
  "agent_skills",
  "ai_onboarding",
  "anyhow",
+ "asherin_chat",
  "async-channel 2.5.0",
  "audio",
  "base64 0.22.1",
@@ -938,6 +941,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb44936d800fea8f016d7f2311c6a4f97aebd5dc86f09906139ec848cf3a46f"
 dependencies = [
  "libloading",
+]
+
+[[package]]
+name = "asherin_chat"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "noah_trust",
+]
+
+[[package]]
+name = "asherin_eye"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-compression",
+ "async-tar",
+ "auto_update",
+ "collections",
+ "futures 0.3.34",
+ "gpui",
+ "http_client",
+ "log",
+ "node_runtime",
+ "paths",
+ "project",
+ "release_channel",
+ "sha2",
+ "smol",
+ "task",
+ "tempfile",
+ "util",
+ "which",
+ "workspace",
+ "zed_actions",
 ]
 
 [[package]]
@@ -11511,6 +11549,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "noah_addons"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "imara-diff",
+ "jsonschema",
+ "paths",
+ "rquickjs",
+ "schemars 1.0.4",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "noah_capture"
 version = "0.1.0"
 dependencies = [
@@ -11562,12 +11617,15 @@ name = "noah_trust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "regex",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "tempfile",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -15302,6 +15360,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "relative-path"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bca40a312222d8ba74837cb474edef44b37f561da5f773981007a10bbaa992b0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "release_channel"
 version = "0.1.0"
 dependencies = [
@@ -15807,6 +15874,35 @@ dependencies = [
  "util",
  "zlog",
  "zstd 0.11.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "rquickjs"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0a22bf72f515cc4189dd7c63d016f6de92a11eee98ddf7dd64794198f6eb34e"
+dependencies = [
+ "rquickjs-core",
+]
+
+[[package]]
+name = "rquickjs-core"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6657979a24d543e5fc66f32cef2f47ca82ce8eb55cec5f7d59a12b7b570bbf24"
+dependencies = [
+ "hashbrown 0.17.1",
+ "relative-path",
+ "rquickjs-sys",
+]
+
+[[package]]
+name = "rquickjs-sys"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee271d0eeba64f0915b846cb7ae02e16faf3dfdffdca91731101d9d30fe3423"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -23012,6 +23108,7 @@ dependencies = [
  "agent_skills",
  "agent_ui",
  "anyhow",
+ "asherin_eye",
  "ashpd",
  "askpass",
  "assets",

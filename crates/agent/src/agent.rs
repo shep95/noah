@@ -1,3 +1,4 @@
+pub mod chat_tree;
 mod db;
 mod legacy_thread;
 mod native_agent_server;
@@ -1631,7 +1632,24 @@ impl NativeAgent {
             Some(command)
         });
 
+        // asherin.chat's commands. The room handles `/code` and `/agent`
+        // itself; the rest reach the thread as typed and are shaped when the
+        // request is built.
+        let chat_commands = Thread::is_chat_project(&state.project, cx)
+            .then(|| {
+                asherin_chat::SlashCommand::ALL.into_iter().map(|command| {
+                    acp::AvailableCommand::new(command.name(), command.description()).input(
+                        acp::AvailableCommandInput::Unstructured(
+                            acp::UnstructuredCommandInput::new(command.input_hint()),
+                        ),
+                    )
+                })
+            })
+            .into_iter()
+            .flatten();
+
         std::iter::once(compact_command)
+            .chain(chat_commands)
             .chain(mcp_commands)
             .collect()
     }
@@ -1649,6 +1667,12 @@ impl NativeAgent {
                 .load_thread(id.clone())
                 .await?
                 .with_context(|| format!("no thread found with ID: {id:?}"))?;
+            let chat_agent = database
+                .chat_conversation(id.clone())
+                .await
+                .log_err()
+                .flatten()
+                .and_then(|conversation| conversation.agent);
 
             this.update(cx, |this, cx| {
                 let project_id = this.get_or_create_project_state(&project, cx);
@@ -1671,6 +1695,7 @@ impl NativeAgent {
                         cx,
                     );
                     thread.set_summarization_model(summarization_model, cx);
+                    thread.set_chat_agent(chat_agent, cx);
                     thread
                 }))
             })?

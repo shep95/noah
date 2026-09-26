@@ -1273,6 +1273,9 @@
     // A monthly spending limit in US dollars for paid models, such as 20.
     // noah asks before going over it. null means no limit.
     "monthly_budget_usd": null,
+    // A spending limit in US dollars for each thread on paid models, such as
+    // 2. A thread that reaches it stops and says so. null means no limit.
+    "thread_budget_usd": null,
     // Hosts shepherd's fetch and browser tools may reach, such as "docs.rs" or
     // "*.github.com". Empty allows every host.
     "allowed_hosts": [],
@@ -1318,6 +1321,7 @@
           "find_references": true,
           "get_code_actions": true,
           "go_to_definition": true,
+          "list_addons": true,
           "list_agents_and_models": true,
           "list_directory": true,
           "model_file": true,
@@ -1326,6 +1330,8 @@
           "rename_symbol": true,
           "read_file": true,
           "grep": true,
+          "run_addon": true,
+          "save_addon": true,
           "skill": true,
           "spawn_agent": true,
           "terminal": true,
@@ -1344,6 +1350,7 @@
           "diagnostics": true,
           "ask_user": false,
           "fetch": true,
+          "list_addons": true,
           "list_agents_and_models": true,
           "list_directory": true,
           "find_path": true,
@@ -1352,6 +1359,7 @@
           "go_to_definition": true,
           "read_file": true,
           "grep": true,
+          "run_addon": true,
           "skill": true,
           "spawn_agent": true,
           "search_web": true,
@@ -1376,6 +1384,12 @@
           "grep": true,
           "skill": true,
           "project_memory": true,
+          // Add-ons compute in noah's sandbox and are saved to ~/.noah/addons
+          // only after the person approves each one, so chat can make and
+          // use them without touching a project.
+          "list_addons": true,
+          "run_addon": true,
+          "save_addon": true,
         },
       },
     },

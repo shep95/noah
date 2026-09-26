@@ -255,6 +255,7 @@
     "context": "AgentPanel",
     "use_key_equivalents": true,
     "bindings": {
+      "cmd-b": "asherin_chat::ToggleTree",
       "cmd-n": "agent::NewThread",
       "cmd-alt-c": "agent::OpenSettings",
       "cmd-alt-m": "agent::ToggleOptionsMenu",

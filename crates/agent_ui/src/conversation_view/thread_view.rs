@@ -54,6 +54,8 @@ use super::elicitation::{
 };
 use super::*;
 
+mod chat_room;
+
 const DATA_RETENTION_LEARN_MORE_URL: &str = "https://support.claude.com/en/articles/15425996-data-retention-practices-for-mythos-class-models";
 
 #[derive(Default)]
@@ -588,6 +590,7 @@ pub struct ThreadView {
     pub(super) thread_error: Option<ThreadError>,
     /// shepherd rewriting the draft into a clearer prompt, while it runs.
     sharpening: Option<Task<()>>,
+    pub(crate) chat_room: chat_room::ChatRoomState,
     #[cfg(feature = "audio")]
     voice: VoiceState,
     pub thread_error_markdown: Option<Entity<Markdown>>,
@@ -1012,6 +1015,7 @@ impl ThreadView {
             thread_retry_status: None,
             thread_error: None,
             sharpening: None,
+            chat_room: Default::default(),
             #[cfg(feature = "audio")]
             voice: VoiceState::default(),
             thread_error_markdown: None,
@@ -1087,6 +1091,7 @@ impl ThreadView {
                 });
             });
 
+        this.start_chat_room(cx);
         if should_auto_submit {
             this.send(window, cx);
         }
@@ -1319,7 +1324,10 @@ impl ThreadView {
             }
             ViewEvent::MessageEditorEvent(_editor, MessageEditorEvent::SendImmediately) => {}
             ViewEvent::MessageEditorEvent(editor, MessageEditorEvent::Send) => {
-                if !self.is_subagent() {
+                if self.is_subagent() {
+                } else if self.is_chat_room(cx) {
+                    self.branch_from_edit(event.entry_index, editor.clone(), window, cx);
+                } else {
                     self.regenerate(event.entry_index, editor.clone(), window, cx);
                 }
             }
@@ -1487,6 +1495,13 @@ impl ThreadView {
     }
 
     pub fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_loading_contents
+            && !self.message_editor.read(cx).is_empty(cx)
+            && self.thread.read(cx).status() == ThreadStatus::Idle
+            && self.intercept_chat_room_send(window, cx)
+        {
+            return;
+        }
         let thread = &self.thread;
 
         if self.is_loading_contents {
@@ -4454,6 +4469,7 @@ impl ThreadView {
                                 )
                             }),
                     )
+                    .children(self.render_chat_redaction_notice(cx))
                     .child(
                         h_flex()
                             .w_full()
@@ -4477,6 +4493,7 @@ impl ThreadView {
                                     .flex_wrap()
                                     .gap_1()
                                     .children(self.render_token_usage(cx))
+                                    .children(self.render_chat_agent_picker(cx))
                                     .children(self.profile_selector.clone())
                                     .map(|this| match self.config_options_view.clone() {
                                         Some(config_view) => this.child(config_view),
@@ -7250,6 +7267,12 @@ impl ThreadView {
                     )
                 },
             )
+            .children(self.render_chat_turn_controls(
+                entry_ix,
+                user_message_index,
+                is_thread_bottom,
+                cx,
+            ))
             .when_some(feedback_buttons, |this, buttons| this.child(buttons))
             .when_some(copy_response_button, |this, button| this.child(button))
             .child(scroll_to_recent_user_prompt)

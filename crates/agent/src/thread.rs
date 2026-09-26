@@ -3,6 +3,7 @@ use crate::{
     CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
     DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, FindReferencesTool, GetCodeActionsTool,
     GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool, EvidenceTool, VerifyTool, ProjectMemoryTool, CodebaseTool,
+    ListAddonsTool, RunAddonTool, SaveAddonTool,
     MovePathTool, ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
     SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
     WriteFileTool, decide_permission_from_settings,
@@ -1298,6 +1299,9 @@ pub struct Thread {
     /// Whether `profile_id` was downgraded to `minimal` at thread start because
     /// the workspace is restricted. Used purely to surface a warning in the UI.
     profile_downgraded_for_restricted_workspace: bool,
+    /// The custom asherin.chat agent this conversation uses, by id. Loaded
+    /// from the chat conversation table when the thread opens.
+    chat_agent: Option<String>,
     project_context: Entity<ProjectContext>,
     pub(crate) templates: Arc<Templates>,
     model: ThreadModel,
@@ -1441,6 +1445,7 @@ impl Thread {
             context_server_registry,
             profile_id,
             profile_downgraded_for_restricted_workspace,
+            chat_agent: None,
             project_context,
             templates,
             model,
@@ -1820,6 +1825,7 @@ impl Thread {
             context_server_registry,
             profile_id,
             profile_downgraded_for_restricted_workspace: false,
+            chat_agent: None,
             project_context,
             templates,
             model,
@@ -2193,6 +2199,9 @@ impl Thread {
         self.add_tool(EvidenceTool::new(self.project.clone()));
         self.add_tool(VerifyTool::new(self.project.clone()));
         self.add_tool(ProjectMemoryTool::new(self.project.clone()));
+        self.add_tool(SaveAddonTool::new(self.project.clone()));
+        self.add_tool(RunAddonTool::new(self.project.clone()));
+        self.add_tool(ListAddonsTool::new(self.project.clone()));
         self.add_tool(CodebaseTool::new(self.project.clone()));
 
         self.add_tool(AskUserTool);
@@ -2259,11 +2268,29 @@ impl Thread {
     /// happened.
     /// Whether this thread runs in asherin.chat's own folder rather than a
     /// project. Chat threads think with the person; they never edit or run.
-    fn is_chat_project(project: &Entity<Project>, cx: &App) -> bool {
+    pub fn is_chat_project(project: &Entity<Project>, cx: &App) -> bool {
         let chat_directory = paths::chat_directory();
         let mut worktrees = project.read(cx).visible_worktrees(cx).peekable();
         worktrees.peek().is_some()
             && worktrees.all(|worktree| worktree.read(cx).abs_path().as_ref() == chat_directory)
+    }
+
+    pub fn chat_agent(&self) -> Option<&str> {
+        self.chat_agent.as_deref()
+    }
+
+    pub fn set_chat_agent(&mut self, agent: Option<String>, cx: &mut Context<Self>) {
+        if self.chat_agent != agent {
+            self.chat_agent = agent;
+            cx.notify();
+        }
+    }
+
+    /// The custom chat agent's definition, read fresh for each request so
+    /// edits to its file apply to the next message.
+    fn chat_agent_definition(&self, cx: &App) -> Option<Result<asherin_chat::agents::ChatAgent>> {
+        let id = self.chat_agent.as_deref()?;
+        Self::is_chat_project(&self.project, cx).then(|| crate::chat_tree::load_chat_agent(id))
     }
 
     fn profile_for_restricted_workspace(
@@ -2392,6 +2419,7 @@ impl Thread {
                 self.id.to_string(),
                 cx,
             );
+            self.record_chat_turn_cost(model.as_ref(), new_input + new_cached, new_output, cx);
         }
         self.accumulate_token_usage(update);
 
@@ -2403,6 +2431,44 @@ impl Thread {
             .insert(last_user_message.id.clone(), update);
         cx.emit(TokenUsageUpdated(self.latest_token_usage()));
         cx.notify();
+    }
+
+    /// In asherin.chat, adds what this request cost to its turn, so each
+    /// answer can show its cost and the conversation a running total.
+    fn record_chat_turn_cost(
+        &self,
+        model: &dyn LanguageModel,
+        input_tokens: u64,
+        output_tokens: u64,
+        cx: &mut Context<Self>,
+    ) {
+        let Some((input_price, output_price)) = model.price_per_million_tokens() else {
+            return;
+        };
+        let usd = noah_trust::cost::Pricing {
+            input_per_million: input_price,
+            output_per_million: output_price,
+        }
+        .cost(input_tokens, output_tokens);
+        if usd <= 0.0 || !Self::is_chat_project(&self.project, cx) {
+            return;
+        }
+        let Some(message_id) = self.last_user_message().map(|message| message.id.to_string())
+        else {
+            return;
+        };
+        let thread_id = self.id.clone();
+        let database = crate::ThreadsDatabase::connect(cx);
+        cx.background_spawn(async move {
+            let recorded = match database.await {
+                Ok(database) => database.add_chat_turn_cost(thread_id, message_id, usd).await,
+                Err(error) => Err(anyhow!(error)),
+            };
+            if let Err(error) = recorded {
+                log::error!("couldn't record a chat turn's cost: {error:#}");
+            }
+        })
+        .detach();
     }
 
     /// Records that the last request overflowed the model's context window so
@@ -2600,6 +2666,7 @@ impl Thread {
 
         log::info!("Thread::send called with model: {}", model.name().0);
         crate::trust::check_model_allowed(model.as_ref(), cx)?;
+        crate::trust::check_thread_budget(model.as_ref(), &self.id.to_string(), cx)?;
         self.advance_prompt_id();
 
         log::debug!("Total messages in thread: {}", self.messages.len());
@@ -2898,6 +2965,7 @@ impl Thread {
                     .clone()
                     .or_else(|| this.model().cloned())
                     .ok_or_else(|| anyhow!(NoModelConfiguredError))?;
+                crate::trust::check_thread_budget(model.as_ref(), &this.id.to_string(), cx)?;
                 this.refresh_turn_tools(cx);
                 let request = this.build_completion_request(intent, cx)?;
                 this.current_request_token_usage = TokenUsage::default();
@@ -3723,6 +3791,34 @@ impl Thread {
             }),
             http_client: self.project.read(cx).client().http_client(),
         };
+        let thread_entity_id = cx.entity_id();
+        let context_tokens = self
+            .latest_token_usage()
+            .map_or(0, |usage| usage.used_tokens);
+        crate::trust::note_thread(
+            thread_entity_id,
+            provenance_context.roots.clone(),
+            self.messages
+                .iter()
+                .filter_map(|message| message.as_agent_message())
+                .chain(self.pending_message.as_ref())
+                .flat_map(|message| {
+                    message.content.iter().filter_map(|content| match content {
+                        AgentMessageContent::ToolUse(tool_use) => Some((
+                            tool_use.name.as_ref(),
+                            &tool_use.input,
+                            message
+                                .tool_results
+                                .get(&tool_use.id)
+                                .is_some_and(|result| !result.is_error),
+                        )),
+                        _ => None,
+                    })
+                }),
+            self.model()
+                .map(|model| crate::trust::ThreadModelInfo::new(model.as_ref(), context_tokens)),
+            cx,
+        );
         let tool_result = tool.run(tool_input, tool_event_stream, cx);
         cx.spawn(async move |_this, cx| {
             let (is_error, output) = match tool_result.await {
@@ -3768,6 +3864,9 @@ impl Thread {
                 Err(output) => (true, output),
             };
             let mut output = output;
+            cx.update(|cx| {
+                crate::trust::note_tool_result(thread_entity_id, &tool_name, is_error, cx)
+            });
             let screened = cx.update(|cx| {
                 crate::trust::screen_tool_output(
                     &tool_name,
@@ -4154,7 +4253,7 @@ impl Thread {
         else {
             return Vec::new();
         };
-        noah_trust::project_files::CONTEXT_FILES
+        let mut knowledge: Vec<crate::KnowledgeFile> = noah_trust::project_files::CONTEXT_FILES
             .iter()
             .filter_map(|(name, label)| {
                 let text = std::fs::read_to_string(noah_trust::project_files::path(&root, name)).ok()?;
@@ -4164,7 +4263,20 @@ impl Thread {
                     content: noah_trust::project_files::clip(text),
                 })
             })
-            .collect()
+            .collect();
+        if Self::is_chat_project(&self.project, cx)
+            && let Ok(text) = std::fs::read_to_string(
+                paths::chat_directory().join(asherin_chat::MEMORY_FILE_NAME),
+            )
+            && !text.trim().is_empty()
+        {
+            knowledge.push(crate::KnowledgeFile {
+                label: "global chat memory (~/.noah/chat/memory.md, shared by every chat)"
+                    .to_string(),
+                content: noah_trust::project_files::clip(text.trim()),
+            });
+        }
+        knowledge
     }
 
     pub(crate) fn build_completion_request(
@@ -4182,6 +4294,9 @@ impl Thread {
         let model = self
             .model()
             .ok_or_else(|| anyhow!(NoModelConfiguredError))?;
+        if let Some(Err(error)) = self.chat_agent_definition(cx) {
+            return Err(error);
+        }
         let sandboxing_enabled = crate::sandboxing::sandboxing_enabled(cx);
         let tools = if let Some(turn) = self.running_turn.as_ref() {
             turn.tools
@@ -4371,6 +4486,21 @@ impl Thread {
             }
         }
 
+        // A custom chat agent narrows the chat room's tools and can never
+        // widen them, whatever its file lists.
+        if let Some(Ok(agent)) = self.chat_agent_definition(cx)
+            && let Some(agent_tools) = agent.tools.as_deref()
+        {
+            let allowed: Vec<String> = asherin_chat::agents::restrict_tools(
+                tools.keys().map(|name| -> &str { name }),
+                Some(agent_tools),
+            )
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+            tools.retain(|name, _| allowed.iter().any(|allowed| allowed.as_str() == &**name));
+        }
+
         tools
     }
 
@@ -4504,10 +4634,17 @@ impl Thread {
             },
             project_knowledge: self.project_knowledge(cx),
             teaching_mode: AgentSettings::get_global(cx).teaching_mode,
+            addons: crate::addon_catalog(&self.project, cx),
         }
         .render(&self.templates)
         .context("failed to build system prompt")
         .expect("Invalid template");
+        let mut system_prompt = system_prompt;
+        let is_chat = Self::is_chat_project(&self.project, cx);
+        if let Some(Ok(agent)) = self.chat_agent_definition(cx) {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&asherin_chat::agents::system_prompt_section(&agent));
+        }
         let mut messages = vec![LanguageModelRequestMessage {
             role: Role::System,
             content: vec![system_prompt.into()],
@@ -4515,6 +4652,9 @@ impl Thread {
             reasoning_details: None,
         }];
         self.extend_request_history_until(&mut messages, end_ix);
+        if is_chat {
+            shape_chat_slash_commands(&mut messages);
+        }
 
         if let Some(last_message) = messages.last_mut() {
             last_message.cache = true;
@@ -5002,6 +5142,23 @@ pub(crate) fn messages_to_markdown(messages: &[Arc<Message>]) -> String {
         markdown.push_str(&message.to_markdown());
     }
     markdown
+}
+
+/// In asherin.chat, a message that starts with a shaping command such as
+/// `/research` is stored as typed but sent with the command's instruction in
+/// place of the command. Every request reshapes the whole history the same
+/// way, so the cached prompt prefix stays stable.
+fn shape_chat_slash_commands(request_messages: &mut [LanguageModelRequestMessage]) {
+    for message in request_messages {
+        if message.role != Role::User {
+            continue;
+        }
+        if let Some(language_model::MessageContent::Text(text)) = message.content.first_mut()
+            && let Some(shaped) = asherin_chat::shape_request_text(text)
+        {
+            *text = shaped;
+        }
+    }
 }
 
 fn extend_request_history_until(
@@ -5981,21 +6138,37 @@ impl ToolCallEventStream {
         context: ToolPermissionContext,
         cx: &mut App,
     ) -> Task<Result<()>> {
-        let title = title.into();
         let options = context.build_permission_options();
 
         let tool_name = context.tool_name.clone();
         let input_values = context.input_values.clone();
-        let check_settings: Box<dyn Fn(&App) -> ToolPermissionDecision> =
-            Box::new(move |cx: &App| {
-                decide_permission_from_settings(
+        // noah's capability file and taint tracking have a say alongside the
+        // settings patterns.
+        let gate = crate::trust::ToolGate::new(
+            self.thread_entity_id(),
+            &tool_name,
+            &input_values,
+            cx,
+        );
+        let title = gate.title(title.into());
+        let check_settings: Box<dyn Fn(&App) -> ToolPermissionDecision> = Box::new({
+            let gate = gate.clone();
+            move |cx: &App| {
+                gate.decide(decide_permission_from_settings(
                     &tool_name,
                     &input_values,
                     agent_settings::AgentSettings::get_global(cx),
-                )
-            });
+                ))
+            }
+        });
 
-        self.run_authorization_loop(title, options, Some(context), Some(check_settings), cx)
+        let authorization =
+            self.run_authorization_loop(title, options, Some(context), Some(check_settings), cx);
+        cx.spawn(async move |cx| {
+            authorization.await?;
+            cx.update(|cx| gate.approved(cx));
+            Ok(())
+        })
     }
 
     /// Like [`Self::authorize`], but always prompts the user without
@@ -6010,6 +6183,16 @@ impl ToolCallEventStream {
         cx: &mut App,
     ) -> Task<Result<()>> {
         let title = title.into();
+        if let Some(denial) = crate::trust::ToolGate::new(
+            self.thread_entity_id(),
+            &context.tool_name,
+            &context.input_values,
+            cx,
+        )
+        .denial()
+        {
+            return Task::ready(Err(anyhow!(denial)));
+        }
         let options = context.build_permission_options();
         self.run_authorization_loop(title, options, Some(context), None, cx)
     }

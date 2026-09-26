@@ -784,6 +784,7 @@ fn main() {
         tabular_data_preview::init(cx);
         svg_preview::init(cx);
         onboarding::init(cx);
+        asherin_eye::init(cx);
         settings_ui::init(cx);
         keymap_editor::init(cx);
         extensions_ui::init(cx);

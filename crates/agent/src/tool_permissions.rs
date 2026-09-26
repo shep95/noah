@@ -597,6 +597,7 @@ mod tests {
             teaching_mode: false,
             offline: false,
             monthly_budget_usd: None,
+            thread_budget_usd: None,
             allowed_hosts: Vec::new(),
             model_parameters: vec![],
             auto_compact: agent_settings::AutoCompactSettings {

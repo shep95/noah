@@ -374,6 +374,7 @@ impl EditToolTest {
                 language: None,
                 project_knowledge: Vec::new(),
                 teaching_mode: false,
+                addons: Default::default(),
             };
             let templates = Templates::new();
             template.render(&templates)?

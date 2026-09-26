@@ -240,6 +240,7 @@ pub struct AgentSettings {
     pub teaching_mode: bool,
     pub offline: bool,
     pub monthly_budget_usd: Option<f64>,
+    pub thread_budget_usd: Option<f64>,
     pub allowed_hosts: Vec<String>,
     pub model_parameters: Vec<LanguageModelParameters>,
     pub auto_compact: AutoCompactSettings,
@@ -830,6 +831,7 @@ impl Settings for AgentSettings {
             teaching_mode: agent.teaching_mode.unwrap_or(false),
             offline: agent.offline.unwrap_or(false),
             monthly_budget_usd: agent.monthly_budget_usd.filter(|budget| *budget > 0.0),
+            thread_budget_usd: agent.thread_budget_usd.filter(|budget| *budget > 0.0),
             allowed_hosts: agent.allowed_hosts.unwrap_or_default(),
             model_parameters: agent.model_parameters,
             auto_compact: {

@@ -12,6 +12,7 @@ pub mod injection;
 pub mod mutation;
 pub mod outcomes;
 pub mod packages;
+pub mod permissions;
 pub mod planning;
 pub mod project_files;
 pub mod provenance;

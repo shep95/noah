@@ -1,6 +1,7 @@
-//! Spend: estimates before a request is sent, a running total per month, and
-//! the budget the person set. Prices come from the provider (Venice lists
-//! them with its models), in US dollars per million tokens.
+//! Spend: estimates before a request is sent, projections before a larger
+//! run, running totals per month and per thread, and the budgets the person
+//! set. Prices come from the provider (Venice lists them with its models),
+//! in US dollars per million tokens.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,88 @@ pub fn estimate_turn(context_tokens: u64, pricing: Pricing) -> Estimate {
     }
 }
 
+/// How a multi-step run is assumed to go: every step sends the whole
+/// context again, the context grows by what each step adds (tool output and
+/// the reply), and each step replies with about the same number of tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RunShape {
+    pub steps: u64,
+    pub growth_per_step: u64,
+    pub output_per_step: u64,
+}
+
+impl RunShape {
+    /// A quick run of `tasks` independent tasks: a few steps each, small
+    /// tool outputs.
+    pub fn light(tasks: u64) -> Self {
+        Self {
+            steps: tasks.max(1) * 4,
+            growth_per_step: 1_500,
+            output_per_step: 600,
+        }
+    }
+
+    /// The same tasks when they need exploration, retries and long outputs.
+    pub fn heavy(tasks: u64) -> Self {
+        Self {
+            steps: tasks.max(1) * 12,
+            growth_per_step: 4_000,
+            output_per_step: 1_500,
+        }
+    }
+}
+
+/// What a run shaped like `shape` is likely to cost, starting from a
+/// context of `context_tokens`. `max_context_tokens` caps how large the
+/// context gets, since noah compacts threads that reach the model's limit.
+pub fn project_run(
+    context_tokens: u64,
+    max_context_tokens: Option<u64>,
+    shape: RunShape,
+    pricing: Pricing,
+) -> Estimate {
+    let cap = max_context_tokens.filter(|cap| *cap > 0).unwrap_or(u64::MAX);
+    let mut input_tokens = 0u64;
+    for step in 0..shape.steps {
+        let context = context_tokens
+            .saturating_add(step.saturating_mul(shape.growth_per_step))
+            .min(cap);
+        input_tokens = input_tokens.saturating_add(context);
+    }
+    let output_tokens = shape.steps.saturating_mul(shape.output_per_step);
+    Estimate {
+        input_tokens,
+        output_tokens,
+        usd: pricing.cost(input_tokens, output_tokens),
+    }
+}
+
+/// "this plan will likely cost $0.40–$1.10 on opus", from a light and a
+/// heavy projection. `pricing` is `None` for models without published
+/// prices; `local` models run on this machine and cost nothing.
+pub fn describe_projection(
+    model: &str,
+    context_tokens: u64,
+    max_context_tokens: Option<u64>,
+    tasks: u64,
+    pricing: Option<Pricing>,
+    local: bool,
+) -> String {
+    if local {
+        return format!("this plan runs on {model}, a local model, so it costs nothing beyond electricity");
+    }
+    let Some(pricing) = pricing else {
+        return format!("{model} doesn't publish prices, so noah can't project what this plan costs");
+    };
+    let low = project_run(context_tokens, max_context_tokens, RunShape::light(tasks), pricing);
+    let high = project_run(context_tokens, max_context_tokens, RunShape::heavy(tasks), pricing);
+    format!(
+        "this plan will likely cost {}–{} on {model}",
+        format_usd(low.usd),
+        format_usd(high.usd)
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Spend {
     pub time: String,
@@ -81,6 +164,15 @@ pub fn month_total(entries: &[Spend], month: &str) -> f64 {
         .sum()
 }
 
+/// Dollars spent in one thread, across months.
+pub fn thread_total(entries: &[Spend], thread: &str) -> f64 {
+    entries
+        .iter()
+        .filter(|entry| entry.thread.as_deref() == Some(thread))
+        .map(|entry| entry.usd)
+        .sum()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BudgetState {
     Unlimited,
@@ -90,8 +182,8 @@ pub enum BudgetState {
     Exceeded { over: f64 },
 }
 
-pub fn budget_state(spent: f64, monthly_budget: Option<f64>, next: f64) -> BudgetState {
-    let Some(budget) = monthly_budget.filter(|budget| *budget > 0.0) else {
+pub fn budget_state(spent: f64, budget: Option<f64>, next: f64) -> BudgetState {
+    let Some(budget) = budget.filter(|budget| *budget > 0.0) else {
         return BudgetState::Unlimited;
     };
     let after = spent + next;
@@ -130,6 +222,46 @@ mod tests {
         assert!(matches!(budget_state(8.0, Some(10.0), 0.5), BudgetState::Near { .. }));
         assert!(matches!(budget_state(9.9, Some(10.0), 0.5), BudgetState::Exceeded { .. }));
         assert_eq!(format_usd(0.004), "$0.0040");
+    }
+
+    #[test]
+    fn totals_by_thread() {
+        let entry = |thread: Option<&str>, usd: f64| Spend {
+            time: "2026-09-01T00:00:00Z".into(),
+            provider: "venice".into(),
+            model: "m".into(),
+            input_tokens: 0,
+            output_tokens: 0,
+            usd,
+            thread: thread.map(str::to_string),
+        };
+        let entries = [entry(Some("a"), 0.25), entry(Some("b"), 1.0), entry(Some("a"), 0.5), entry(None, 3.0)];
+        assert!((thread_total(&entries, "a") - 0.75).abs() < 1e-9);
+        assert_eq!(thread_total(&entries, "c"), 0.0);
+        assert!(matches!(budget_state(0.75, Some(1.0), 0.0), BudgetState::Within { .. }));
+        assert!(matches!(budget_state(1.0, Some(1.0), 0.01), BudgetState::Exceeded { .. }));
+    }
+
+    #[test]
+    fn projects_runs() {
+        let pricing = Pricing { input_per_million: 5.0, output_per_million: 25.0 };
+        let shape = RunShape { steps: 3, growth_per_step: 1_000, output_per_step: 100 };
+        let estimate = project_run(10_000, None, shape, pricing);
+        assert_eq!(estimate.input_tokens, 10_000 + 11_000 + 12_000);
+        assert_eq!(estimate.output_tokens, 300);
+        let capped = project_run(10_000, Some(10_500), shape, pricing);
+        assert_eq!(capped.input_tokens, 10_000 + 10_500 + 10_500);
+
+        let low = project_run(20_000, Some(200_000), RunShape::light(2), pricing);
+        let high = project_run(20_000, Some(200_000), RunShape::heavy(2), pricing);
+        assert!(low.usd < high.usd);
+        let text = describe_projection("opus", 20_000, Some(200_000), 2, Some(pricing), false);
+        assert_eq!(
+            text,
+            format!("this plan will likely cost {}–{} on opus", format_usd(low.usd), format_usd(high.usd))
+        );
+        assert!(describe_projection("qwen", 20_000, None, 2, None, true).contains("local model"));
+        assert!(describe_projection("mystery", 20_000, None, 2, None, false).contains("doesn't publish prices"));
     }
 
     #[test]

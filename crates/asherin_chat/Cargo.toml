@@ -1,0 +1,17 @@
+[package]
+name = "asherin_chat"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/asherin_chat.rs"
+doctest = false
+
+[dependencies]
+chrono.workspace = true
+noah_trust.workspace = true

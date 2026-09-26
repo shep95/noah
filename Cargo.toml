@@ -13,6 +13,8 @@ members = [
     "crates/agent_ui",
     "crates/ai_onboarding",
     "crates/anthropic",
+    "crates/asherin_chat",
+    "crates/asherin_eye",
     "crates/askpass",
     "crates/assets",
     "crates/audio",
@@ -147,6 +149,7 @@ members = [
     "crates/multi_buffer",
     "crates/net",
     "crates/node_runtime",
+    "crates/noah_addons",
     "crates/noah_capture",
     "crates/noah_device",
     "crates/noah_i18n",
@@ -295,6 +298,8 @@ agent_skills = { path = "crates/agent_skills" }
 agent_ui = { path = "crates/agent_ui" }
 ai_onboarding = { path = "crates/ai_onboarding" }
 anthropic = { path = "crates/anthropic" }
+asherin_chat = { path = "crates/asherin_chat" }
+asherin_eye = { path = "crates/asherin_eye" }
 askpass = { path = "crates/askpass" }
 assets = { path = "crates/assets" }
 audio = { path = "crates/audio" }
@@ -422,6 +427,7 @@ mistral = { path = "crates/mistral" }
 multi_buffer = { path = "crates/multi_buffer" }
 net = { path = "crates/net" }
 node_runtime = { path = "crates/node_runtime" }
+noah_addons = { path = "crates/noah_addons" }
 noah_capture = { path = "crates/noah_capture" }
 noah_device = { path = "crates/noah_device" }
 noah_i18n = { path = "crates/noah_i18n" }
@@ -824,6 +830,7 @@ resvg = { version = "0.46.0", default-features = false, features = [
     "raster-images",
 ] }
 ring = "0.17"
+rquickjs = "0.14.0"
 rsa = "0.9.6"
 runtimelib = { version = "1.4.0", default-features = false, features = [
     "async-dispatcher-runtime", "aws-lc-rs"

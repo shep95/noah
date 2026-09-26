@@ -233,6 +233,7 @@ impl TerminalToolTest {
                 language: None,
                 project_knowledge: Vec::new(),
                 teaching_mode: false,
+                addons: Default::default(),
             };
             template.render(&Templates::new())?
         };

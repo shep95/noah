@@ -70,6 +70,22 @@ pub struct SystemPromptTemplate<'a> {
     pub project_knowledge: Vec<KnowledgeFile>,
     /// Whether the person turned on teaching mode.
     pub teaching_mode: bool,
+    /// The saved add-ons shepherd can run with `run_addon`.
+    pub addons: AddonCatalog,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct AddonCatalog {
+    pub addons: Vec<AddonSummary>,
+    /// How many more are saved than are listed.
+    pub more: usize,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct AddonSummary {
+    pub name: String,
+    pub version: u32,
+    pub use_when: String,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -143,6 +159,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -168,6 +185,7 @@ mod tests {
                 language,
                 project_knowledge: Vec::new(),
                 teaching_mode: false,
+                addons: Default::default(),
             }
             .render(&Templates::new())
             .unwrap()
@@ -204,6 +222,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -236,6 +255,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -272,6 +292,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -318,6 +339,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -354,6 +376,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -387,6 +410,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -412,6 +436,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -435,6 +460,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
@@ -456,6 +482,7 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            addons: Default::default(),
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
