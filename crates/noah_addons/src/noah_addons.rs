@@ -219,7 +219,21 @@ impl Manifest {
     }
 }
 
+/// Everything people make in noah is named `asherin.<name>`, add-ons
+/// included. Takes a name with or without the prefix and gives it with.
+pub fn canonical_name(name: &str) -> Result<String> {
+    let slug = name.trim().strip_prefix(NAME_PREFIX).unwrap_or(name.trim());
+    validate_slug(slug)?;
+    Ok(format!("{NAME_PREFIX}{slug}"))
+}
+
+pub const NAME_PREFIX: &str = "asherin.";
+
 pub fn validate_name(name: &str) -> Result<()> {
+    validate_slug(name.strip_prefix(NAME_PREFIX).unwrap_or(name))
+}
+
+fn validate_slug(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name.len() <= MAX_NAME_LENGTH
         && name.starts_with(|character: char| character.is_ascii_lowercase())
@@ -755,7 +769,12 @@ pub struct Registry {
 
 impl Registry {
     pub fn get(&self, name: &str) -> Option<&InstalledAddon> {
-        self.addons.iter().find(|addon| addon.manifest.name == name)
+        // Accepts the name with or without the asherin. prefix, and still
+        // finds add-ons saved before the prefix existed.
+        let slug = name.trim().strip_prefix(NAME_PREFIX).unwrap_or(name.trim());
+        self.addons.iter().find(|addon| {
+            addon.manifest.name.strip_prefix(NAME_PREFIX).unwrap_or(&addon.manifest.name) == slug
+        })
     }
 
     /// Add-ons whose name or `use_when` share words with `query`, best first.
@@ -944,8 +963,8 @@ pub fn unified_diff(before: &str, after: &str) -> String {
 
 /// Validates a draft, gives it the next version number and runs its tests.
 /// Nothing is written.
-pub fn prepare_save(draft: Draft, scope: Scope, roots: &AddonRoots) -> Result<PreparedSave> {
-    validate_name(&draft.name)?;
+pub fn prepare_save(mut draft: Draft, scope: Scope, roots: &AddonRoots) -> Result<PreparedSave> {
+    draft.name = canonical_name(&draft.name)?;
     let root = roots.directory(scope).ok_or_else(|| {
         anyhow!("there's no project folder open, so the add-on can't be saved to the project; save it globally instead")
     })?;

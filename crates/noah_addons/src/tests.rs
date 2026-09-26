@@ -701,7 +701,7 @@ fn saving_keeps_every_version() {
         "preparing must not write anything"
     );
     let installed = install(&first).expect("installs");
-    assert_eq!(installed.directory, roots.global.join("candidate-score"));
+    assert_eq!(installed.directory, roots.global.join("asherin.candidate-score"));
     for file in [MANIFEST_FILE_NAME, DEFAULT_ENTRY, TESTS_FILE_NAME] {
         assert!(installed.directory.join(file).is_file(), "{file} missing");
     }
@@ -1089,21 +1089,21 @@ fn tool_outputs_read_well() {
     let first = prepare_save(candidate_score_draft(10), Scope::Global, &roots).expect("prepares");
     let review = render_review(&first);
     assert!(
-        review.contains("**candidate-score** v1 (global)"),
+        review.contains("**asherin.candidate-score** v1 (global)"),
         "{review}"
     );
     assert!(review.contains("permissions: none"), "{review}");
     assert!(review.contains("tests: 2 cases, 2 passed"), "{review}");
     assert!(review.contains("```js\nexport function run"), "{review}");
     let installed = install(&first).expect("installs");
-    assert!(render_saved(&first).starts_with("saved candidate-score v1 (global)"));
+    assert!(render_saved(&first).starts_with("saved asherin.candidate-score v1 (global)"));
 
     let second = prepare_save(candidate_score_draft(8), Scope::Global, &roots).expect("prepares");
     let review = render_review(&second);
     assert!(review.contains("changes to main.js since v1"), "{review}");
     assert!(review.contains("```diff"), "{review}");
     assert!(review.contains("changed tests: #1 perfect"), "{review}");
-    assert!(render_saved(&second).starts_with("updated to candidate-score v2"));
+    assert!(render_saved(&second).starts_with("updated to asherin.candidate-score v2"));
 
     let execution = run(
         &installed.load_source().expect("loads"),
@@ -1112,14 +1112,14 @@ fn tool_outputs_read_well() {
     .expect("runs");
     let output = render_run_output(&installed, &execution);
     assert!(
-        output.starts_with("ran candidate-score v1 (global, tested)"),
+        output.starts_with("ran asherin.candidate-score v1 (global, tested)"),
         "{output}"
     );
     assert!(output.contains("```json\n[]\n```"), "{output}");
 
     let list = render_list(&discover(&roots), None);
     assert!(
-        list.contains("- candidate-score v1 (global): use when ranking"),
+        list.contains("- asherin.candidate-score v1 (global): use when ranking"),
         "{list}"
     );
     let list = render_list(&discover(&roots), Some("weather"));
