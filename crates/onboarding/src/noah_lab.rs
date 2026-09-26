@@ -186,6 +186,16 @@ pub struct NoahLab {
     has_rustup: bool,
 }
 
+/// Whether `rustup` is on PATH, which is what building an extension needs.
+fn rustup_on_path() -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let names: &[&str] = if cfg!(windows) { &["rustup.exe", "rustup"] } else { &["rustup"] };
+    std::env::split_paths(&path)
+        .any(|directory| names.iter().any(|name| directory.join(name).is_file()))
+}
+
 impl NoahLab {
     fn new(workspace: WeakEntity<Workspace>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_editor = cx.new(|cx| {
@@ -198,7 +208,7 @@ impl NoahLab {
             focus_handle: cx.focus_handle(),
             name_editor,
             status: None,
-            has_rustup: which::which("rustup").is_ok(),
+            has_rustup: rustup_on_path(),
         }
     }
 
