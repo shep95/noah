@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "noah shield",
-  "version": "2026.9.27.5",
+  "version": "2026.9.27.6",
   "description": "A tunnel that fails closed instead of leaking, trackers and data grabs stopped on every page, cheaper prices and working coupons while you shop, and a watch on anything that could record your screen.",
   "author": "House of Asher",
   "homepage_url": "https://noah.asherin.com/shield",
@@ -247,6 +247,29 @@
       ],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/inspect.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/inspect_bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
     }
   ],
   "declarative_net_request": {

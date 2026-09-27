@@ -1220,6 +1220,33 @@ const handlers = {
     await Shield.updateSettings({ shopping: { quietSites: toggleInList(settings.shopping.quietSites, site, true) } });
     return { ok: true };
   },
+  async "inspect.enabled"(message, sender) {
+    const tabId = sender.tab ? sender.tab.id : (message && message.tabId);
+    if (tabId == null) return { enabled: false };
+    const stored = await api.storage.session.get("inspectTabs");
+    const map = stored.inspectTabs || {};
+    return { enabled: Boolean(map[String(tabId)]) };
+  },
+  async "inspect.arm"(message) {
+    const tabId = Number(message && message.tabId);
+    if (!Number.isFinite(tabId)) return { error: "no tabId" };
+    const stored = await api.storage.session.get("inspectTabs");
+    const map = stored.inspectTabs || {};
+    const on = Boolean(message.on);
+    if (on) map[String(tabId)] = { at: Date.now() };
+    else delete map[String(tabId)];
+    await api.storage.session.set({ inspectTabs: map });
+    try {
+      await api.tabs.sendMessage(tabId, { type: "inspect.set", enabled: on });
+    } catch {}
+    return { enabled: on };
+  },
+  async "inspect.status"(message) {
+    const tabId = Number(message && message.tabId);
+    const stored = await api.storage.session.get("inspectTabs");
+    const map = stored.inspectTabs || {};
+    return { enabled: Boolean(map[String(tabId)]) };
+  },
 };
 
 async function applyModes(settings) {
@@ -1493,7 +1520,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

@@ -563,4 +563,32 @@ byId("options").addEventListener("click", (event) => {
   Shield.api.runtime.openOptionsPage();
 });
 
+async function refreshInspect() {
+  const tab = await activeTab();
+  if (!tab) return;
+  const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
+  const on = Boolean(status && status.enabled);
+  byId("inspect-toggle").textContent = on ? "stop inspecting" : "arm this tab";
+  byId("inspect-count").textContent = on ? "recording" : "off";
+}
+byId("inspect-toggle").addEventListener("click", async () => {
+  const tab = await activeTab();
+  if (!tab) return;
+  const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
+  const on = !(status && status.enabled);
+  await Shield.send({ type: "inspect.arm", tabId: tab.id, on });
+  await refreshInspect();
+});
+byId("inspect-reload").addEventListener("click", async () => {
+  const tab = await activeTab();
+  if (!tab) return;
+  const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
+  if (!status || !status.enabled) {
+    await Shield.send({ type: "inspect.arm", tabId: tab.id, on: true });
+  }
+  await Shield.api.tabs.reload(tab.id);
+  window.close();
+});
+refreshInspect();
+
 refresh();

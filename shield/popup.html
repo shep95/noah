@@ -58,6 +58,15 @@
     <p id="week" class="muted"></p>
   </section>
 
+  <section id="inspect-section">
+    <div class="row"><h2>inspect (for your own site)</h2><span id="inspect-count" class="muted"></span></div>
+    <p class="muted small">Records every request, form, WebSocket, storage read and secret this page sees in plain text. Only turn this on for a site you own or are testing.</p>
+    <div class="row small">
+      <button id="inspect-toggle" class="ghost">arm this tab</button>
+      <button id="inspect-reload" class="ghost" title="Reload so the panel picks up everything from the first request">reload after arm</button>
+    </div>
+  </section>
+
   <section id="capture-section">
     <div class="row"><h2>capture</h2><span id="capture-status" class="muted"></span></div>
     <div class="row small">
