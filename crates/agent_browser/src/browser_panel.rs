@@ -128,6 +128,18 @@ impl BrowserPanel {
                             this.connect(window, cx);
                         }
                     }
+                    BrowserEvent::Show { url } => {
+                        this.error = None;
+                        this.address.update(cx, |editor, cx| editor.set_text(url.clone(), window, cx));
+                        if matches!(this.connection, Connection::Disconnected) {
+                            this.connect(window, cx);
+                        }
+                        if let Some(workspace) = window.root::<Workspace>().flatten() {
+                            workspace.update(cx, |workspace, cx| {
+                                workspace.open_panel::<Self>(window, cx);
+                            });
+                        }
+                    }
                 },
             ));
         }
@@ -657,20 +669,33 @@ impl BrowserPanel {
                         })),
                 )
             })
-            .when_some(
-                self.error
-                    .clone()
-                    .filter(|error| error.contains("No Chrome, Edge or Chromium")),
-                |this, _| {
-                    this.child(
-                        Button::new("browser-install", noah_i18n::t(cx, "download a browser"))
-                            .style(ButtonStyle::Outlined)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.run(vec!["install".into()], window, cx)
-                            })),
-                    )
-                },
-            )
+            .when_some(self.error.clone(), |this, error| {
+                // Why it is not working, in the room itself, and what the
+                // machine has: nobody should have to guess from a spinner.
+                this.child(
+                    v_flex()
+                        .gap_1()
+                        .max_w(px(560.0))
+                        .child(Label::new(error.clone()).size(LabelSize::Small).color(Color::Error))
+                        .children(crate::doctor().into_iter().map(|line| {
+                            Label::new(line).size(LabelSize::XSmall).color(Color::Muted)
+                        })),
+                )
+                .when(
+                    error.contains("No Chrome, Edge or Chromium") || error.contains("download a browser") || error.contains("Executable doesn't exist"),
+                    |this| {
+                        this.child(
+                            Button::new("browser-install", noah_i18n::t(cx, "download a browser"))
+                                .style(ButtonStyle::Outlined)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.error = Some("downloading a browser (about 150 MB); the room starts when it is done".into());
+                                    cx.notify();
+                                    this.run(vec!["install".into()], window, cx)
+                                })),
+                        )
+                    },
+                )
+            })
     }
 
     fn render_page(&self, frame: &Frame, cx: &mut Context<Self>) -> impl IntoElement {

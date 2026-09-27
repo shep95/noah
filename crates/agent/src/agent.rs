@@ -5,6 +5,7 @@ mod native_agent_server;
 pub mod outline;
 mod pattern_extraction;
 mod sandboxing;
+mod finish_line;
 mod templates;
 #[cfg(test)]
 mod tests;

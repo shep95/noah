@@ -72,6 +72,13 @@ pub struct SystemPromptTemplate<'a> {
     pub teaching_mode: bool,
     /// The saved add-ons shepherd can run with `run_addon`.
     pub addons: AddonCatalog,
+    /// Whether the model cannot call tools, so files are written through
+    /// fenced blocks that noah applies after the reply.
+    pub text_edits: bool,
+    /// Whether noah runs the project's check after edits and hands failures back.
+    pub verify_after_edits: bool,
+    /// Whether noah shows interface code in the browser room on its own.
+    pub canvas: bool,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -118,6 +125,17 @@ fn brain_text_from(replacement: &std::path::Path) -> std::borrow::Cow<'static, s
     }
 }
 
+/// The real clock, for the system prompt's own date line.
+pub fn clock_line() -> String {
+    prompt_store::clock_line()
+}
+
+/// The brain, the person's standing instructions, then the clock: see
+/// [`prompt_store::prompt_head`].
+pub fn prompt_head() -> String {
+    prompt_store::prompt_head(&brain_text())
+}
+
 // A helper rather than a partial: partials are parsed as templates, so any
 // `{{` in the brain text would be interpreted instead of sent verbatim.
 fn brain(
@@ -127,7 +145,7 @@ fn brain(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    out.write(brain_text().trim_end())?;
+    out.write(&prompt_head())?;
     Ok(())
 }
 
@@ -195,6 +213,9 @@ mod tests {
             project_knowledge: Vec::new(),
             teaching_mode: false,
             addons: Default::default(),
+            text_edits: false,
+            verify_after_edits: true,
+            canvas: true,
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();

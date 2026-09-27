@@ -6,6 +6,7 @@
 //! up live in the room, and the person can take over at any moment.
 
 mod browser_panel;
+pub mod canvas;
 
 use anyhow::{Context as _, Result};
 use gpui::{App, AppContext as _, Context, Entity, EventEmitter, Global, SharedString, Task};
@@ -50,6 +51,9 @@ pub enum BrowserEvent {
     /// A command finished, so the page may have changed or the browser may
     /// have just started.
     CommandFinished,
+    /// noah wants the room in front, showing this address: the canvas after
+    /// shepherd wrote interface code.
+    Show { url: String },
 }
 
 #[derive(Default)]
@@ -67,6 +71,12 @@ impl AgentBrowser {
 
     pub fn is_busy(&self) -> bool {
         self.running_commands > 0
+    }
+
+    /// Opens the address and brings the browser room in front: the canvas.
+    pub fn show(&mut self, url: String, cx: &mut Context<Self>) -> Task<Result<String>> {
+        cx.emit(BrowserEvent::Show { url: url.clone() });
+        self.run(vec!["open".into(), url], cx)
     }
 
     /// Runs one agent-browser command (for example `["open", "example.com"]`)
@@ -120,10 +130,11 @@ async fn run_command(arguments: Vec<String>) -> Result<String> {
     }
     let (status, stdout, stderr) = run_to_exit(&mut command, &binary).await?;
     let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+    remember_output(&arguments, status.code(), &stdout, &stderr);
     if status.success() {
         return Ok(stdout);
     }
-    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
     let message = if stderr.is_empty() { stdout } else { stderr };
     anyhow::bail!(explain_failure(&message))
 }
@@ -209,6 +220,52 @@ async fn run_to_exit(
     let stdout = stdout_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
     let stderr = stderr_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
     Ok((status, stdout, stderr))
+}
+
+/// The last thing agent-browser said, for the room's diagnostics.
+static LAST_OUTPUT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn remember_output(arguments: &[String], code: Option<i32>, stdout: &str, stderr: &str) {
+    let mut text = format!(
+        "agent-browser {} → exit {}",
+        arguments.join(" "),
+        code.map(|code| code.to_string()).unwrap_or_else(|| "signal".into())
+    );
+    for (label, body) in [("stdout", stdout), ("stderr", stderr)] {
+        if !body.is_empty() {
+            let start = body.len().saturating_sub(600);
+            let start = body.char_indices().map(|(index, _)| index).find(|index| *index >= start).unwrap_or(0);
+            text.push_str(&format!("\n{label}: {}", &body[start..]));
+        }
+    }
+    if let Ok(mut last) = LAST_OUTPUT.lock() {
+        *last = Some(text);
+    }
+}
+
+/// What the browser room can say about itself when it is not working: where
+/// agent-browser is, which browser it would use, where the profile lives, and
+/// the last thing agent-browser printed. Plain words, so the person can send
+/// them along or act on them.
+pub fn doctor() -> Vec<String> {
+    let mut lines = Vec::new();
+    match find_binary() {
+        Some(path) => lines.push(format!("agent-browser: {}", path.display())),
+        None => lines.push("agent-browser: not found next to noah or on the PATH; reinstall noah".to_string()),
+    }
+    match std::env::var_os("AGENT_BROWSER_EXECUTABLE_PATH").map(PathBuf::from).or_else(find_browser) {
+        Some(path) => lines.push(format!("browser: {}", path.display())),
+        None => lines.push(
+            "browser: no Chrome, Edge, Brave or Chromium found; \"download a browser\" fetches one (about 150 MB)".to_string(),
+        ),
+    }
+    lines.push(format!("profile: {}", profile_directory().display()));
+    if let Ok(last) = LAST_OUTPUT.lock()
+        && let Some(last) = last.as_ref()
+    {
+        lines.push(format!("last: {last}"));
+    }
+    lines
 }
 
 fn profile_directory() -> PathBuf {

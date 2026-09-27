@@ -23,7 +23,7 @@ use agent_settings::{
     SUMMARIZE_THREAD_DETAILED_PROMPT, SUMMARIZE_THREAD_PROMPT, builtin_profiles,
 };
 use anyhow::{Context as _, Result, anyhow};
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
 use client::UserStore;
 use cloud_api_types::Plan;
 use collections::{HashMap, HashSet, IndexMap};
@@ -2891,6 +2891,8 @@ impl Thread {
         let mut intent = CompletionIntent::UserPrompt;
         // Set when a refusal fallback occurs so subsequent iterations use the fallback model.
         let mut refusal_fallback_model: Option<Arc<dyn LanguageModel>> = None;
+        // How many times this turn's edits were checked and handed back.
+        let mut verify_rounds: usize = 0;
         loop {
             match Self::perform_compaction_if_needed(
                 this,
@@ -3221,7 +3223,17 @@ impl Thread {
                     }
                 })?;
             } else if end_turn {
-                return Ok(());
+                match Self::finish_turn(this, event_stream, &mut verify_rounds, cx).await {
+                    Ok(ControlFlow::Break(())) => return Ok(()),
+                    Ok(ControlFlow::Continue(())) => {
+                        intent = CompletionIntent::UserPrompt;
+                        attempt = 0;
+                    }
+                    Err(error) => {
+                        log::warn!("finish line failed: {error:#}");
+                        return Ok(());
+                    }
+                }
             } else {
                 let end_at_boundary =
                     this.update(cx, |this, _| this.end_turn_at_next_boundary())?;
@@ -3737,6 +3749,172 @@ impl Thread {
             cancellation_rx,
             cx,
         ))
+    }
+
+    /// What noah itself does when the model stops: apply fenced file blocks
+    /// from a model without tools, run the project's check and hand a
+    /// failure back, and open the canvas when interface code changed.
+    /// `Break` ends the turn; `Continue` sends the failure to the model.
+    async fn finish_turn(
+        this: &WeakEntity<Self>,
+        event_stream: &ThreadEventStream,
+        verify_rounds: &mut usize,
+        cx: &mut AsyncApp,
+    ) -> Result<ControlFlow<()>> {
+        struct FinishPlan {
+            roots: Vec<(String, PathBuf)>,
+            blocks: Vec<crate::finish_line::FileBlock>,
+            edited: bool,
+            interface_edited: bool,
+            verify: bool,
+            canvas: bool,
+        }
+        let plan = this.update(cx, |this, cx| {
+            let roots: Vec<(String, PathBuf)> = this
+                .project
+                .read(cx)
+                .visible_worktrees(cx)
+                .map(|worktree| {
+                    let worktree = worktree.read(cx);
+                    (worktree.root_name_str().to_string(), worktree.abs_path().to_path_buf())
+                })
+                .collect();
+            let text_edits = this.model().is_some_and(|model| !model.supports_tools());
+            // What this turn touched, read from the messages after the last
+            // user message: tool calls that write, and their paths.
+            let last_user = this
+                .messages
+                .iter()
+                .rposition(|message| matches!(message.as_ref(), Message::User(_)))
+                .unwrap_or(0);
+            let mut edited = false;
+            let mut interface_edited = false;
+            let mut reply_text = String::new();
+            for message in &this.messages[last_user..] {
+                let Message::Agent(agent_message) = message.as_ref() else { continue };
+                for content in &agent_message.content {
+                    match content {
+                        AgentMessageContent::Text(text) => {
+                            reply_text.push_str(text);
+                            reply_text.push('\n');
+                        }
+                        AgentMessageContent::ToolUse(tool_use) => {
+                            let name = tool_use.name.as_ref();
+                            if matches!(name, "edit_file" | "write_file" | "move_path" | "delete_path") {
+                                edited = true;
+                                if let Ok(input) = tool_use.input.clone().into_json()
+                                    && let Some(path) = input.get("path").and_then(|value| value.as_str())
+                                    && crate::finish_line::is_interface_file(path)
+                                {
+                                    interface_edited = true;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let blocks = if text_edits {
+                crate::finish_line::parse_file_blocks(&reply_text)
+            } else {
+                Vec::new()
+            };
+            let settings = AgentSettings::get_global(cx);
+            FinishPlan {
+                roots,
+                blocks,
+                edited,
+                interface_edited,
+                verify: settings.verify_after_edits && this.parent_thread_id().is_none(),
+                canvas: settings.canvas && this.parent_thread_id().is_none(),
+            }
+        })?;
+        if plan.roots.is_empty() {
+            return Ok(ControlFlow::Break(()));
+        }
+        let mut edited = plan.edited;
+        let mut interface_edited = plan.interface_edited;
+        // 1. Files from a model without tools.
+        if !plan.blocks.is_empty() {
+            let roots = plan.roots.clone();
+            let blocks = plan.blocks;
+            let written = cx
+                .background_spawn(async move { crate::finish_line::apply_file_blocks(&blocks, &roots) })
+                .await;
+            match written {
+                Ok(written) => {
+                    edited = true;
+                    interface_edited |= written
+                        .iter()
+                        .any(|path| crate::finish_line::is_interface_file(&path.to_string_lossy()));
+                    let names = written
+                        .iter()
+                        .filter_map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    event_stream.send_text(&format!("\n\nnoah wrote {} file{} from this reply: {names}\n", written.len(), if written.len() == 1 { "" } else { "s" }));
+                }
+                Err(error) => {
+                    event_stream.send_text(&format!("\n\nnoah could not write the files from this reply: {error:#}\n"));
+                }
+            }
+        }
+        // 2. The check, handed back on failure.
+        if edited && plan.verify && *verify_rounds < crate::finish_line::MAX_VERIFY_ROUNDS {
+            let root = plan.roots[0].1.clone();
+            if let Some((label, command)) = crate::finish_line::project_check_command(&root) {
+                event_stream.send_text(&format!("\n\nnoah is running `{label}`…\n"));
+                let (passed, output) = cx
+                    .background_spawn(crate::finish_line::run_check(root, command))
+                    .await;
+                if passed {
+                    event_stream.send_text(&format!("`{label}` passes.\n"));
+                } else {
+                    *verify_rounds += 1;
+                    let round = *verify_rounds;
+                    let message_text = format!(
+                        "noah ran `{label}` after your changes and it failed (round {round} of {}). fix it; the check runs again after your next reply.\n\n```\n{output}\n```",
+                        crate::finish_line::MAX_VERIFY_ROUNDS
+                    );
+                    this.update(cx, |this, cx| {
+                        this.flush_pending_message(cx);
+                        let message = UserMessage {
+                            id: ClientUserMessageId::new(),
+                            content: Arc::from(vec![UserMessageContent::Text(message_text)]),
+                        };
+                        event_stream.send_user_message(&message);
+                        this.messages.push(Arc::new(Message::User(message)));
+                        cx.notify();
+                    })?;
+                    return Ok(ControlFlow::Continue(()));
+                }
+            }
+        }
+        // 3. The canvas.
+        if interface_edited && plan.canvas {
+            let root = plan.roots[0].1.clone();
+            if agent_browser::canvas::kind_of(&root).is_some() {
+                // canvas::open holds a std mutex over awaits, so it runs on
+                // the foreground executor rather than a background thread.
+                let opened = cx
+                    .update(|cx| cx.spawn(async move |_| agent_browser::canvas::open(root).await))
+                    .await;
+                match opened {
+                    Ok(url) => {
+                        event_stream.send_text(&format!("\nthe canvas is up: {url} (in the browser room)\n"));
+                        cx.update(|cx| {
+                            if let Some(browser) = agent_browser::AgentBrowser::global(cx) {
+                                browser.update(cx, |browser, cx| browser.show(url, cx).detach());
+                            }
+                        });
+                    }
+                    Err(error) => {
+                        event_stream.send_text(&format!("\nthe canvas could not open: {error:#}\n"));
+                    }
+                }
+            }
+        }
+        Ok(ControlFlow::Break(()))
     }
 
     fn run_tool(
@@ -4311,7 +4489,10 @@ impl Thread {
             return Err(error);
         }
         let sandboxing_enabled = crate::sandboxing::sandboxing_enabled(cx);
-        let tools = if let Some(turn) = self.running_turn.as_ref() {
+        // A model that cannot call tools gets none: sending them makes some
+        // providers refuse the request outright, and the prompt tells such a
+        // model to write files through fenced blocks instead.
+        let tools = if let Some(turn) = self.running_turn.as_ref().filter(|_| model.supports_tools()) {
             turn.tools
                 .iter()
                 .map(|(tool_name, tool)| {
@@ -4365,6 +4546,7 @@ impl Thread {
         let available_tools: Vec<_> = self
             .running_turn
             .as_ref()
+            .filter(|_| model.supports_tools())
             .map(|turn| turn.tools.keys().cloned().collect())
             .unwrap_or_default();
 
@@ -4634,7 +4816,7 @@ impl Thread {
             project: self.project_context.read(cx),
             available_tools,
             model_name: self.model().map(|m| m.name().0.to_string()),
-            date: Local::now().format("%Y-%m-%d").to_string(),
+            date: crate::templates::clock_line(),
             user_agents_md,
             sandboxing: crate::sandboxing::sandboxing_enabled_for_project(
                 self.project.read(cx),
@@ -4655,6 +4837,10 @@ impl Thread {
             project_knowledge: self.project_knowledge(cx),
             teaching_mode: AgentSettings::get_global(cx).teaching_mode,
             addons: crate::addon_catalog(&self.project, cx),
+            text_edits: self.model().is_some_and(|model| !model.supports_tools()),
+            verify_after_edits: AgentSettings::get_global(cx).verify_after_edits
+                && !self.is_subagent(),
+            canvas: AgentSettings::get_global(cx).canvas && !self.is_subagent(),
         }
         .render(&self.templates)
         .context("failed to build system prompt")

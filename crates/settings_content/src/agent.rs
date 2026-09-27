@@ -344,6 +344,18 @@ pub struct AgentSettingsContent {
     ///
     /// Default: false
     pub teaching_mode: Option<bool>,
+    /// After shepherd changes code, noah runs the project's own check (build,
+    /// tests or type check, found per project), hands failures back to
+    /// shepherd to fix, and repeats until it passes or three rounds are up.
+    ///
+    /// Default: true
+    pub verify_after_edits: Option<bool>,
+    /// The canvas: once shepherd has written interface code (html, css,
+    /// scripts, components), noah serves it and shows it in the browser
+    /// room without being asked.
+    ///
+    /// Default: true
+    pub canvas: Option<bool>,
     /// Offline mode: shepherd only uses local models (Ollama, LM Studio) and
     /// the web, browser and package-registry tools are switched off, so
     /// nothing leaves this machine.

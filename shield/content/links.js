@@ -175,6 +175,7 @@
   });
 
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (sender.id !== api.runtime.id) return false;
     if (message && message.type === "links.cleanSelection") {
       sendResponse({ cleaned: clean(String(message.url || "")) });
     }

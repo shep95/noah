@@ -19,11 +19,13 @@ dirs.workspace = true
 futures.workspace = true
 gpui = { workspace = true, features = ["screen-capture"] }
 gpui_util.workspace = true
+ignore.workspace = true
 image.workspace = true
 log.workspace = true
 paths.workspace = true
 util.workspace = true
 which.workspace = true
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 scap.workspace = true

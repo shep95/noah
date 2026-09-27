@@ -8924,6 +8924,98 @@ fn ai_page(cx: &App) -> SettingsPage {
                 metadata: None,
                 files: USER,
             }),
+            SettingsPageItem::ActionLink(ActionLink {
+                title: "Brain".into(),
+                description: Some(
+                    "Standing instructions every AI in noah always follows, in every conversation and every path (shepherd, inline edits, the terminal assistant), with any model. Write them once here instead of repeating yourself."
+                        .into(),
+                ),
+                button_text: "Edit Instructions".into(),
+                on_click: Arc::new(|settings_window, window, cx| {
+                    let Some(original_window) = settings_window.original_window else {
+                        return;
+                    };
+                    let path = paths::instructions_file();
+                    if !path.exists() {
+                        std::fs::write(
+                            &path,
+                            "# your standing instructions\n\n# every AI in noah reads this file on every request, whatever the model.\n# write in plain words; delete these lines when you start.\n",
+                        )
+                        .ok();
+                    }
+                    original_window
+                        .update(cx, |multi_workspace, original_window, cx| {
+                            multi_workspace.workspace().update(cx, |workspace, cx| {
+                                workspace
+                                    .open_abs_path(path, Default::default(), original_window, cx)
+                                    .detach();
+                            });
+                            original_window.activate_window();
+                        })
+                        .ok();
+                    window.remove_window();
+                }),
+                files: USER,
+            }),
+            SettingsPageItem::ActionLink(ActionLink {
+                title: "Shepherd's Brain File".into(),
+                description: Some(
+                    "The whole identity shepherd thinks with. Editing this replaces the built-in brain; empty it to go back."
+                        .into(),
+                ),
+                button_text: "Edit Brain".into(),
+                on_click: Arc::new(|settings_window, window, cx| {
+                    let Some(original_window) = settings_window.original_window else {
+                        return;
+                    };
+                    let path = paths::shepherd_brain_file();
+                    if !path.exists() {
+                        std::fs::write(&path, agent::brain_text().as_bytes()).ok();
+                    }
+                    original_window
+                        .update(cx, |multi_workspace, original_window, cx| {
+                            multi_workspace.workspace().update(cx, |workspace, cx| {
+                                workspace
+                                    .open_abs_path(path, Default::default(), original_window, cx)
+                                    .detach();
+                            });
+                            original_window.activate_window();
+                        })
+                        .ok();
+                    window.remove_window();
+                }),
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Run, Test, Fix",
+                description: "After shepherd changes code, noah runs the project's own check (build, tests or type check) and hands failures back to be fixed, until it passes.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.verify_after_edits"),
+                    pick: |settings_content| {
+                        settings_content.agent.as_ref()?.verify_after_edits.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().verify_after_edits = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Canvas",
+                description: "Once shepherd writes interface code, noah serves it and shows it in the browser room without being asked.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.canvas"),
+                    pick: |settings_content| settings_content.agent.as_ref()?.canvas.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().canvas = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Teaching Mode",
                 description: "shepherd explains its reasoning, asks you questions and leaves the critical part of each change for you to write, so your own skills stay sharp.",

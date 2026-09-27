@@ -160,6 +160,9 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     .on_action(cx.listener(|workspace, _: &noah_capture::TakeScreenshot, window, cx| {
         workspace.take_screenshot(window, cx)
     }))
+    .on_action(cx.listener(|workspace, _: &noah_capture::DownloadProjectZip, _window, cx| {
+        workspace.download_project_zip(cx)
+    }))
     .on_action(
         cx.listener(|workspace, _: &noah_capture::ToggleScreenRecording, window, cx| {
             workspace.toggle_screen_recording(window, cx)
@@ -259,6 +262,7 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                 Box::new(zed_actions::PreviewFileInBrowser),
             )
             .action("screenshot", Box::new(noah_capture::TakeScreenshot))
+            .action("download project as zip", Box::new(noah_capture::DownloadProjectZip))
             .action(
                 if recording { "stop recording" } else { "record the screen" },
                 Box::new(noah_capture::ToggleScreenRecording),
@@ -296,6 +300,33 @@ impl Workspace {
             Err(error) => format!("couldn't turn the camera on: {error:#}"),
         };
         self.show_capture_toast(message, None, cx);
+    }
+
+    fn download_project_zip(&mut self, cx: &mut Context<Self>) {
+        let roots: Vec<(String, std::path::PathBuf)> = self
+            .visible_worktrees(cx)
+            .map(|worktree| {
+                let worktree = worktree.read(cx);
+                (worktree.root_name().to_string(), worktree.abs_path().to_path_buf())
+            })
+            .collect();
+        let task = noah_capture::zip_project(roots, cx);
+        cx.spawn(async move |workspace, cx| {
+            let result = task.await;
+            workspace.update(cx, |workspace, cx| match result {
+                Ok(path) => workspace.show_capture_toast(
+                    format!("project zipped to {}", path.display()),
+                    Some(path),
+                    cx,
+                ),
+                Err(error) => workspace.show_capture_toast(
+                    format!("couldn't zip the project: {error:#}"),
+                    None,
+                    cx,
+                ),
+            })
+        })
+        .detach_and_log_err(cx);
     }
 
     fn take_screenshot(&mut self, window: &mut Window, cx: &mut Context<Self>) {

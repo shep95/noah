@@ -402,6 +402,7 @@ dependencies = [
  "smol",
  "theme",
  "theme_settings",
+ "tiny_http",
  "ui",
  "url",
  "util",
@@ -11610,6 +11611,7 @@ dependencies = [
  "futures 0.3.34",
  "gpui",
  "gpui_util",
+ "ignore",
  "image",
  "log",
  "paths",
@@ -11619,6 +11621,7 @@ dependencies = [
  "which",
  "x11rb",
  "zed-scap",
+ "zip",
 ]
 
 [[package]]

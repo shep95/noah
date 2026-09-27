@@ -1282,6 +1282,11 @@
     // Teaching mode: shepherd explains, asks you questions and leaves the
     // critical part of each change for you to write.
     "teaching_mode": false,
+    // After shepherd changes code, noah runs the project's own check and hands
+    // failures back to be fixed, until it passes (three rounds at most).
+    "verify_after_edits": true,
+    // Once shepherd writes interface code, noah shows it in the browser room.
+    "canvas": true,
     // A monthly spending limit in US dollars for paid models, such as 20.
     // noah asks before going over it. null means no limit.
     "monthly_budget_usd": null,

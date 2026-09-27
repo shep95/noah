@@ -496,6 +496,9 @@ const handlers = {
     return { ok: true };
   },
   async "log.open"(message, sender) {
+    // A page can ask for the log only a few times a minute: the button under
+    // the search counter is a person's click, a loop is not.
+    if (sender && sender.tab && !allowRate("logopen", sender, 3)) return { ok: false };
     await openLog({ site: sender && sender.tab ? Shield.siteOf(Shield.hostOf(sender.tab.url || "")) : String(message.site || "") });
     return { ok: true };
   },

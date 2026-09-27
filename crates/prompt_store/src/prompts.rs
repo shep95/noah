@@ -205,17 +205,7 @@ fn brain(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    let replacement = std::fs::read_to_string(paths::shepherd_brain_file())
-        .ok()
-        .filter(|text| !text.trim().is_empty());
-    let built_in = Assets
-        .load("shepherd/shepherd_brain.txt")
-        .ok()
-        .flatten()
-        .map(|bytes| String::from_utf8_lossy(bytes.as_ref()).into_owned());
-    if let Some(text) = replacement.or(built_in) {
-        out.write(text.trim_end())?;
-    }
+    out.write(&prompt_head(&brain_text()))?;
     Ok(())
 }
 
@@ -559,4 +549,65 @@ impl PromptBuilder {
             .lock()
             .render("terminal_assistant_prompt", &context)
     }
+}
+
+/// The brain: the person's own file at [`paths::shepherd_brain_file`] when
+/// they made one, otherwise the one built into noah's assets.
+pub fn brain_text() -> String {
+    if let Ok(text) = std::fs::read_to_string(paths::shepherd_brain_file())
+        && !text.trim().is_empty()
+    {
+        return text;
+    }
+    Assets
+        .load("shepherd/shepherd_brain.txt")
+        .ok()
+        .flatten()
+        .map(|bytes| String::from_utf8_lossy(bytes.as_ref()).into_owned())
+        .unwrap_or_default()
+}
+
+/// The person's standing instructions from noah's settings ("brain"), when
+/// they wrote any. Read on every render, so an edit reaches the next prompt.
+pub fn standing_instructions() -> Option<String> {
+    let text = std::fs::read_to_string(paths::instructions_file()).ok()?;
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// The real clock, for every prompt: models carry a stale sense of the date
+/// and would otherwise reason from it.
+pub fn clock_line() -> String {
+    let now = chrono::Local::now();
+    format!("{} (UTC{})", now.format("%A %-d %B %Y, %H:%M"), now.format("%:z"))
+}
+
+/// The head of every prompt noah sends, whichever path and model it goes to:
+/// the brain, the person's standing instructions, then the clock.
+pub fn prompt_head(brain: &str) -> String {
+    let mut head = brain.trim_end().to_string();
+    if let Some(instructions) = standing_instructions() {
+        head.push_str("\n\n## the person's standing instructions\n\nthe person wrote these in noah's settings (brain). they apply to everything you do, in every conversation, before any other guidance:\n\n");
+        head.push_str(&instructions);
+    }
+    head.push_str("\n\n## now\n\nthe clock says it is ");
+    head.push_str(&clock_line());
+    head.push_str(". this is the real date and time; trust it over any date you remember. when an answer depends on today (versions, prices, news, what is \"latest\"), check the web instead of guessing.");
+    head
+}
+
+/// The brain: the person's own file at [`paths::shepherd_brain_file`] when
+/// they made one, otherwise the one built into noah's assets.
+pub fn brain_text() -> String {
+    if let Ok(text) = std::fs::read_to_string(paths::shepherd_brain_file())
+        && !text.trim().is_empty()
+    {
+        return text;
+    }
+    Assets
+        .load("shepherd/shepherd_brain.txt")
+        .ok()
+        .flatten()
+        .map(|bytes| String::from_utf8_lossy(bytes.as_ref()).into_owned())
+        .unwrap_or_default()
 }

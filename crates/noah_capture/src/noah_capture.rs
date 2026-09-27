@@ -18,6 +18,9 @@ pub use avi::AviWriter;
 actions!(
     capture,
     [
+        /// Saves a zip of the open project (what git would track: no
+        /// node_modules, build output or ignored files) to your Downloads folder.
+        DownloadProjectZip,
         /// Saves a screenshot of the noah window and copies it to the clipboard.
         TakeScreenshot,
         /// Starts or stops recording the noah window.
@@ -113,17 +116,18 @@ fn timestamp() -> String {
     chrono::Local::now().format("%Y-%m-%d %H.%M.%S").to_string()
 }
 
-fn output_directory(videos: bool) -> Result<PathBuf> {
-    let base = if videos {
-        dirs::video_dir()
-    } else {
-        dirs::picture_dir()
-    }
-    .unwrap_or_else(|| paths::home_dir().join(if videos { "Videos" } else { "Pictures" }));
-    let directory = base.join("noah");
+/// Everything noah saves for the person lands in their Downloads folder, the
+/// one place every file manager and browser already shows, never a folder of
+/// noah's own.
+pub fn downloads_directory() -> Result<PathBuf> {
+    let directory = dirs::download_dir().unwrap_or_else(|| paths::home_dir().join("Downloads"));
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("couldn't create {}", directory.display()))?;
     Ok(directory)
+}
+
+fn output_directory(_videos: bool) -> Result<PathBuf> {
+    downloads_directory()
 }
 
 /// The window's rectangle on its display, in the display's physical pixels.
@@ -164,7 +168,7 @@ pub fn take_screenshot(window: &Window, cx: &mut App) -> Task<Result<PathBuf>> {
         Ok(directory) => directory,
         Err(error) => return Task::ready(Err(error)),
     };
-    let path = directory.join(format!("noah {}.png", timestamp()));
+    let path = directory.join(format!("noah screenshot {}.png", timestamp()));
     #[cfg(target_os = "macos")]
     let capture = {
         let bounds = window.bounds();
@@ -215,7 +219,7 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
     };
     #[cfg(target_os = "macos")]
     {
-        let path = directory.join(format!("noah {}.mov", timestamp()));
+        let path = directory.join(format!("noah recording {}.mov", timestamp()));
         let child = match platform_mac::start_recording(&path, window.bounds()) {
             Ok(child) => child,
             Err(error) => return Task::ready(Err(error)),
@@ -231,7 +235,7 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let path = directory.join(format!("noah {}.avi", timestamp()));
+        let path = directory.join(format!("noah recording {}.avi", timestamp()));
         // The camera starts first so its first frames are ready when the
         // screen frames begin; a camera that fails to open fails the
         // recording rather than silently leaving the bubble out.
@@ -1113,4 +1117,65 @@ mod tests {
         );
         assert_eq!(CropRect { x: 3000, y: 0, width: 10, height: 10 }.clamped(1920, 1080), None);
     }
+}
+
+/// The folders a zip never needs: dependency and build output that any
+/// checkout regenerates, whether or not the project ignores them.
+const ZIP_SKIP: &[&str] = &[
+    ".git", "node_modules", "target", "dist", "build", ".next", ".nuxt", ".svelte-kit", "__pycache__",
+    ".venv", "venv", ".mypy_cache", ".pytest_cache", ".gradle", ".idea", ".DS_Store", "coverage", ".turbo", ".cache",
+];
+
+/// Zips the project's roots into one file in the Downloads folder, honoring
+/// each root's .gitignore, and returns where it landed.
+pub fn zip_project(roots: Vec<(String, PathBuf)>, cx: &App) -> Task<Result<PathBuf>> {
+    cx.background_spawn(async move {
+        use std::io::Write as _;
+        anyhow::ensure!(!roots.is_empty(), "there is no project open to zip");
+        let directory = downloads_directory()?;
+        let name = if roots.len() == 1 { roots[0].0.clone() } else { "project".to_string() };
+        let path = directory.join(format!("{name} {}.zip", timestamp()));
+        let file = std::fs::File::create(&path).with_context(|| format!("couldn't create {}", path.display()))?;
+        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
+        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let mut count = 0usize;
+        for (root_name, root) in &roots {
+            let walker = ignore::WalkBuilder::new(root)
+                .hidden(false)
+                .git_ignore(true)
+                .git_global(true)
+                .git_exclude(true)
+                .filter_entry(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .is_none_or(|file_name| !ZIP_SKIP.contains(&file_name))
+                })
+                .build();
+            for entry in walker {
+                let entry = entry?;
+                let Ok(relative) = entry.path().strip_prefix(root) else { continue };
+                if relative.as_os_str().is_empty() {
+                    continue;
+                }
+                let inside = format!(
+                    "{}/{}",
+                    if roots.len() == 1 { name.as_str() } else { root_name.as_str() },
+                    relative.to_string_lossy().replace('\\', "/")
+                );
+                if entry.file_type().is_some_and(|kind| kind.is_dir()) {
+                    zip.add_directory(inside, options)?;
+                } else if entry.file_type().is_some_and(|kind| kind.is_file()) {
+                    zip.start_file(inside, options)?;
+                    let bytes = std::fs::read(entry.path())
+                        .with_context(|| format!("couldn't read {}", entry.path().display()))?;
+                    zip.write_all(&bytes)?;
+                    count += 1;
+                }
+            }
+        }
+        zip.finish()?;
+        log::info!("zipped {count} files into {}", path.display());
+        Ok(path)
+    })
 }

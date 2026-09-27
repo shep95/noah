@@ -29,6 +29,7 @@ serde.workspace = true
 serde_json.workspace = true
 smol.workspace = true
 theme.workspace = true
+tiny_http.workspace = true
 theme_settings.workspace = true
 ui.workspace = true
 url.workspace = true

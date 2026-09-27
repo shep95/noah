@@ -135,8 +135,11 @@ fn parse_models(body: &str) -> Result<Vec<VeniceModel>> {
     Ok(response
         .data
         .into_iter()
+        // Every conversational model Venice serves: text is what a chat can
+        // use, but nothing else is held back (no capability filter, and
+        // models Venice marks offline stay listed so nobody wonders where
+        // one went; a request to one fails with Venice's own words).
         .filter(|entry| entry.model_type.as_deref().is_none_or(|kind| kind == "text"))
-        .filter(|entry| !entry.model_spec.offline)
         .map(|entry| {
             let spec = entry.model_spec;
             VeniceModel {
@@ -163,7 +166,7 @@ async fn list_models(
 ) -> Result<Vec<VeniceModel>> {
     let request = HttpRequest::builder()
         .method(Method::GET)
-        .uri(format!("{api_url}/models?type=text"))
+        .uri(format!("{api_url}/models?type=all"))
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {api_key}"))
         .body(AsyncBody::default())?;

@@ -124,6 +124,13 @@ pub fn shepherd_brain_file() -> PathBuf {
     config_dir().join("shepherd_brain.txt")
 }
 
+/// The person's standing instructions, written in noah's settings under
+/// "brain": read into every prompt noah sends, for every model and every
+/// path (the agent, inline edits, the terminal assistant). Absent by default.
+pub fn instructions_file() -> PathBuf {
+    config_dir().join("instructions.md")
+}
+
 /// Returns the path to the configuration directory used by Zed.
 pub fn config_dir() -> &'static PathBuf {
     CONFIG_DIR.get_or_init(|| {
