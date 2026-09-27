@@ -61,6 +61,9 @@ manifest["browser_specific_settings"] = {
 json.dump(manifest, open(sys.argv[2], "w"), indent=2)
 PY
 (cd "$stage/firefox" && rm -f "$OLDPWD/dist/noah-shield-firefox.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-firefox.zip" .)
+# The same bytes as an .xpi: what addons.mozilla.org signs, and what Firefox
+# installs from the site in one click once it carries that signature.
+cp dist/noah-shield-firefox.zip dist/noah-shield-firefox.xpi
 
 # Safari: Xcode converts the Chromium layout; the converter dislikes only the
 # minimum Chrome version.
@@ -95,6 +98,11 @@ fi
 feeds="$site/public/shield"
 mkdir -p "$feeds"
 cp dist/noah-shield-chromium.zip dist/noah-shield-firefox.zip dist/noah-shield-safari.zip "$feeds/"
+# A signed .xpi already on the site is kept: the build must not replace a
+# signed file with an unsigned one.
+if [[ ! -f "$feeds/noah-shield-firefox.xpi" ]] || ! unzip -l "$feeds/noah-shield-firefox.xpi" 2>/dev/null | grep -q "META-INF/mozilla.rsa"; then
+    cp dist/noah-shield-firefox.xpi "$feeds/noah-shield-firefox.xpi"
+fi
 (cd "$feeds" && for file in noah-shield-chromium.zip noah-shield-firefox.zip noah-shield-safari.zip; do sha256sum "$file" > "$file.sha256"; done)
 
 generated="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
