@@ -522,7 +522,43 @@ const handlers = {
     const stored = await api.storage.local.get("look");
     const look = stored.look || null;
     const image = look && look.image ? (look.image.startsWith("data:") ? look.image : api.runtime.getURL("looks/" + look.image)) : null;
-    return { clean: settings.search.clean, farms: settings.search.farms, look: settings.search.look && Boolean(image), image, palette: look ? look.palette : null };
+    return { clean: settings.search.clean, farms: settings.search.farms, look: settings.search.look && Boolean(image), peek: settings.search.peek, image, palette: look ? look.palette : null };
+  },
+  // A result's page, fetched once without cookies or a referrer, for the
+  // "peek" under it. Only when asked, only web pages, never local addresses.
+  async "search.peek"(message, sender) {
+    const settings = await Shield.loadSettings();
+    if (!settings.search.peek || settings.localOnly) return { error: "peeking is off" };
+    if (!allowRate("peek", sender, 20)) return { error: "too many in a minute; a moment" };
+    let url;
+    try { url = new URL(String(message.url || "")); } catch { return { error: "not a web address" }; }
+    if (!/^https?:$/.test(url.protocol) || Shield.isLocalHost(url.hostname)) return { error: "not a web address" };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      const response = await fetch(url.href, { credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow", cache: "default", signal: controller.signal, headers: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5" } });
+      if (!response.ok) return { error: "the site answered " + response.status };
+      const type = response.headers.get("content-type") || "";
+      if (!/html|xml/.test(type)) return { error: "not a page (" + type.split(";")[0] + ")" };
+      if (Shield.isLocalHost(Shield.hostOf(response.url))) return { error: "the page moved somewhere local" };
+      const reader = response.body.getReader();
+      const chunks = [];
+      let size = 0;
+      while (size < 1500000) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        size += value.byteLength;
+      }
+      reader.cancel().catch(() => {});
+      const html = new TextDecoder().decode(await new Blob(chunks).arrayBuffer());
+      await Shield.count("peeks", 1, sender.tab ? sender.tab.id : null);
+      return { html, url: response.url };
+    } catch (error) {
+      return { error: controller.signal.aborted ? "no answer in nine seconds" : String(error.message || error) };
+    } finally {
+      clearTimeout(timer);
+    }
   },
   async "search.hidden"(message, sender) {
     if (!allowRate("search", sender, 30)) return { ok: false };
@@ -1454,7 +1490,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

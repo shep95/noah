@@ -205,6 +205,7 @@
       showNote();
       report();
     }
+    addPeekButtons();
   }
 
   let noteTimer = null;
@@ -251,33 +252,237 @@
   }
 
   // ---- the look -----------------------------------------------------------------------------
-  function luminanceOf(color) {
-    const match = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(color || "");
-    if (!match) return null;
-    if (match[4] !== undefined && Number(match[4]) === 0) return null;
-    const [r, g, b] = [match[1], match[2], match[3]].map(Number);
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  // The whole results page takes the picture's palette, the shield's type and
+  // its spacing: cards with the same radius and hairline, the same rhythm
+  // between them, one accent where a hand goes. Whatever mode the engine was
+  // in, the words are the palette's, so they always read.
+  const THEME = {
+    google: {
+      cards: "#rso > div:has(h3), #rso .MjjYud:has(h3) > div:not(:has(.MjjYud)), .related-question-pair, #rhs .kp-blk, #rhs > div:has(h2), #botstuff > div:has(h3)",
+      cardsInner: "#rso .MjjYud > div > div.g, #rso .g",
+      title: "#rso h3, #rhs h2, #rhs h3, #botstuff h3",
+      snippet: "#rso [data-sncf], #rso .VwiC3b, #rso div[style*='line-clamp'], #rso .ITZIwc, #rhs .kno-rdesc span, #rso span.hgKElc",
+      url: "#rso cite, #rso .VuuXrf, #rso .byrV5b, #rhs cite",
+      searchBox: "#searchform form, #tsf, .RNNXgb, form[role='search'] > div, .SDkEP",
+      searchInput: "textarea[name='q'], input[name='q']",
+      tabs: "#hdtb a, #top_nav a, .crJ18e a, #hdtb div[role='listitem'] a, .T47uwc a",
+      tabSelected: "#hdtb .hdtb-msel, #hdtb a[aria-current], #hdtb [selected] a, .Ww4FFb[aria-selected='true']",
+      chips: "#rso a[role='link'].fl, #rso .Xk52Ge a, #rso .zVvuGd a, #rso a.MXl0lf, .k8XOCe",
+      quiet: "#rso .g .MUxGbd:not(.VwiC3b), #rso .fG8Fp, #rso .LEwnzc, #rhs .rhstc4, #botstuff td",
+    },
+    bing: { cards: "#b_results > li.b_algo, #b_results > li.b_ans, #b_context .b_ans", title: "#b_results h2, #b_context h2", snippet: "#b_results .b_caption p, #b_results .b_lineclamp2, #b_results .b_lineclamp3", url: "#b_results cite, #b_results .b_attribution", searchBox: "#sb_form, .b_searchboxForm", searchInput: "#sb_form_q", tabs: "#b_header .b_scopebar a", tabSelected: "#b_header .b_scopebar .b_active a", chips: "#b_results .b_rs a", quiet: "#b_results .b_factrow, #b_results .b_vlist2col" },
+    duckduckgo: { cards: "article[data-testid='result'], li[data-layout='organic'] > article, section[data-testid='sidebar'] > div", title: "article h2, article h2 a span", snippet: "article [data-result='snippet'], article div[data-result='snippet'] span", url: "article a[data-testid='result-extras-url-link'], article p[data-testid='result-extras-url']", searchBox: "form[role='search'], #search_form, .search--header, div[data-testid='search-box-container']", searchInput: "#search_form_input, input[name='q']", tabs: "ul[data-testid='zci-tabs'] a, .zcm__link", tabSelected: ".zcm__link.is-active, ul[data-testid='zci-tabs'] a[aria-current]", chips: "article .related-searches a", quiet: "article footer" },
+    brave: { cards: "#results > .snippet, #side-right > div", title: ".snippet .title, .snippet-title, #side-right h2", snippet: ".snippet .snippet-description, .snippet-content", url: ".snippet .netloc, .snippet cite, .snippet .site-name", searchBox: "#searchform, .searchbox, form#searchform > div", searchInput: "#searchbox, input[name='q']", tabs: ".tabs a, #tabs a, nav a.tab", tabSelected: ".tabs a.active, nav a.tab[aria-current]", chips: ".related a", quiet: ".snippet .footer" },
+    yahoo: { cards: "#web ol > li, #right .dd", title: "#web h3, #right h3", snippet: "#web .compText p, #web .compText", url: "#web .compTitle cite, #web span.fz-ms", searchBox: "#sbq-wrap, .sbq-w, form[role='search']", searchInput: "#yschsp, input[name='p']", tabs: "#horizontal-bar a", tabSelected: "#horizontal-bar .active a", chips: "#web .compDlink a", quiet: "#web .compAttribution" },
+    startpage: { cards: ".w-gl__result, .result, [class*='w-gl__result']", title: ".w-gl__result-title, .result-title, h2", snippet: ".w-gl__description, .result-description, p.description", url: ".w-gl__result-url, .result-link, a.link", searchBox: "form.search-form, .search-form", searchInput: "#q, input[name='query']", tabs: ".nav-bar a, .layout-web__header a", tabSelected: ".nav-bar a.active", chips: "", quiet: "" },
+    ecosia: { cards: "[data-test-id='mainline-result'], .result, article", title: "[data-test-id='result-title'], .result-title, article h2", snippet: "[data-test-id='result-description'], .result-snippet, article p", url: "[data-test-id='result-url'], .result-url, article cite", searchBox: "form[role='search'], .search-form", searchInput: "input[name='q']", tabs: ".search-nav a, nav a", tabSelected: ".search-nav a[aria-current], nav a.active", chips: "", quiet: "" },
+  };
+
+  function themeCss(palette, image) {
+    const theme = THEME[engine.id] || THEME.startpage;
+    const p = {
+      bg: palette.bg || "#070909", raise: palette.raise || "#0a100c", surface: palette.surface || "rgba(8, 11, 9, 0.92)", surface2: palette.surface2 || "rgba(10, 14, 11, 0.9)",
+      line: palette.line || "rgba(180, 210, 190, 0.08)", lineMid: palette.lineMid || "rgba(180, 210, 190, 0.14)", text: palette.text || "#d8ddd6", sub: palette.sub || "#b9beb7",
+      muted: palette.muted || "#9aa298", faint: palette.faint || "#6f766e", accent: palette.accent || "#5f8a58", accentBright: palette.accentBright || "#72a868", accentSoft: palette.accentSoft || "#a9cf9f", bright: palette.bright || "#f1f4ef",
+    };
+    const rule = (selector, body) => (selector ? `${selector} { ${body} }\n` : "");
+    return `
+      :root { --noah-bg: ${p.bg}; --noah-raise: ${p.raise}; --noah-surface: ${p.surface}; --noah-surface2: ${p.surface2}; --noah-line: ${p.line}; --noah-line-mid: ${p.lineMid}; --noah-text: ${p.text}; --noah-sub: ${p.sub}; --noah-muted: ${p.muted}; --noah-faint: ${p.faint}; --noah-accent: ${p.accent}; --noah-accent-bright: ${p.accentBright}; --noah-accent-soft: ${p.accentSoft}; --noah-bright: ${p.bright}; --noah-display: Georgia, "Times New Roman", serif; --noah-body: -apple-system, "Segoe UI", system-ui, sans-serif; --noah-ease: cubic-bezier(0.2, 0.7, 0.2, 1); }
+      html, body { background: transparent !important; color: var(--noah-text) !important; font-family: var(--noah-body) !important; color-scheme: dark; }
+      ${engine.transparent.join(", ")} { background: transparent !important; background-color: transparent !important; box-shadow: none !important; border-color: var(--noah-line) !important; }
+      #noah-shield-look-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: linear-gradient(color-mix(in srgb, ${p.bg} 82%, transparent), color-mix(in srgb, ${p.bg} 88%, transparent)), url("${image}"); background-size: cover; background-position: center; background-repeat: no-repeat; }
+      ${rule(theme.cards, "background: var(--noah-surface) !important; border: 1px solid var(--noah-line) !important; border-radius: 14px !important; padding: 16px 18px !important; margin: 0 0 12px !important; box-shadow: none !important; transition: border-color .16s var(--noah-ease), transform .26s var(--noah-ease);")}
+      ${rule(theme.cards ? theme.cards.split(",").map((part) => part.trim() + ":hover").join(", ") : "", "border-color: var(--noah-line-mid) !important;")}
+      ${rule(theme.cardsInner, "background: transparent !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; border: 0 !important;")}
+      ${rule(theme.title, "font-family: var(--noah-display) !important; font-weight: 400 !important; font-size: 21px !important; line-height: 1.25 !important; letter-spacing: .005em; color: var(--noah-bright) !important; margin: 2px 0 6px !important;")}
+      ${rule(theme.title ? theme.title.split(",").map((part) => "a:hover " + part.trim().replace(/^#\w+ /, "")).join(", ") : "", "color: var(--noah-accent-soft) !important;")}
+      ${rule(theme.snippet, "font-family: var(--noah-body) !important; font-size: 14px !important; line-height: 1.6 !important; color: var(--noah-sub) !important;")}
+      ${rule(theme.url, "font-family: var(--noah-body) !important; font-size: 12px !important; color: var(--noah-muted) !important; letter-spacing: .01em;")}
+      ${rule(theme.searchBox, "background: var(--noah-raise) !important; border: 1px solid var(--noah-line-mid) !important; border-radius: 999px !important; box-shadow: none !important;")}
+      ${rule(theme.searchInput, "color: var(--noah-bright) !important; font-family: var(--noah-body) !important; font-size: 16px !important; background: transparent !important; caret-color: var(--noah-accent-soft);")}
+      ${rule(theme.tabs, "color: var(--noah-muted) !important; font-family: var(--noah-body) !important; font-size: 13px !important; letter-spacing: .02em; text-decoration: none !important; border-bottom-color: transparent !important; transition: color .16s var(--noah-ease);")}
+      ${rule(theme.tabs ? theme.tabs.split(",").map((part) => part.trim() + ":hover").join(", ") : "", "color: var(--noah-text) !important;")}
+      ${rule(theme.tabSelected, "color: var(--noah-bright) !important; border-bottom: 2px solid var(--noah-accent-bright) !important;")}
+      ${rule(theme.chips, "background: transparent !important; border: 1px solid var(--noah-line-mid) !important; border-radius: 999px !important; color: var(--noah-sub) !important; font-family: var(--noah-body) !important; font-size: 12px !important;")}
+      ${rule(theme.quiet, "color: var(--noah-muted) !important;")}
+      #rso, #rhs, #botstuff, #b_results, #b_context, #web, #right, #results, main, article { color: var(--noah-text) !important; }
+      #rso span, #rso div, #rso em, #rso b, #rso td, #rhs span, #rhs div, #rhs td, #botstuff span, #botstuff div, #b_results span, #b_results div, #b_results p, #b_context span, #b_context div, #web span, #web div, #right span, #right div, #results span, #results div, article span, article p, article div { color: inherit; }
+      #rso a, #rhs a, #botstuff a, #b_results a, #b_context a, #web a, #right a, #results a, article a { color: var(--noah-accent-soft); }
+      #rso em, #b_results strong, article b { color: var(--noah-bright) !important; font-style: normal; font-weight: 500; }
+      #rso img, #rhs img, #b_results img, article img { border-radius: 10px; }
+      #rso svg, #rhs svg, #hdtb svg, #searchform svg { fill: var(--noah-muted); color: var(--noah-muted); }
+      ::selection { background: color-mix(in srgb, var(--noah-accent) 45%, transparent); }
+      #noah-shield-search-note { font-family: var(--noah-body) !important; }
+      /* peek */
+      .noah-peek-button { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--noah-line-mid); background: transparent; color: var(--noah-muted); font: 12px var(--noah-body); cursor: pointer; transition: color .16s var(--noah-ease), border-color .16s var(--noah-ease); }
+      .noah-peek-button:hover { color: var(--noah-bright); border-color: var(--noah-accent); }
+      .noah-peek-button.on { color: var(--noah-accent-soft); border-color: var(--noah-accent); }
+      .noah-peek { margin: 12px 0 2px; padding: 14px 16px; border-radius: 12px; background: var(--noah-surface2); border: 1px solid var(--noah-line); font: 14px/1.6 var(--noah-body); color: var(--noah-text); animation: noah-arrive .26s var(--noah-ease) both; }
+      @keyframes noah-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+      .noah-peek header { display: flex; gap: 12px; align-items: baseline; margin: 0 0 8px; font: 12px var(--noah-body); color: var(--noah-muted); }
+      .noah-peek header b { font: 400 16px var(--noah-display); color: var(--noah-bright); }
+      .noah-peek .noah-peek-lead { color: var(--noah-sub); margin: 0 0 10px; }
+      .noah-peek .noah-peek-body { display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+      .noah-peek .noah-peek-text { max-height: 340px; overflow: auto; padding-right: 8px; scrollbar-gutter: stable; }
+      .noah-peek .noah-peek-text p { margin: 0 0 10px; }
+      .noah-peek .noah-peek-text h4 { margin: 12px 0 4px; font: 400 15px var(--noah-display); color: var(--noah-bright); }
+      .noah-peek img { max-width: 220px; max-height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid var(--noah-line); }
+      .noah-peek .noah-peek-foot { margin: 10px 0 0; font-size: 12px; color: var(--noah-faint); }
+      .noah-peek .noah-peek-foot a { color: var(--noah-accent-soft); }
+      .noah-peek .noah-peek-error { color: var(--noah-muted); }
+      @media (prefers-reduced-motion: reduce) { .noah-peek { animation: none; } }
+    `;
   }
 
   function wearLook() {
     if (!state || !state.look || !state.image || !engine.page()) return;
     if (document.getElementById("noah-shield-look")) return;
-    const bodyLuminance = luminanceOf(getComputedStyle(document.body).backgroundColor) ?? luminanceOf(getComputedStyle(document.documentElement).backgroundColor) ?? 1;
-    const dark = bodyLuminance < 0.45;
-    const palette = state.palette || {};
-    const veil = dark ? `color-mix(in srgb, ${palette.bg || "#070909"} 84%, transparent)` : "rgba(255, 255, 255, 0.88)";
     const style = document.createElement("style");
     style.id = "noah-shield-look";
-    style.textContent = `
-      html, body { background: transparent !important; }
-      ${engine.transparent.join(", ")} { background: transparent !important; background-color: transparent !important; box-shadow: none !important; }
-      #noah-shield-look-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: linear-gradient(${veil}, ${veil}), url("${state.image}"); background-size: cover; background-position: center; background-repeat: no-repeat; }
-      :root { --noah-text: ${palette.text || "#d8ddd6"}; --noah-raise: ${palette.raise || "#0a100c"}; --noah-line: ${palette.lineMid || "rgba(180,210,190,.16)"}; --noah-accent: ${palette.accentSoft || "#a9cf9f"}; }
-    `;
+    style.textContent = themeCss(state.palette || {}, state.image);
     (document.head || document.documentElement).append(style);
     const layer = document.createElement("div");
     layer.id = "noah-shield-look-layer";
     document.documentElement.append(layer);
+  }
+
+  // ---- peek: the page's own words, here, without the visit --------------------------------------
+  const peeked = new WeakSet();
+  function addPeekButtons() {
+    if (!state || !state.peek || !engine.page()) return;
+    for (const block of resultBlocks()) {
+      if (peeked.has(block) || block.hasAttribute("data-noah-shield") && block.getAttribute("data-noah-shield") !== "dim") continue;
+      const anchor = firstLink(block);
+      if (!anchor) continue;
+      const target = targetHost(anchor);
+      if (!target || !/^https?:$/.test(new URL(anchor.href, location.href).protocol)) continue;
+      peeked.add(block);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "noah-peek-button";
+      button.textContent = "peek";
+      button.title = "Read what this page says, here, without opening it";
+      const titleNode = block.querySelector("h3, h2, [data-testid='result-title-a']");
+      const parent = titleNode ? titleNode.closest("a") || titleNode : anchor;
+      parent.parentElement ? parent.parentElement.insertBefore(button, parent.nextSibling) : block.append(button);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePeek(block, button, realHref(anchor));
+      });
+    }
+  }
+
+  function realHref(anchor) {
+    try {
+      const url = new URL(anchor.href, location.href);
+      for (const key of ["uddg", "url", "u", "q"]) {
+        const inner = url.searchParams.get(key);
+        if (inner && /^https?:\/\//.test(inner)) return inner;
+      }
+      return url.href;
+    } catch {
+      return anchor.href;
+    }
+  }
+
+  function textOf(html, url) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    for (const junk of doc.querySelectorAll("script, style, noscript, template, svg, iframe, nav, footer, aside, header, form, [role='navigation'], [role='banner'], [role='contentinfo'], [aria-hidden='true'], .cookie, .cookies, .newsletter, .sidebar, .advert, .ad")) junk.remove();
+    const meta = (name) => { const node = doc.querySelector(`meta[property='${name}'], meta[name='${name}']`); return node ? node.getAttribute("content") || "" : ""; };
+    const title = (meta("og:title") || (doc.querySelector("title") || {}).textContent || "").trim().slice(0, 160);
+    const description = (meta("description") || meta("og:description") || "").trim().slice(0, 400);
+    let image = meta("og:image") || meta("twitter:image") || "";
+    try { if (image) image = new URL(image, url).href; } catch { image = ""; }
+    if (!/^https:/.test(image)) image = "";
+    const roots = [doc.querySelector("article"), doc.querySelector("main"), doc.querySelector("[role='main']"), doc.body].filter(Boolean);
+    let best = roots[0];
+    let bestScore = -1;
+    for (const root of roots) {
+      const score = Array.from(root.querySelectorAll("p")).reduce((sum, paragraph) => sum + (paragraph.textContent.trim().length > 60 ? paragraph.textContent.trim().length : 0), 0);
+      if (score > bestScore) { best = root; bestScore = score; }
+    }
+    const pieces = [];
+    let total = 0;
+    for (const node of best.querySelectorAll("h1, h2, h3, p, li")) {
+      const text = node.textContent.replace(/\s+/g, " ").trim();
+      if (!text) continue;
+      const heading = /^H[1-3]$/.test(node.tagName);
+      // The page's own heading repeats the title line above the text.
+      if (heading && title && text.toLowerCase() === title.toLowerCase()) continue;
+      if (!heading && text.length < 50) continue;
+      if (node.tagName === "LI" && text.length < 80) continue;
+      pieces.push({ heading, text: text.slice(0, 700) });
+      total += text.length;
+      if (total > 6000 || pieces.length > 40) break;
+    }
+    const words = Math.round(best.textContent.split(/\s+/).filter(Boolean).length);
+    return { title, description, image, pieces, words };
+  }
+
+  async function togglePeek(block, button, url) {
+    const existing = block.querySelector(".noah-peek");
+    if (existing) { existing.remove(); button.classList.remove("on"); return; }
+    button.classList.add("on");
+    const panel = document.createElement("div");
+    panel.className = "noah-peek";
+    panel.textContent = "reading…";
+    const at = button.closest("a") ? button.closest("a").parentElement : button.parentElement;
+    (at && at !== block ? at : block).append(panel);
+    const answer = await new Promise((resolve) => api.runtime.sendMessage({ type: "search.peek", url }, (response) => { void api.runtime.lastError; resolve(response || { error: "no answer" }); }));
+    panel.replaceChildren();
+    if (answer.error) {
+      const error = document.createElement("div");
+      error.className = "noah-peek-error";
+      error.textContent = "Could not read it from here: " + answer.error;
+      panel.append(error);
+      return;
+    }
+    const page = textOf(answer.html, answer.url || url);
+    const head = document.createElement("header");
+    const strong = document.createElement("b");
+    strong.textContent = page.title || new URL(url).hostname;
+    head.append(strong, document.createTextNode(`${new URL(answer.url || url).hostname} · about ${Math.max(1, Math.round(page.words / 230))} min to read`));
+    panel.append(head);
+    if (page.description) {
+      const lead = document.createElement("p");
+      lead.className = "noah-peek-lead";
+      lead.textContent = page.description;
+      panel.append(lead);
+    }
+    const body = document.createElement("div");
+    body.className = "noah-peek-body";
+    const text = document.createElement("div");
+    text.className = "noah-peek-text";
+    for (const piece of page.pieces) {
+      const node = document.createElement(piece.heading ? "h4" : "p");
+      node.textContent = piece.text;
+      text.append(node);
+    }
+    if (!page.pieces.length) {
+      const none = document.createElement("p");
+      none.className = "noah-peek-error";
+      none.textContent = "This page carries its words in scripts, so there is nothing to read without opening it.";
+      text.append(none);
+    }
+    body.append(text);
+    if (page.image) {
+      const image = document.createElement("img");
+      image.src = page.image;
+      image.alt = "";
+      image.referrerPolicy = "no-referrer";
+      image.loading = "lazy";
+      body.append(image);
+    }
+    panel.append(body);
+    const foot = document.createElement("div");
+    foot.className = "noah-peek-foot";
+    const open = document.createElement("a");
+    open.href = url;
+    open.textContent = "open the page";
+    open.rel = "noopener noreferrer";
+    foot.append("Fetched once, without cookies or your address in a referrer. ", open);
+    panel.append(foot);
   }
 
   function start() {
@@ -305,7 +510,7 @@
 
   api.runtime.sendMessage({ type: "search.state" }, (response) => {
     void api.runtime.lastError;
-    if (!response || response.error || !(response.clean || response.farms || response.look)) return;
+    if (!response || response.error || !(response.clean || response.farms || response.look || response.peek)) return;
     state = response;
     if (document.body) start();
     else document.addEventListener("DOMContentLoaded", start, { once: true });

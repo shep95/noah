@@ -162,7 +162,11 @@ frame and toolbars wear it; Chrome and Edge let no extension recolor theirs.
 * **Search.** On Google, Bing, DuckDuckGo, Brave, Yahoo, Startpage and Ecosia
   the paid results go, known content farms and scraper sites go, and pages
   whose titles read as written for the engine are faded; a count on the page,
-  a line in the log, three switches. Search pages wear the look.
+  a line in the log, four switches. Search pages wear the look outright: the
+  picture behind, the palette's words whatever mode the engine was in, the
+  shield's type (serif titles, system body) and its spacing (cards with the
+  same radius, hairline and rhythm). A "peek" under each result fetches the
+  page once, without cookies or a referrer, and shows its words there.
 * **Ads.** EasyList's general and third-party sections now come first (that
   is where Google's ad domains live; the long tail of ad servers had been
   using up the cap), a second ruleset of 30,000 more rules turns on when the

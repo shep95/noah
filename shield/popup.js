@@ -207,6 +207,7 @@ function render(state) {
   byId("search-clean").checked = settings.search.clean;
   byId("search-farms").checked = settings.search.farms;
   byId("search-look").checked = settings.search.look;
+  byId("search-peek").checked = settings.search.peek;
   byId("search-now").textContent = (today.paidResults || 0) + (today.farmResults || 0) ? `${(today.paidResults || 0) + (today.farmResults || 0)} results removed today` : "";
   byId("mode-now").textContent = settings.modes.profile ? settings.modes.profile + (site && settings.modes.siteModes[site.site] ? " · this site: " + settings.modes.siteModes[site.site] : "") : site && settings.modes.siteModes[site.site] ? "this site: " + settings.modes.siteModes[site.site] : "none";
   for (const element of document.querySelectorAll("button[data-profile]")) element.classList.toggle("on", settings.modes.profile === element.dataset.profile);
@@ -343,6 +344,7 @@ readLight();
 bindSetting("search-clean", ["search", "clean"]);
 bindSetting("search-farms", ["search", "farms"]);
 bindSetting("search-look", ["search", "look"]);
+bindSetting("search-peek", ["search", "peek"]);
 
 // ---- what happened here ---------------------------------------------------------------------
 byId("here").addEventListener("click", async () => {

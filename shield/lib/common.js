@@ -70,6 +70,7 @@ Shield.DEFAULT_SETTINGS = {
     clean: true,
     farms: true,
     look: true,
+    peek: true,
   },
   shopping: {
     compare: true,
