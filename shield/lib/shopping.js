@@ -503,7 +503,13 @@ Shield.storeCheck = async function storeCheck(host, hints = {}) {
 
 // ---- reminders, receipts, warranties ---------------------------------------------------------
 
-Shield.addReminder = async function addReminder(reminder) {
+let reminderQueue = Promise.resolve();
+Shield.addReminder = function addReminder(reminder) {
+  const run = reminderQueue.then(() => addReminderNow(reminder));
+  reminderQueue = run.catch(() => {});
+  return run;
+};
+async function addReminderNow(reminder) {
   const stored = await Shield.api.storage.local.get("reminders");
   const reminders = stored.reminders || [];
   const entry = { id: "reminder-" + crypto.randomUUID(), at: reminder.at, label: String(reminder.label || "").slice(0, 160), url: String(reminder.url || "").slice(0, 500), kind: reminder.kind || "reminder" };
@@ -511,7 +517,7 @@ Shield.addReminder = async function addReminder(reminder) {
   await Shield.api.storage.local.set({ reminders });
   await Shield.api.alarms.create(entry.id, { when: entry.at });
   return entry;
-};
+}
 
 Shield.dueReminder = async function dueReminder(id) {
   const stored = await Shield.api.storage.local.get("reminders");

@@ -81,7 +81,10 @@ Shield.applyPrivacy = async function applyPrivacy(settings) {
 // Trusted sites: every request a page of theirs makes is let through, which
 // is how a site that breaks without its analytics gets fixed by you, not us.
 // Strict-cookie sites: their pages send and receive no cookies at all.
-Shield.applySiteRules = async function applySiteRules(settings) {
+Shield.applySiteRules = function applySiteRules(settings) {
+  return Shield.withRuleLock(() => applySiteRulesNow(settings));
+};
+async function applySiteRulesNow(settings) {
   const rulesets = Shield.api.declarativeNetRequest;
   if (!rulesets || !rulesets.updateDynamicRules) return;
   const existing = await rulesets.getDynamicRules();
@@ -122,7 +125,7 @@ Shield.applySiteRules = async function applySiteRules(settings) {
   } catch (error) {
     console.warn("shield: dynamic rules", error);
   }
-};
+}
 
 let trackerDomainsPromise = null;
 function trackerDomains() {

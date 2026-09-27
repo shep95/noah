@@ -244,6 +244,15 @@ Shield.send = function send(message) {
   });
 };
 
+// declarativeNetRequest dynamic rules are read-modify-write; the writers
+// take turns so two of them never add the same ids at once.
+let ruleQueue = Promise.resolve();
+Shield.withRuleLock = function withRuleLock(work) {
+  const run = ruleQueue.then(work, work);
+  ruleQueue = run.catch(() => {});
+  return run;
+};
+
 Shield.isFirefox = typeof navigator !== "undefined" && /Firefox\//.test(navigator.userAgent);
 Shield.isSafari =
   typeof navigator !== "undefined" &&

@@ -78,7 +78,10 @@ function nowInWindow(focus) {
   return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
 }
 
-Shield.applyFocusHours = async function applyFocusHours(settings) {
+Shield.applyFocusHours = function applyFocusHours(settings) {
+  return Shield.withRuleLock(() => applyFocusHoursNow(settings));
+};
+async function applyFocusHoursNow(settings) {
   const rules = Shield.api.declarativeNetRequest;
   if (!rules) return false;
   const focus = settings.modes.focus;
@@ -92,11 +95,14 @@ Shield.applyFocusHours = async function applyFocusHours(settings) {
   })) : [];
   await rules.updateDynamicRules({ removeRuleIds: existing, addRules });
   return Boolean(active);
-};
+}
 
 // ---- low data --------------------------------------------------------------------------
 
-Shield.applyLowData = async function applyLowData(settings) {
+Shield.applyLowData = function applyLowData(settings) {
+  return Shield.withRuleLock(() => applyLowDataNow(settings));
+};
+async function applyLowDataNow(settings) {
   const rules = Shield.api.declarativeNetRequest;
   if (!rules) return;
   const existing = (await rules.getDynamicRules()).filter((rule) => rule.id >= LOW_DATA_RULE_BASE && rule.id < LOW_DATA_RULE_BASE + 10).map((rule) => rule.id);
@@ -105,7 +111,7 @@ Shield.applyLowData = async function applyLowData(settings) {
     { id: LOW_DATA_RULE_BASE + 1, priority: 3, action: { type: "block" }, condition: { urlFilter: "*", domainType: "thirdParty", resourceTypes: ["image"] } },
   ] : [];
   await rules.updateDynamicRules({ removeRuleIds: existing, addRules });
-};
+}
 
 // ---- battery saver ------------------------------------------------------------------------
 
@@ -136,7 +142,10 @@ const ENGINES = {
   ecosia: "https://www.ecosia.org/search?q=\\1",
 };
 
-Shield.applySearchSwitch = async function applySearchSwitch(settings) {
+Shield.applySearchSwitch = function applySearchSwitch(settings) {
+  return Shield.withRuleLock(() => applySearchSwitchNow(settings));
+};
+async function applySearchSwitchNow(settings) {
   const rules = Shield.api.declarativeNetRequest;
   if (!rules) return;
   const existing = (await rules.getDynamicRules()).filter((rule) => rule.id >= SEARCH_RULE_BASE && rule.id < SEARCH_RULE_BASE + 20).map((rule) => rule.id);
@@ -147,7 +156,7 @@ Shield.applySearchSwitch = async function applySearchSwitch(settings) {
     { id: SEARCH_RULE_BASE + 2, priority: 4, action: { type: "redirect", redirect: { regexSubstitution: engine } }, condition: { regexFilter: "^https?://search\\.yahoo\\.com/search\\?(?:.*&)?p=([^&#]+)", resourceTypes: ["main_frame"] } },
   ] : [];
   await rules.updateDynamicRules({ removeRuleIds: existing, addRules });
-};
+}
 
 // ---- parental mode --------------------------------------------------------------------------
 
@@ -160,7 +169,10 @@ const ADULT_DOMAINS = [
 ];
 const ADULT_KEYWORDS = "(porn|xxx|hentai|xvideo|xhamster|sexcam|camgirl|escort|milf|nsfw|onlyfans|fleshlight|dildo)";
 
-Shield.applyParental = async function applyParental(settings) {
+Shield.applyParental = function applyParental(settings) {
+  return Shield.withRuleLock(() => applyParentalNow(settings));
+};
+async function applyParentalNow(settings) {
   const rules = Shield.api.declarativeNetRequest;
   if (!rules) return;
   const existing = (await rules.getDynamicRules()).filter((rule) => rule.id >= PARENTAL_RULE_BASE && rule.id < PARENTAL_RULE_BASE + 500).map((rule) => rule.id);
@@ -177,7 +189,7 @@ Shield.applyParental = async function applyParental(settings) {
     addRules.push({ id: PARENTAL_RULE_BASE + 6, priority: 30, action: { type: "modifyHeaders", requestHeaders: [{ header: "Prefer-SafeSearch", operation: "set", value: "strict" }] }, condition: { urlFilter: "*", resourceTypes: ["main_frame"] } });
   }
   await rules.updateDynamicRules({ removeRuleIds: existing, addRules });
-};
+}
 
 Shield.hashPin = async function hashPin(pin) {
   const salt = await Shield.installSalt();
