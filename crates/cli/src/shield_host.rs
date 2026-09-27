@@ -519,18 +519,34 @@ pub mod tor {
         best.map(|(_, name)| name)
     }
 
+    /// Downloads with the system's curl (Windows 10 and later, macOS and
+    /// nearly every Linux ship one), which keeps a TLS stack out of noah's
+    /// command-line program. Only https, no redirects off it.
+    fn fetch(url: &str) -> Result<Vec<u8>> {
+        let target = std::env::temp_dir().join(format!("noah-shield-{}.download", std::process::id()));
+        let output = hidden(Command::new("curl"))
+            .args(["--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-time", "900", "--user-agent", "noah-shield-host", "--output"])
+            .arg(&target)
+            .arg(url)
+            .output()
+            .context("curl is not on this computer, and noah needs it to fetch Tor")?;
+        if !output.status.success() {
+            std::fs::remove_file(&target).ok();
+            bail!("could not fetch {url}: {}", String::from_utf8_lossy(&output.stderr).trim());
+        }
+        let bytes = std::fs::read(&target)?;
+        std::fs::remove_file(&target).ok();
+        Ok(bytes)
+    }
+
     pub fn install() -> Result<Value> {
         let (os, arch) = platform_bundle()?;
-        let client = reqwest::blocking::Client::builder()
-            .user_agent("noah-shield-host")
-            .timeout(Duration::from_secs(600))
-            .build()?;
-        let index = client.get(TOR_DIST).send()?.error_for_status()?.text()?;
+        let index = String::from_utf8_lossy(&fetch(TOR_DIST)?).into_owned();
         let version = latest_version(&index).context("the Tor Project's download list had no release in it")?;
         let name = format!("tor-expert-bundle-{os}-{arch}-{version}.tar.gz");
         let url = format!("{TOR_DIST}{version}/{name}");
-        let bytes = client.get(&url).send()?.error_for_status()?.bytes()?;
-        let sums = client.get(format!("{url}.sha256sum")).send()?.error_for_status()?.text()?;
+        let bytes = fetch(&url)?;
+        let sums = String::from_utf8_lossy(&fetch(&format!("{url}.sha256sum"))?).into_owned();
         let expected = sums.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
         let actual = format!("{:x}", sha2::Sha256::digest(&bytes));
         if expected.len() != 64 || expected != actual {

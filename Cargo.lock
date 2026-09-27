@@ -3208,7 +3208,6 @@ dependencies = [
  "walkdir",
  "windows 0.62.2",
  "windows_resources",
- "zed-reqwest",
 ]
 
 [[package]]
@@ -23386,7 +23385,6 @@ dependencies = [
  "base64 0.22.1",
  "bytes 1.11.1",
  "encoding_rs",
- "futures-channel",
  "futures-core",
  "futures-util",
  "h2 0.4.12",
