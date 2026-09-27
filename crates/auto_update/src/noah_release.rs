@@ -14,6 +14,10 @@ use std::path::{Path, PathBuf};
 
 /// The release manifest the website publishes next to the installers.
 const DEFAULT_MANIFEST_URL: &str = "https://noah.asherin.com/downloads/latest.json";
+const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+/// More than any installer noah publishes; a download past this is cut off
+/// rather than left to fill the disk.
+pub const MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// Where people get noah by hand, for installs noah can't update itself.
 pub const DOWNLOAD_PAGE: &str = "https://noah.asherin.com/download";
@@ -135,12 +139,22 @@ pub async fn fetch_manifest(
         .get(&url, Default::default(), true)
         .await
         .with_context(|| format!("couldn't reach {url}; check the internet connection"))?;
-    let mut body = Vec::new();
-    response.body_mut().read_to_end(&mut body).await?;
     ensure!(
         response.status().is_success(),
         "couldn't read noah's release list ({})",
         response.status()
+    );
+    // The list is a few kilobytes; a server that answers with more is not
+    // ours, and shouldn't be able to fill memory before the signature check.
+    let mut body = Vec::new();
+    response
+        .body_mut()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_end(&mut body)
+        .await?;
+    ensure!(
+        body.len() as u64 <= MAX_MANIFEST_BYTES,
+        "noah's release list is larger than {MAX_MANIFEST_BYTES} bytes, so it wasn't trusted"
     );
     serde_json::from_slice(&body).context("noah's release information couldn't be read")
 }

@@ -7,9 +7,6 @@
 // page script exists, so a page can neither answer for you nor listen in.
 (() => {
   "use strict";
-  if (window.__noahShieldGuard) return;
-  Object.defineProperty(window, "__noahShieldGuard", { value: true, enumerable: false });
-
   const define = Object.defineProperty;
   const dispatch = EventTarget.prototype.dispatchEvent;
   const listen = EventTarget.prototype.addEventListener;
@@ -279,18 +276,106 @@
   define(window, "fetch", {
     value: function (input, init) {
       const url = input instanceof Request ? input.url : input;
-      const body = init && init.body !== undefined ? init.body : input instanceof Request ? null : null;
+      const body = init && init.body !== undefined ? init.body : null;
       if (leaks(url, body)) return Promise.reject(leakDenied(url));
+      // A body tucked inside a Request object is read from a clone.
+      if (body === null && input instanceof Request && input.body && !input.bodyUsed && typeof input.clone === "function") {
+        const args = arguments;
+        return input.clone().text().then((text) => {
+          if (leaks(url, text)) throw leakDenied(url);
+          return realFetch.apply(this, args);
+        });
+      }
       return realFetch.apply(this, arguments);
+    },
+    configurable: true, writable: true,
+  });
+  // Beacons by other names: an image or script address, a socket, a stream, a cross-site form.
+  const guardUrlProperty = (proto, property) => {
+    const real = Object.getOwnPropertyDescriptor(proto, property);
+    if (!real || !real.set) return;
+    define(proto, property, {
+      get() { return real.get.call(this); },
+      set(value) {
+        if (leaks(value, "")) { leakDenied(value); return; }
+        real.set.call(this, value);
+      },
+      configurable: true,
+    });
+  };
+  for (const [proto, property] of [[HTMLImageElement.prototype, "src"], [HTMLScriptElement.prototype, "src"], [HTMLIFrameElement.prototype, "src"], [HTMLLinkElement.prototype, "href"], [HTMLMediaElement.prototype, "src"], [HTMLSourceElement.prototype, "src"], [HTMLEmbedElement.prototype, "src"], [HTMLObjectElement.prototype, "data"], [HTMLTrackElement.prototype, "src"]]) {
+    try { guardUrlProperty(proto, property); } catch { /* a page froze it first */ }
+  }
+  const realSetAttribute = Element.prototype.setAttribute;
+  define(Element.prototype, "setAttribute", {
+    value: function (name, value) {
+      const lower = String(name).toLowerCase();
+      if ((lower === "src" || lower === "href" || lower === "data" || lower === "srcset" || lower === "ping" || lower === "action" || lower === "formaction") && leaks(value, "")) { leakDenied(value); return; }
+      return realSetAttribute.call(this, name, value);
+    },
+    configurable: true, writable: true,
+  });
+  const RealWebSocket = window.WebSocket;
+  if (RealWebSocket) {
+    const realSend = RealWebSocket.prototype.send;
+    define(RealWebSocket.prototype, "send", {
+      value: function (data) {
+        if (leaks(this.url, typeof data === "string" ? data : "")) throw leakDenied(this.url);
+        return realSend.call(this, data);
+      },
+      configurable: true, writable: true,
+    });
+    const Wrapped = function WebSocket(url, protocols) {
+      if (leaks(url, "")) throw leakDenied(url);
+      return protocols === undefined ? new RealWebSocket(url) : new RealWebSocket(url, protocols);
+    };
+    Wrapped.prototype = RealWebSocket.prototype;
+    for (const key of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) Wrapped[key] = RealWebSocket[key];
+    define(window, "WebSocket", { value: Wrapped, configurable: true, writable: true });
+  }
+  const RealEventSource = window.EventSource;
+  if (RealEventSource) {
+    const WrappedSource = function EventSource(url, init) {
+      if (leaks(url, "")) throw leakDenied(url);
+      return init === undefined ? new RealEventSource(url) : new RealEventSource(url, init);
+    };
+    WrappedSource.prototype = RealEventSource.prototype;
+    define(window, "EventSource", { value: WrappedSource, configurable: true, writable: true });
+  }
+  // A form whose action is another site, carrying what you typed, is stopped
+  // whether it is submitted by a click or by script.
+  const formLeaks = (form) => {
+    if (!config.formLeak || !form || !form.action) return false;
+    let destination;
+    try { destination = new URL(form.action, location.href).hostname; } catch { return false; }
+    if (siteOf(destination) === here || PROCESSORS.test(destination)) return false;
+    const values = Array.from(form.elements || []).map((element) => String(element.value || "")).filter((value) => value.length >= 6);
+    return values.some((value) => typed.includes(value));
+  };
+  listen.call(document, "submit", (event) => {
+    const form = event.target;
+    if (formLeaks(form)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      leakDenied(form.action);
+    }
+  }, true);
+  const realSubmit = HTMLFormElement.prototype.submit;
+  define(HTMLFormElement.prototype, "submit", {
+    value: function () {
+      if (formLeaks(this)) throw leakDenied(this.action);
+      return realSubmit.call(this);
     },
     configurable: true, writable: true,
   });
   const realOpen = XMLHttpRequest.prototype.open;
   const realSend = XMLHttpRequest.prototype.send;
-  define(XMLHttpRequest.prototype, "open", { value: function (method, url, ...rest) { this.__noahUrl = url; return realOpen.call(this, method, url, ...rest); }, configurable: true, writable: true });
+  const requestUrls = new WeakMap();
+  define(XMLHttpRequest.prototype, "open", { value: function (method, url, ...rest) { requestUrls.set(this, url); return realOpen.call(this, method, url, ...rest); }, configurable: true, writable: true });
   define(XMLHttpRequest.prototype, "send", {
     value: function (body) {
-      if (leaks(this.__noahUrl, body)) throw leakDenied(this.__noahUrl);
+      const url = requestUrls.get(this);
+      if (leaks(url, body)) throw leakDenied(url);
       return realSend.call(this, body);
     },
     configurable: true, writable: true,
@@ -321,11 +406,12 @@
     return method + (params.length ? " " + stringify(params).slice(0, 200) : "");
   };
   const WALLET_METHODS = /^(eth_sendTransaction|eth_signTransaction|eth_sign|personal_sign|eth_signTypedData(_v[34])?|wallet_watchAsset|wallet_addEthereumChain|wallet_requestPermissions)$/;
+  const wrappedProviders = new WeakSet();
   const wrapProvider = (provider) => {
-    if (!provider || provider.__noahWrapped || typeof provider.request !== "function") return;
+    if (!provider || wrappedProviders.has(provider) || typeof provider.request !== "function") return;
     const request = provider.request.bind(provider);
     try {
-      define(provider, "__noahWrapped", { value: true, enumerable: false });
+      wrappedProviders.add(provider);
       define(provider, "request", {
         value: async function (args) {
           await whenReady();
@@ -587,6 +673,7 @@
   };
 
   // Fake location: the coordinates, clock and language of one city.
+  const explicitZone = new WeakSet();
   const fakeLocation = () => {
     const offsetFor = (tz, date) => {
       try {
@@ -606,7 +693,7 @@
     define(Intl.DateTimeFormat.prototype, "resolvedOptions", {
       value: function () {
         const options = realResolved.call(this);
-        if (config.location && config.location.tz && this.__noahDefaultZone !== false) options.timeZone = config.location.tz;
+        if (config.location && config.location.tz && !explicitZone.has(this)) options.timeZone = config.location.tz;
         return options;
       },
       configurable: true, writable: true,
@@ -614,7 +701,7 @@
     const Wrapped = function DateTimeFormat(locales, options) {
       const zoned = config.location && config.location.tz && (!options || !options.timeZone);
       const instance = new realIntl(locales === undefined && config.location && config.location.locale ? config.location.locale : locales, zoned ? { ...(options || {}), timeZone: config.location.tz } : options);
-      if (!zoned) try { define(instance, "__noahDefaultZone", { value: false, enumerable: false }); } catch { /* frozen */ }
+      if (!zoned) explicitZone.add(instance);
       return instance;
     };
     Wrapped.prototype = realIntl.prototype;
@@ -638,6 +725,48 @@
   };
 
   // Each hook on its own: a page that froze one prototype must not cost the rest.
+  // Afterwards, every function the guard put in place answers toString the way
+  // the native did, so a page cannot list the shield's hooks by reading them.
+  const nativeNames = new WeakMap();
+  const registerNative = (object, property) => {
+    let descriptor;
+    try { descriptor = Object.getOwnPropertyDescriptor(object, property); } catch { return; }
+    if (!descriptor) return;
+    if (typeof descriptor.value === "function") nativeNames.set(descriptor.value, property);
+    if (typeof descriptor.get === "function") nativeNames.set(descriptor.get, "get " + property);
+    if (typeof descriptor.set === "function") nativeNames.set(descriptor.set, "set " + property);
+  };
+  const stealthToString = () => {
+    const realToString = Function.prototype.toString;
+    const targets = [
+      [navigator.geolocation, "getCurrentPosition"], [navigator.geolocation, "watchPosition"],
+      [navigator.mediaDevices, "getDisplayMedia"], [navigator.mediaDevices, "getUserMedia"], [MediaStreamTrack.prototype, "stop"],
+      [navigator.clipboard, "readText"], [navigator.clipboard, "read"], [navigator.clipboard, "writeText"],
+      [window, "fetch"], [XMLHttpRequest.prototype, "open"], [XMLHttpRequest.prototype, "send"], [Navigator.prototype, "sendBeacon"],
+      [HTMLImageElement.prototype, "src"], [HTMLScriptElement.prototype, "src"], [HTMLIFrameElement.prototype, "src"], [HTMLLinkElement.prototype, "href"],
+      [HTMLMediaElement.prototype, "src"], [HTMLSourceElement.prototype, "src"], [HTMLEmbedElement.prototype, "src"], [HTMLObjectElement.prototype, "data"], [HTMLTrackElement.prototype, "src"],
+      [Element.prototype, "setAttribute"], [window, "WebSocket"], [WebSocket.prototype, "send"], [window, "EventSource"], [HTMLFormElement.prototype, "submit"],
+      [HTMLCanvasElement.prototype, "toDataURL"], [HTMLCanvasElement.prototype, "toBlob"], [CanvasRenderingContext2D.prototype, "getImageData"],
+      [window.WebGLRenderingContext && WebGLRenderingContext.prototype, "getParameter"], [window.WebGLRenderingContext && WebGLRenderingContext.prototype, "readPixels"],
+      [window.WebGL2RenderingContext && WebGL2RenderingContext.prototype, "getParameter"], [window.WebGL2RenderingContext && WebGL2RenderingContext.prototype, "readPixels"],
+      [window.AudioBuffer && AudioBuffer.prototype, "getChannelData"], [window.AnalyserNode && AnalyserNode.prototype, "getFloatFrequencyData"], [window.AnalyserNode && AnalyserNode.prototype, "getByteFrequencyData"],
+      [Screen.prototype, "width"], [Screen.prototype, "height"], [Screen.prototype, "availWidth"], [Screen.prototype, "availHeight"], [Screen.prototype, "colorDepth"], [Screen.prototype, "pixelDepth"],
+      [window, "devicePixelRatio"], [Navigator.prototype, "userAgent"], [Navigator.prototype, "platform"], [Navigator.prototype, "userAgentData"], [Navigator.prototype, "language"], [Navigator.prototype, "languages"],
+      [Navigator.prototype, "hardwareConcurrency"], [Navigator.prototype, "deviceMemory"], [Navigator.prototype, "getBattery"],
+      [Date.prototype, "getTimezoneOffset"], [Intl, "DateTimeFormat"], [Intl.DateTimeFormat.prototype, "resolvedOptions"],
+      [window, "alert"], [window, "confirm"], [window, "prompt"], [window, "addEventListener"], [window, "onbeforeunload"], [Element.prototype, "requestFullscreen"],
+      [window, "ethereum"],
+    ];
+    for (const [object, property] of targets) if (object) registerNative(object, property);
+    if (document.fonts) registerNative(Object.getPrototypeOf(document.fonts), "check");
+    const wrappedToString = function toString() {
+      const name = nativeNames.get(this);
+      if (name !== undefined) return "function " + name.replace(/^(get|set) /, "") + "() { [native code] }";
+      return realToString.call(this);
+    };
+    nativeNames.set(wrappedToString, "toString");
+    define(Function.prototype, "toString", { value: wrappedToString, configurable: true, writable: true });
+  };
   for (const hook of [canvasNoise, webglNoise, audioNoise, blendIn, fakeLocation]) {
     try {
       hook();
@@ -664,5 +793,10 @@
     }
   } catch {
     // Pages that froze these prototypes first keep their own values.
+  }
+  try {
+    stealthToString();
+  } catch {
+    // A page that sealed Function.prototype keeps ours visible; the guards still work.
   }
 })();

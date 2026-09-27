@@ -7168,11 +7168,14 @@ impl Workspace {
                     .flex_col()
                     .justify_end()
                     .gap_2()
-                    .children(
-                        self.notifications
-                            .iter()
-                            .map(|(_, notification)| notification.clone().into_any_element()),
-                    ),
+                    .children(self.notifications.iter().map(|(_, notification)| {
+                        // Each card fades up once, keyed by its view, so a card
+                        // already on screen stays still when another arrives.
+                        ui::animation::fade_in(
+                            div().child(notification.clone()),
+                            ("notification-arrival", notification.entity_id()),
+                        )
+                    })),
             )
         }
     }

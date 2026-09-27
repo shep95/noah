@@ -3,6 +3,13 @@
 // still work, one after another, without ever pressing the order button.
 (() => {
   "use strict";
+
+  // The shield's own elements carry the session's tag; in stealth mode it is a
+  // name no page can look for.
+  function tagName(kind) {
+    const tag = (window.__noahShieldSiteConfig && window.__noahShieldSiteConfig.tag) || "noah-shield";
+    return tag + "-" + kind;
+  }
   if (window.top !== window) return;
   const api = globalThis.chrome ?? globalThis.browser;
   const send = (message) => new Promise((resolve) => {
@@ -126,7 +133,7 @@
   let cardBody = null;
   function card() {
     if (host && host.isConnected) return cardBody;
-    host = document.createElement("noah-shield-shop");
+    host = document.createElement(tagName("shop"));
     const shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
@@ -153,6 +160,10 @@
       button.act:hover { background: #222; }
       .bar { height: 3px; background: #1c1c1c; border-radius: 2px; overflow: hidden; }
       .bar i { display: block; height: 100%; background: #cfcfcf; width: 0; transition: width .3s; }
+
+      @keyframes ns-arrive { from { opacity: 0; } to { opacity: 1; } }
+      :host { animation: ns-arrive .22s ease-out; }
+      @media (prefers-reduced-motion: reduce) { :host, * { animation: none !important; transition: none !important; } }
     `;
     const box = document.createElement("div");
     box.className = "card";

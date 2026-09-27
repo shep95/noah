@@ -134,6 +134,8 @@ Shield.deepMerge = function deepMerge(base, extra) {
   const merged = { ...base };
   if (extra && typeof extra === "object") {
     for (const key of Object.keys(extra)) {
+      // Never let a settings blob reach into prototypes.
+      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
       merged[key] = key in base ? deepMerge(base[key], extra[key]) : extra[key];
     }
   }

@@ -521,7 +521,7 @@ impl Workspace {
                         )
                     })
                     .when_some(badge.filter(|_| !silent), |this, _| {
-                        this.child(
+                        this.child(ui::animation::fade_in(
                             div()
                                 .absolute()
                                 .top(px(4.))
@@ -533,7 +533,8 @@ impl Workspace {
                                 } else {
                                     colors.text_muted
                                 }),
-                        )
+                            (gpui::ElementId::from("room-badge"), room.label()),
+                        ))
                     })
                     .child(
                         IconButton::new(room.label(), room.icon())

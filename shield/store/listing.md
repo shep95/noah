@@ -96,7 +96,8 @@ working coupons while shopping.
 
 ## Firefox (addons.mozilla.org)
 
-* Upload `dist/noah-shield-firefox.zip` (built by `script/build-shield`). The id is `shield@noah.asherin.com`; the update address in the manifest is `https://noah.asherin.com/shield/updates.json`.
+* Upload `dist/noah-shield-firefox.zip` (built by `script/build-shield`; it passes `web-ext lint`). The id is `shield@noah.asherin.com`. The listed package carries no update address, as Mozilla requires; `dist/noah-shield-firefox.xpi` is the self-hosted variant with `https://noah.asherin.com/shield/updates.json`.
+* The linter warns about "coinminer usage" in `rules/trackers.json`: those are the names of miners being *blocked*, from EasyPrivacy. Say so in the reviewer notes.
 * For self-distribution with one-click install from the site instead of a listing: sign once with your AMO credentials and host the result:
 
       npx web-ext sign --source-dir <unzipped firefox package> --channel unlisted \

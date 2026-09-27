@@ -21,6 +21,9 @@ use sha2::{Digest as _, Sha256};
 pub const FOLDER_NAME: &str = "asherin.eye";
 /// ADAM's Vite config falls back to this port when `PORT` isn't set.
 pub const DEFAULT_PORT: u16 = 4173;
+/// Several times the tarball's real size; a download past this is cut off
+/// rather than left to fill the disk.
+const MAX_TARBALL_BYTES: u64 = 512 * 1024 * 1024;
 /// Becomes the copy's AGENTS.md, which shepherd reads as the project's
 /// instructions.
 pub const GUIDE: &str = include_str!("../../../assets/shepherd/asherin_eye_guide.md");
@@ -175,6 +178,10 @@ async fn download(
             .await
             .with_context(|| format!("couldn't write {}", destination.display()))?;
         received += read as u64;
+        ensure!(
+            received <= MAX_TARBALL_BYTES,
+            "the asherin.eye download is larger than {MAX_TARBALL_BYTES} bytes, so it was stopped"
+        );
         on_progress(received, total);
     }
     file.flush().await?;

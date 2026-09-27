@@ -10,29 +10,40 @@ const Shield = (globalThis.Shield = globalThis.Shield || {});
 
 // Session storage has no transactions; the writers queue behind each other
 // so two requests arriving together do not overwrite each other's note.
-let noteQueue = Promise.resolve();
+let pendingNotes = [];
+let flushTimer = null;
+let flushing = Promise.resolve();
 Shield.noteThirdParty = function noteThirdParty(tabId, tabSite, host, blocked) {
-  noteQueue = noteQueue.then(() => noteThirdPartyNow(tabId, tabSite, host, blocked)).catch(() => {});
-  return noteQueue;
+  if (tabId < 0 || !host || pendingNotes.length > 5000) return flushing;
+  pendingNotes.push({ tabId, tabSite, host, blocked });
+  if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flushing = flushing.then(flushNotes).catch(() => {}); }, 500);
+  return flushing;
 };
-async function noteThirdPartyNow(tabId, tabSite, host, blocked) {
-  if (tabId < 0 || !host) return;
+async function flushNotes() {
+  const notes = pendingNotes;
+  pendingNotes = [];
+  if (!notes.length) return;
   const session = await Shield.api.storage.session.get("tabHosts");
   const tabHosts = session.tabHosts || {};
-  const entry = tabHosts[tabId] || { site: tabSite, hosts: {} };
-  if (entry.site !== tabSite) {
-    entry.site = tabSite;
-    entry.hosts = {};
+  for (const { tabId, tabSite, host, blocked } of notes) {
+    const entry = tabHosts[tabId] || { site: tabSite, hosts: {} };
+    if (entry.site !== tabSite) {
+      entry.site = tabSite;
+      entry.hosts = {};
+    }
+    if (!entry.hosts[host] && Object.keys(entry.hosts).length >= 400) continue;
+    const record = entry.hosts[host] || { count: 0, blocked: 0 };
+    record.count++;
+    if (blocked) record.blocked++;
+    entry.hosts[host] = record;
+    tabHosts[tabId] = entry;
   }
-  const record = entry.hosts[host] || { count: 0, blocked: 0 };
-  record.count++;
-  if (blocked) record.blocked++;
-  entry.hosts[host] = record;
-  tabHosts[tabId] = entry;
   await Shield.api.storage.session.set({ tabHosts });
 }
+Shield.flushNotes = () => { if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; } flushing = flushing.then(flushNotes).catch(() => {}); return flushing; };
 
 Shield.tabHosts = async function tabHosts(tabId) {
+  await Shield.flushNotes();
   const session = await Shield.api.storage.session.get("tabHosts");
   const entry = (session.tabHosts || {})[tabId];
   return entry ? entry.hosts : {};

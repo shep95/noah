@@ -964,6 +964,11 @@ async fn download_release(
         }
         target_file.write_all(&buffer[..bytes_read]).await?;
         downloaded_bytes += bytes_read as u64;
+        anyhow::ensure!(
+            downloaded_bytes <= noah_release::MAX_DOWNLOAD_BYTES,
+            "the update is larger than {} bytes, so the download was stopped",
+            noah_release::MAX_DOWNLOAD_BYTES
+        );
 
         if let Some(total_bytes) = total_bytes {
             let fraction = (downloaded_bytes as f32 / total_bytes as f32).clamp(0.0, 1.0);

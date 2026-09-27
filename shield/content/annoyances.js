@@ -75,7 +75,7 @@
   let overlaysRemoved = 0;
   function removeOverlays() {
     const candidates = Array.from(document.querySelectorAll("body *")).filter((element) => {
-      if (element.tagName === "NOAH-SHIELD-SHOP" || element.tagName === "NOAH-SHIELD-BAR" || element.tagName === "NOAH-SHIELD-NOTICE" || element.tagName === "NOAH-SHIELD-TOAST" || /^NS-/.test(element.tagName)) return false;
+      if (/^(NOAH-SHIELD|NS-[0-9A-F]{8})-(SHOP|BAR|NOTICE|TOAST)$/.test(element.tagName)) return false;
       const style = getComputedStyle(element);
       if (style.position !== "fixed" && style.position !== "sticky" && style.position !== "absolute") return false;
       const zIndex = parseInt(style.zIndex, 10);
@@ -89,7 +89,6 @@
     });
     if (!candidates.length) return;
     for (const element of candidates) {
-      element.setAttribute("data-noah-shield", "overlay");
       element.style.setProperty("display", "none", "important");
       overlaysRemoved++;
     }

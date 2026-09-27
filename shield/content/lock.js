@@ -3,6 +3,13 @@
 // it is not a vault, and it says so.
 (() => {
   "use strict";
+
+  // The shield's own elements carry the session's tag; in stealth mode it is a
+  // name no page can look for.
+  function tagName(kind) {
+    const tag = (window.__noahShieldSiteConfig && window.__noahShieldSiteConfig.tag) || "noah-shield";
+    return tag + "-" + kind;
+  }
   if (window.top !== window) return;
   const api = globalThis.chrome ?? globalThis.browser;
   const send = (message) => new Promise((resolve) => {
@@ -21,7 +28,7 @@
   let lastActivity = Date.now();
   function showCurtain() {
     if (curtain) return;
-    curtain = document.createElement("noah-shield-notice");
+    curtain = document.createElement(tagName("notice"));
     const shadow = curtain.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
@@ -31,6 +38,10 @@
       p { margin: 0 0 18px; color: #9aa298; font: 13px -apple-system, "Segoe UI", system-ui, sans-serif; }
       input { font: 22px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .3em; text-align: center; width: 180px; padding: 8px; border-radius: 10px; border: 1px solid rgba(180,210,190,.16); background: #0b0e0c; color: #f1f4ef; }
       .bad { color: #e8b4a8; }
+
+      @keyframes ns-arrive { from { opacity: 0; } to { opacity: 1; } }
+      :host { animation: ns-arrive .22s ease-out; }
+      @media (prefers-reduced-motion: reduce) { :host, * { animation: none !important; transition: none !important; } }
     `;
     const card = document.createElement("div");
     card.className = "card";

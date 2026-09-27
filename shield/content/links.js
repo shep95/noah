@@ -89,7 +89,6 @@
     const cleaned = clean(anchor.href);
     if (cleaned !== anchor.href) {
       anchor.href = cleaned;
-      anchor.setAttribute("data-noah-shield", "cleaned");
     }
     if (anchor.hasAttribute("ping")) anchor.removeAttribute("ping");
     // Google, Bing and others swap the href on mousedown; the copies they keep are dropped.
@@ -120,17 +119,22 @@
   }
 
   // ---- anti-dox: your name blurred wherever it appears -------------------------
+  const blurred = new WeakSet();
   function blurNames(names) {
     if (!names.length) return;
     const pattern = new RegExp(names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i");
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const hits = [];
     let node;
+    const alreadyBlurred = (element) => {
+      for (let current = element; current; current = current.parentElement) if (blurred.has(current)) return true;
+      return false;
+    };
     while ((node = walker.nextNode())) {
-      if (pattern.test(node.nodeValue) && node.parentElement && !node.parentElement.closest("[data-noah-blur]")) hits.push(node.parentElement);
+      if (pattern.test(node.nodeValue) && node.parentElement && !alreadyBlurred(node.parentElement)) hits.push(node.parentElement);
     }
     for (const element of hits) {
-      element.setAttribute("data-noah-blur", "");
+      blurred.add(element);
       element.style.setProperty("filter", "blur(6px)", "important");
       element.title = "noah shield blurred your name here; hover in the shield popup to show it";
     }

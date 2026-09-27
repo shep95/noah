@@ -68,7 +68,7 @@ function render(state) {
       if (!score || !score.grade) return;
       const grade = byId("grade");
       grade.textContent = score.grade;
-      grade.className = "grade " + score.grade.toLowerCase();
+      grade.className = "grade in " + score.grade.toLowerCase();
       byId("score").textContent = `${score.score}/100 · ${score.thirdParties} third parties, ${score.advertising} of them advertising, ${score.cookies} cookies${score.https ? "" : ", no https"}`;
     });
     Shield.send({ type: "media.list" }).then((media) => {

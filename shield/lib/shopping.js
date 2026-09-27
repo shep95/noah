@@ -193,6 +193,8 @@ Shield.searchQuery = function searchQuery(product) {
 };
 
 async function fetchPage(url) {
+  // Store lookups and watched pages are public web addresses, never the local network.
+  if (!/^https?:\/\//i.test(String(url)) || Shield.isLocalHost(Shield.hostOf(url))) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
   try {

@@ -75,7 +75,10 @@ Shield.refreshFeeds = async function refreshFeeds() {
   for (const name of Shield.FEEDS) {
     const entry = feeds[name] || {};
     try {
-      entry.data = await Shield.fetchSignedFeed(name);
+      const fresh = await Shield.fetchSignedFeed(name);
+      // An older signed copy is still refused: a replayed feed cannot roll the shield back.
+      if (entry.data && Date.parse(fresh.generated) < Date.parse(entry.data.generated)) throw new Error(name + ": older than the copy already held");
+      entry.data = fresh;
       entry.fetched = new Date().toISOString();
       entry.error = null;
     } catch (error) {
@@ -103,7 +106,7 @@ Shield.updateStatus = async function updateStatus() {
     running,
     latest: latest.version,
     newer: Shield.compareVersions(latest.version, running) > 0,
-    page: latest.page || Shield.SITE + "/shield",
+    page: typeof latest.page === "string" && latest.page.startsWith(Shield.SITE + "/") ? latest.page : Shield.SITE + "/shield",
     notes: latest.notes || "",
   };
 };

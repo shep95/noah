@@ -193,8 +193,9 @@ async function applyParentalNow(settings) {
 
 Shield.hashPin = async function hashPin(pin) {
   const salt = await Shield.installSalt();
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + "|pin|" + pin));
-  return Shield.hex(new Uint8Array(digest));
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: new TextEncoder().encode(salt + "|pin"), iterations: 200000, hash: "SHA-256" }, material, 256);
+  return Shield.hex(new Uint8Array(bits));
 };
 
 // ---- weekly report ----------------------------------------------------------------------------------
@@ -284,18 +285,22 @@ Shield.SHORTENERS = /(^|\.)(bit\.ly|t\.co|tinyurl\.com|goo\.gl|ow\.ly|is\.gd|buf
 // The final address behind a link. One request follows the redirects, so the
 // shortener counts a click; nothing else is sent.
 Shield.unshorten = async function unshorten(url) {
+  if (Shield.isLocalHost(Shield.hostOf(url))) return { final: url, hops: [url], error: "local addresses are not followed" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   const hops = [url];
-  try {
-    const response = await fetch(url, { method: "HEAD", redirect: "follow", credentials: "omit", signal: controller.signal });
+  // A chain that ends on this computer or the local network is reported and
+  // not read: a shortener must not become a way onto a router's admin page.
+  const landed = (response) => {
     if (response.url && response.url !== url) hops.push(response.url);
+    if (Shield.isLocalHost(Shield.hostOf(response.url || url))) return { final: response.url || url, hops, error: "the chain ends at a local address, which is not followed" };
     return { final: response.url || url, hops, status: response.status, redirected: response.redirected };
+  };
+  try {
+    return landed(await fetch(url, { method: "HEAD", redirect: "follow", credentials: "omit", signal: controller.signal }));
   } catch (error) {
     try {
-      const response = await fetch(url, { method: "GET", redirect: "follow", credentials: "omit", signal: controller.signal });
-      if (response.url && response.url !== url) hops.push(response.url);
-      return { final: response.url || url, hops, status: response.status, redirected: response.redirected };
+      return landed(await fetch(url, { method: "GET", redirect: "follow", credentials: "omit", signal: controller.signal }));
     } catch (again) {
       return { final: url, hops, error: String(again.message || again) };
     }

@@ -4,6 +4,13 @@
 // in a closed shadow root, so page scripts cannot press its buttons.
 (() => {
   "use strict";
+
+  // The shield's own elements carry the session's tag; in stealth mode it is a
+  // name no page can look for.
+  function tagName(kind) {
+    const tag = (window.__noahShieldSiteConfig && window.__noahShieldSiteConfig.tag) || "noah-shield";
+    return tag + "-" + kind;
+  }
   const api = globalThis.chrome ?? globalThis.browser;
   let nonce = null;
   let siteConfig = null;
@@ -93,12 +100,16 @@
     small { display: block; color: #9aa298; }
     code { display: block; margin-top: 4px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9cfc7; word-break: break-all; }
     .toast { position: fixed; left: 18px; bottom: 18px; padding: 10px 14px; border-radius: 10px; background: #0b0e0c; color: #d8ddd6; border: 1px solid rgba(180,210,190,.12); font: 13px -apple-system, "Segoe UI", system-ui, sans-serif; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+
+      @keyframes ns-arrive { from { opacity: 0; } to { opacity: 1; } }
+      :host { animation: ns-arrive .22s ease-out; }
+      @media (prefers-reduced-motion: reduce) { :host, * { animation: none !important; transition: none !important; } }
   `;
 
   let host = null;
   function showBar(id, kind, site, detail) {
     if (host) host.remove();
-    host = document.createElement("noah-shield-bar");
+    host = document.createElement(tagName("bar"));
     const shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = STYLE;
@@ -143,7 +154,7 @@
   let toastHost = null;
   function toast(message) {
     if (toastHost) toastHost.remove();
-    toastHost = document.createElement("noah-shield-toast");
+    toastHost = document.createElement(tagName("toast"));
     const shadow = toastHost.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = STYLE;

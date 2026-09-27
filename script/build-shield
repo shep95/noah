@@ -54,16 +54,18 @@ manifest["browser_specific_settings"] = {
     "gecko": {
         "id": "shield@noah.asherin.com",
         "strict_min_version": "128.0",
-        "update_url": "https://noah.asherin.com/shield/updates.json",
         "data_collection_permissions": {"required": ["none"]},
     }
 }
 json.dump(manifest, open(sys.argv[2], "w"), indent=2)
+# The self-hosted copy updates itself from the site; a listed add-on may not carry that address.
+manifest["browser_specific_settings"]["gecko"]["update_url"] = "https://noah.asherin.com/shield/updates.json"
+json.dump(manifest, open(sys.argv[2] + ".selfhosted", "w"), indent=2)
 PY
-(cd "$stage/firefox" && rm -f "$OLDPWD/dist/noah-shield-firefox.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-firefox.zip" .)
-# The same bytes as an .xpi: what addons.mozilla.org signs, and what Firefox
-# installs from the site in one click once it carries that signature.
-cp dist/noah-shield-firefox.zip dist/noah-shield-firefox.xpi
+(cd "$stage/firefox" && rm -f "$OLDPWD/dist/noah-shield-firefox.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-firefox.zip" . -x "manifest.json.selfhosted")
+# The self-hosted .xpi: what you sign with web-ext for one-click installs from the site.
+mv "$stage/firefox/manifest.json.selfhosted" "$stage/firefox/manifest.json"
+(cd "$stage/firefox" && rm -f "$OLDPWD/dist/noah-shield-firefox.xpi" && zip -qr -X "$OLDPWD/dist/noah-shield-firefox.xpi" .)
 
 # Safari: Xcode converts the Chromium layout; the converter dislikes only the
 # minimum Chrome version.

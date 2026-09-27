@@ -40,6 +40,17 @@ async function noteUpdate(status) {
   await notify("shield-update", "noah shield " + status.latest + " is out", "You run " + status.running + ". Open the shield to get it.");
 }
 
+if (api.notifications && api.notifications.onClicked) {
+  api.notifications.onClicked.addListener((id) => {
+    (async () => {
+      const session = await api.storage.session.get("reminderLinks");
+      const url = (session.reminderLinks || {})[id];
+      if (url && /^https?:\/\//.test(url)) await api.tabs.create({ url });
+      api.notifications.clear(id);
+    })().catch(() => {});
+  });
+}
+
 api.runtime.onInstalled.addListener((details) => {
   applyAll("install").catch((error) => console.error("shield: install", error));
   if (details.reason === "install") {
@@ -94,8 +105,11 @@ api.alarms.onAlarm.addListener((alarm) => {
     } else if (alarm.name.startsWith("reminder-")) {
       const reminder = await Shield.dueReminder(alarm.name);
       if (reminder) {
-        await notify(reminder.id, reminder.kind === "trial" ? "A trial is about to charge" : reminder.kind === "warranty" ? "A warranty is ending" : "You asked to be reminded", reminder.label);
-        await api.tabs.create({ url: reminder.url, active: false }).catch(() => {});
+        const session = await api.storage.session.get("reminderLinks");
+        const reminderLinks = session.reminderLinks || {};
+        reminderLinks[reminder.id] = reminder.url;
+        await api.storage.session.set({ reminderLinks });
+        await notify(reminder.id, reminder.kind === "trial" ? "A trial is about to charge" : reminder.kind === "warranty" ? "A warranty is ending" : "You asked to be reminded", reminder.label + " (press to open)");
       }
     } else if (alarm.name === "tunnel" && settings.tunnel.enabled) {
       const before = await Shield.tunnelStatus();
@@ -197,6 +211,25 @@ async function onceAllowed(site, kind) {
   const grants = session.captureOnce || {};
   const grant = grants[site + "|" + kind];
   return Boolean(grant && Date.now() - grant < 10 * 60 * 1000);
+}
+
+// Token buckets per tab and kind: a page that floods the worker with lookups
+// (breach prefixes, store searches) gets a quiet refusal, not a queue that
+// runs on its behalf.
+const rateBuckets = new Map();
+function allowRate(kind, sender, perMinute) {
+  const key = kind + "|" + (sender && sender.tab ? sender.tab.id : "popup");
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start > 60000) {
+    bucket = { start: now, used: 0 };
+    rateBuckets.set(key, bucket);
+  }
+  if (rateBuckets.size > 2000) {
+    for (const [otherKey, other] of rateBuckets) if (now - other.start > 60000) rateBuckets.delete(otherKey);
+  }
+  bucket.used += 1;
+  return bucket.used <= perMinute;
 }
 
 const handlers = {
@@ -557,6 +590,7 @@ const handlers = {
     return { ok: true };
   },
   async "safety.event"(message, sender) {
+    if (!allowRate("safety", sender, 120)) return { ok: false, limited: true };
     const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads"]);
     const kind = kinds.has(message.kind) ? message.kind : "other";
     await Shield.count(kind, Math.min(50, Math.max(1, Number(message.amount) || 1)), sender.tab ? sender.tab.id : null);
@@ -586,9 +620,10 @@ const handlers = {
     const site = Shield.siteOf(Shield.hostOf(sender.url || ""));
     return Shield.passwordSeen(String(message.hash || ""), site);
   },
-  async "password.breach"(message) {
+  async "password.breach"(message, sender) {
     const settings = await Shield.loadSettings();
     if (settings.localOnly || !settings.security.breachCheck) return { count: 0, skipped: true };
+    if (!allowRate("breach", sender, 5)) return { count: 0, skipped: true, limited: true };
     try {
       return { count: await Shield.breachCount(String(message.prefix || ""), String(message.suffix || "")) };
     } catch (error) {
@@ -633,7 +668,8 @@ const handlers = {
     if (!message.keep) await Shield.count("downloads", 1);
     return { ok: true };
   },
-  async "shop.compare"(message) {
+  async "shop.compare"(message, sender) {
+    if (!allowRate("shop", sender, 6)) return { error: "too many lookups", limited: true };
     const product = message.product || {};
     if (typeof product.title !== "string" || product.title.length < 4) return { error: "no product" };
     return Shield.compareProduct({ ...product, title: product.title.slice(0, 300) });
@@ -687,12 +723,12 @@ const handlers = {
   },
   async "shop.storeCheck"(message, sender) {
     const settings = await Shield.loadSettings();
-    if (settings.localOnly) return { verdict: "unknown", warnings: [], days: null };
+    if (settings.localOnly || !allowRate("shop", sender, 6)) return { verdict: "unknown", warnings: [], days: null };
     return Shield.storeCheck(Shield.hostOf(sender.url || ""), { tooGood: Boolean(message.tooGood), http: Boolean(message.http) });
   },
-  async "shop.reddit"(message) {
+  async "shop.reddit"(message, sender) {
     const settings = await Shield.loadSettings();
-    if (settings.localOnly) return { threads: [], searchUrl: null };
+    if (settings.localOnly || !allowRate("shop", sender, 6)) return { threads: [], searchUrl: null };
     return Shield.redditThreads(String(message.query || "").slice(0, 120));
   },
   async "shop.remind"(message) {
@@ -958,6 +994,33 @@ if (api.downloads && api.downloads.onCreated) {
 // The handlers by name, for the shield's own pages and tests running inside the worker.
 globalThis.handlersProxy = (type, message = {}) => handlers[type]({ ...message, type }, { url: api.runtime.getURL("background.js") });
 
+function sameSiteAsSender(url, sender) {
+  const senderSite = Shield.siteOf(Shield.hostOf(sender.url || ""));
+  return Boolean(senderSite) && Shield.siteOf(Shield.hostOf(String(url || ""))) === senderSite;
+}
+
+// What a page's content script may say, and about what: its own tab, its own
+// site, its own addresses. Nothing it sends can reach into another tab.
+function boundToSender(message, sender) {
+  const site = Shield.siteOf(Shield.hostOf(sender.url || ""));
+  switch (message.type) {
+    case "site.score":
+      return sender.tab ? { ...message, tabId: sender.tab.id, url: sender.tab.url } : null;
+    case "lookalike.allow":
+      return message.site === site ? message : null;
+    case "shop.price":
+    case "shop.watch":
+      return message.product && sameSiteAsSender(message.product.url, sender) ? message : null;
+    case "shop.unwatch":
+    case "shop.remind":
+      return sameSiteAsSender(message.url, sender) ? message : null;
+    case "shop.receipt":
+      return message.receipt && sameSiteAsSender(message.receipt.url, sender) ? { ...message, receipt: { ...message.receipt, site } } : null;
+    default:
+      return message;
+  }
+}
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = message && handlers[message.type];
   if (!handler) {
@@ -971,6 +1034,13 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;
+  }
+  if (fromPage) {
+    message = boundToSender(message, sender);
+    if (!message) {
+      sendResponse({ error: "not about this page" });
+      return false;
+    }
   }
   handler(message, sender)
     .then((result) => sendResponse(result === undefined ? { ok: true } : result))

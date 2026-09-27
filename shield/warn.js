@@ -26,11 +26,14 @@ async function closeThisTab() {
 }
 
 async function lookalike() {
-  const url = params.get("url") || "";
+  const url = /^https?:\/\//i.test(params.get("url") || "") ? params.get("url") : "";
   const host = Shield.hostOf(url);
-  const brand = params.get("brand") || "";
-  const real = params.get("real") || "";
-  const reason = params.get("reason") || "";
+  const known = Shield.BRANDS.find((entry) => entry.name === params.get("brand"));
+  // Only a brand and a real domain from the shield's own table can be offered; a
+  // crafted address to this page cannot point "the real site" anywhere else.
+  const brand = known ? known.name : "a known brand";
+  const real = known && known.domains.includes(params.get("real")) ? params.get("real") : known ? known.domains[0] : "";
+  const reason = (params.get("reason") || "").slice(0, 80);
   title.textContent = `This is not ${brand}.`;
   title.className = "warn";
   paragraph(`${host} looks like ${brand} (${reason}), but ${brand} lives at ${real}. Pages like this exist to take a password or a card number.`);
@@ -38,12 +41,14 @@ async function lookalike() {
   code.textContent = url;
   const where = paragraph("You were going to: ");
   where.append(code);
-  button("Go to the real " + real, true, () => { location.replace("https://" + real); });
+  if (real) button("Go to the real " + real, true, () => { location.replace("https://" + real); });
   button("Back to safety", false, () => closeThisTab());
-  button("I know this site, continue", false, async () => {
-    await Shield.send({ type: "lookalike.allow", site: Shield.siteOf(host) });
-    location.replace(url);
-  });
+  if (url) {
+    button("I know this site, continue", false, async () => {
+      await Shield.send({ type: "lookalike.allow", site: Shield.siteOf(host) });
+      location.replace(url);
+    });
+  }
 }
 
 async function download() {

@@ -3,24 +3,40 @@ body.options header { padding: 18px 4px 10px; }
 body.options header h1 { font-size: 20px; }
 main { display: grid; gap: 12px; }
 body.options section { margin: 0; padding: 16px 18px; gap: 10px; }
-h3 { font-size: 13px; margin: 8px 0 0; color: #cfcfcf; }
+h3 { font: 400 13px/1.3 var(--body); margin: 8px 0 0; color: var(--sub); }
 .grid { display: grid; gap: 8px 16px; }
 .grid.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 640px) { .grid.two { grid-template-columns: 1fr; } }
-label { display: grid; gap: 4px; font-size: 12px; color: #bdbdbd; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--sub); }
 label.switch { display: flex; color: var(--text); font-size: 13px; }
-input[type="text"], input[type="number"], input[type="password"], input:not([type]), textarea, select {
-  font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #101010; color: var(--text);
+input[type="text"], input[type="number"], input[type="password"], input[type="url"], input[type="email"], input:not([type]), textarea, select {
+  font: inherit; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line-mid); background: var(--raise); color: var(--text);
+  transition: border-color var(--quick);
 }
-textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+input:hover, textarea:hover { border-color: rgba(180, 210, 190, 0.22); }
+input:focus-visible, textarea:focus-visible { outline: none; border-color: rgba(114, 168, 104, 0.5); }
+input::placeholder, textarea::placeholder { color: var(--faint); }
+textarea { resize: vertical; font-family: var(--mono); font-size: 12px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 500; }
+th { color: var(--muted); font-weight: 400; letter-spacing: 0.04em; }
+tbody tr, tr { transition: background var(--quick); }
+tr:hover td { background: rgba(180, 210, 190, 0.025); }
 td.actions { white-space: nowrap; text-align: right; }
 .bad { color: var(--bad); font-size: 12px; }
 .level-watch { color: var(--bad); }
 .level-note { color: var(--warn); }
 .level-quiet { color: var(--muted); }
-details summary { cursor: pointer; color: #cfcfcf; font-size: 13px; }
-details form { margin-top: 10px; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #1a1a1a; padding: 1px 5px; border-radius: 5px; }
+details summary { cursor: pointer; color: var(--sub); font-size: 13px; }
+details form { margin-top: 10px; animation: arrive var(--calm) var(--ease) both; }
+code { font-family: var(--mono); background: rgba(180, 210, 190, 0.06); padding: 1px 5px; border-radius: 5px; }
+input[type="file"] { color: var(--muted); font-size: 12px; }
+input[type="file"]::file-selector-button {
+  font: 12px var(--body); padding: 5px 11px; margin-right: 10px; border-radius: 999px; border: 1px solid var(--line-mid);
+  background: transparent; color: var(--sub); cursor: pointer; transition: background var(--quick), color var(--quick);
+}
+input[type="file"]::file-selector-button:hover { background: rgba(180, 210, 190, 0.06); color: #f1f4ef; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

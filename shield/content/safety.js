@@ -3,6 +3,13 @@
 // hidden autofill fields, hidden third-party frames, fake support pages.
 (() => {
   "use strict";
+
+  // The shield's own elements carry the session's tag; in stealth mode it is a
+  // name no page can look for.
+  function tagName(kind) {
+    const tag = (window.__noahShieldSiteConfig && window.__noahShieldSiteConfig.tag) || "noah-shield";
+    return tag + "-" + kind;
+  }
   const api = globalThis.chrome ?? globalThis.browser;
   const send = (message) => new Promise((resolve) => {
     try {
@@ -29,7 +36,7 @@
   let noticeHost = null;
   function notice({ title, lines, buttons, tone }) {
     if (noticeHost) noticeHost.remove();
-    noticeHost = document.createElement("noah-shield-notice");
+    noticeHost = document.createElement(tagName("notice"));
     const shadow = noticeHost.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
@@ -41,6 +48,10 @@
       p { margin: 0 0 10px; color: #b9beb7; }
       .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
       button { font: 14px -apple-system, "Segoe UI", system-ui, sans-serif; padding: 10px 16px; border-radius: 10px; border: 1px solid rgba(180,210,190,.16); background: rgba(10,16,12,.9); color: #d8ddd6; cursor: pointer; }
+
+      @keyframes ns-arrive { from { opacity: 0; } to { opacity: 1; } }
+      :host { animation: ns-arrive .22s ease-out; }
+      @media (prefers-reduced-motion: reduce) { :host, * { animation: none !important; transition: none !important; } }
       button.primary { background: #5f8a58; border-color: #5f8a58; color: #f1f4ef; }
       button:hover { filter: brightness(1.15); }
       small { display: block; margin-top: 16px; font: 12px -apple-system, "Segoe UI", system-ui, sans-serif; color: #8f958d; }
@@ -121,17 +132,23 @@
   }
   async function hashPassword(password) {
     if (!salt) salt = (await send({ type: "password.salt" })).salt || "";
-    return (await digestHex("SHA-256", salt + "\n" + password)).slice(0, 32);
+    let digest = await digestHex("SHA-256", salt + "\n" + password);
+    for (let round = 0; round < 3000; round++) digest = await digestHex("SHA-256", salt + digest);
+    return digest.slice(0, 32);
   }
   async function sha1Hex(text) {
     return (await digestHex("SHA-1", text)).toUpperCase();
   }
 
+  // Only a digest is remembered, so a page that finds this scope in a heap
+  // snapshot learns nothing typed here.
   const checkedPasswords = new Set();
   async function passwordLeaving(input, config) {
     const password = input.value;
-    if (!password || password.length < 6 || checkedPasswords.has(password)) return;
-    checkedPasswords.add(password);
+    if (!password || password.length < 6) return;
+    const seenKey = await digestHex("SHA-256", "seen|" + password);
+    if (checkedPasswords.has(seenKey)) return;
+    checkedPasswords.add(seenKey);
     if (config.passwordHttp && location.protocol === "http:") {
       notice({
         tone: "warn",
@@ -175,6 +192,19 @@
     }
   }
 
+  let wipeTimer = null;
+  function watchPasswordCopies(config) {
+    if (!config.clipboardWipe) return;
+    document.addEventListener("copy", () => {
+      const active = document.activeElement;
+      if (!active || active.tagName !== "INPUT" || active.type !== "password") return;
+      clearTimeout(wipeTimer);
+      wipeTimer = setTimeout(() => {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText("").catch(() => {});
+      }, 30000);
+    }, true);
+  }
+
   function watchPasswords(config) {
     if (!config.passwordReuse && !config.passwordHttp && !config.breachCheck) return;
     document.addEventListener("focusout", (event) => {
@@ -204,14 +234,18 @@
     if (box.right < -100 || box.bottom < -100) return true;
     return false;
   }
+  // Marks live in WeakSets, never in attributes a page could query to learn
+  // the shield is here.
+  const handled = new WeakSet();
   let disarmed = 0;
   function disarmHiddenFields() {
-    for (const input of document.querySelectorAll("input:not([data-noah-shield])")) {
+    for (const input of document.querySelectorAll("input")) {
+      if (handled.has(input)) continue;
       const kind = (input.getAttribute("autocomplete") || input.name || input.id || "").toLowerCase();
       if (!AUTOFILL.test(kind) || input.type === "hidden") continue;
       if (!invisible(input)) continue;
       input.setAttribute("autocomplete", "off");
-      input.setAttribute("data-noah-shield", "hidden-field");
+      handled.add(input);
       disarmed++;
     }
     if (disarmed) {
@@ -221,13 +255,14 @@
   }
 
   // ---- hidden third-party frames -------------------------------------------
-  const FRAME_ALLOW = /(^|\.)(google\.com|gstatic\.com|recaptcha\.net|hcaptcha\.com|cloudflare\.com|stripe\.com|paypal\.com|paypalobjects\.com|braintreegateway\.com|adyen\.com|checkout\.com|klarna\.com|apple\.com|youtube\.com|youtube-nocookie\.com|vimeo\.com|facebook\.com|accounts\.google\.com|login\.microsoftonline\.com|okta\.com|auth0\.com|doubleclick\.net)$/;
+  const FRAME_ALLOW = /(^|\.)(google\.com|gstatic\.com|recaptcha\.net|hcaptcha\.com|cloudflare\.com|stripe\.com|paypal\.com|paypalobjects\.com|braintreegateway\.com|adyen\.com|checkout\.com|klarna\.com|apple\.com|youtube\.com|youtube-nocookie\.com|vimeo\.com|accounts\.google\.com|login\.microsoftonline\.com|okta\.com|auth0\.com)$/;
   function siteOf(name) {
     const parts = name.split(".");
     return parts.length <= 2 ? name : parts.slice(-2).join(".");
   }
   function checkFrames() {
-    for (const frame of document.querySelectorAll("iframe:not([data-noah-shield])")) {
+    for (const frame of document.querySelectorAll("iframe")) {
+      if (handled.has(frame)) continue;
       const source = frame.getAttribute("src") || "";
       if (!/^https?:/.test(source)) continue;
       let frameHost;
@@ -241,7 +276,7 @@
       const box = frame.getBoundingClientRect();
       const hidden = style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) < 0.05 || (box.width <= 2 && box.height <= 2) || box.right < -50;
       if (!hidden) continue;
-      frame.setAttribute("data-noah-shield", "hidden-frame");
+      handled.add(frame);
       frame.remove();
       send({ type: "safety.event", kind: "frames", detail: frameHost });
     }
@@ -290,6 +325,7 @@
     if (!config || config.trusted) return;
     checkLookalike(config);
     watchPasswords(config);
+    watchPasswordCopies(config);
     const sweep = () => {
       if (config.hiddenFields) disarmHiddenFields();
       if (config.hiddenFrames) checkFrames();

@@ -4,6 +4,13 @@
 // location and camera metadata before they upload.
 (() => {
   "use strict";
+
+  // The shield's own elements carry the session's tag; in stealth mode it is a
+  // name no page can look for.
+  function tagName(kind) {
+    const tag = (window.__noahShieldSiteConfig && window.__noahShieldSiteConfig.tag) || "noah-shield";
+    return tag + "-" + kind;
+  }
   const api = globalThis.chrome ?? globalThis.browser;
   const send = (message) => new Promise((resolve) => {
     try { api.runtime.sendMessage(message, (response) => { void api.runtime.lastError; resolve(response || {}); }); } catch { resolve({}); }
@@ -50,13 +57,17 @@
   let bar = null;
   function askPaste(found, onAllow) {
     if (bar) bar.remove();
-    bar = document.createElement("noah-shield-bar");
+    bar = document.createElement(tagName("bar"));
     const shadow = bar.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
       :host { all: initial; position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647; font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
       .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 18px; background: #0b0e0c; color: #d8ddd6; border-bottom: 1px solid rgba(180,210,190,.12); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
       .bar span { flex: 1 1 auto; min-width: 200px; } b { color: #fff; } small { display: block; color: #9aa298; }
+
+      @keyframes ns-arrive { from { opacity: 0; } to { opacity: 1; } }
+      :host { animation: ns-arrive .22s ease-out; }
+      @media (prefers-reduced-motion: reduce) { :host, * { animation: none !important; transition: none !important; } }
       button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(180,210,190,.16); background: #131916; color: #d8ddd6; cursor: pointer; }
       button.stop { border-color: #6b2a2a; background: #2a1414; }
     `;
