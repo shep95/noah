@@ -1002,6 +1002,7 @@ impl BoardView {
             .px_2()
             .py_1()
             .gap_1()
+            .overflow_x_hidden()
             .border_b_1()
             .border_color(colors.border_variant)
             .bg(colors.title_bar_background)
@@ -1036,6 +1037,7 @@ impl BoardView {
                 let current = self.color == name;
                 div()
                     .id(("board-color", index))
+                    .flex_none()
                     .size(px(14.0))
                     .rounded_full()
                     .bg(resolve_color(name, cx))
@@ -1083,6 +1085,8 @@ impl BoardView {
             .child(
                 div()
                     .id("board-zoom-reset")
+                    .flex_none()
+                    .whitespace_nowrap()
                     .px_1()
                     .min_w(px(40.0))
                     .text_xs()
