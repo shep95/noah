@@ -109,6 +109,36 @@ dot, one connect button, locations by country with flags, "fastest location"
 by default, Tor named as the anonymous route, and statuses in plain words. A
 disconnect can no longer be overwritten by an exit check that finishes late.
 
+## Stage 9: typing guard, site trust, network (shipped)
+
+Typing guard: what you typed and then deleted is remembered alongside what
+stayed, and neither leaves for another site before you submit; keystroke
+telemetry (the same few field names, many times, headed elsewhere) is stopped;
+a script from another site that listens to every key on the page is named the
+first time a key reaches it, and in strict mode never receives the keys. Site
+trust: the popup says, under the grade, whether the site is a lookalike, is
+plain http, and whether it has leaked its users' data before (Have I Been
+Pwned's public breach list by domain, kept a week; the domain is all that
+leaves), with "use a password you use nowhere else here" when it has. Network,
+on the tools page: where the traffic comes out, and whether another extension,
+a policy or a system proxy steers the route. The wifi's name, password and DNS
+are beyond an extension; noah's device room shows them, with a join code.
+
+## Stage 10: light, frequency, the look (shipped)
+
+Light: a veil over every page by scene (bright and sunny, in a dark room,
+restaurant, night) or by two sliders, dim and warm; the backlight itself is
+the device room's. Frequency: a tone from 20 to 963 Hz, or below 20 Hz a
+binaural beat (two carriers an ear apart), played under whatever is on from
+Chrome's offscreen document or Firefox's tools page, with presets from 2 Hz
+to 963 Hz and a volume. The look: one of noah's six pictures or one of your
+own (shrunk and re-encoded in the browser, never uploaded) sets the palette
+by rules people find easy on the eye: blacks that carry the picture's
+temperature, words that always read, one accent from the picture seen only
+where it matters. The shield's pages, the new tab page (picture, clock,
+search, today's numbers, a plain switch) and, on Firefox, the browser's own
+frame and toolbars wear it; Chrome and Edge let no extension recolor theirs.
+
 ## Not possible from an extension, and what we do instead
 
 * **A real VPN for the whole computer.** An extension can only proxy the

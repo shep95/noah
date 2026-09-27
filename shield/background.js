@@ -4,7 +4,7 @@
 "use strict";
 
 if (typeof importScripts === "function") {
-  importScripts("lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js");
+  importScripts("lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "lib/look.js");
 }
 
 const api = Shield.api;
@@ -166,6 +166,41 @@ if (api.webNavigation) {
     if (details.frameId === 0) Shield.resetTabCount(details.tabId).catch(() => {});
     if (/^https?:/.test(details.url || "")) hideAds(details).catch(() => {});
   });
+}
+
+// ---- the sound host ----------------------------------------------------------------------------
+// Chrome plays through an offscreen document that lives as long as the sound;
+// Firefox has none, so the tools page hosts the sound there.
+async function toneHost(message, create = true) {
+  if (api.offscreen) {
+    const contexts = api.runtime.getContexts ? await api.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] }) : [];
+    if (!contexts.length) {
+      if (!create) return { playing: false };
+      await api.offscreen.createDocument({ url: "offscreen.html", reasons: ["AUDIO_PLAYBACK"], justification: "plays the frequency the person chose under their videos" });
+    }
+    const state = await new Promise((resolve) => api.runtime.sendMessage({ target: "tone-host", ...message }, (response) => { void api.runtime.lastError; resolve(response || {}); }));
+    if (message.action === "stop" && api.offscreen.closeDocument) await api.offscreen.closeDocument().catch(() => {});
+    return state;
+  }
+  const url = api.runtime.getURL("tools.html");
+  let [tab] = await api.tabs.query({ url });
+  if (!tab) {
+    if (!create) return { playing: false };
+    tab = await api.tabs.create({ url, active: false });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return new Promise((resolve) => api.tabs.sendMessage(tab.id, { target: "tone-host", ...message }, (response) => { void api.runtime.lastError; resolve(response || {}); }));
+}
+
+// Firefox wears the look on its frame; elsewhere the pages and the new tab do.
+async function wearLook(look) {
+  if (!api.theme || !api.theme.update) return;
+  try {
+    if (look) await api.theme.update(Shield.themeFromPalette(look.palette));
+    else if (api.theme.reset) await api.theme.reset();
+  } catch (error) {
+    console.warn("shield: theme", error);
+  }
 }
 
 // ---- ad slots ---------------------------------------------------------------------------------
@@ -350,6 +385,103 @@ const handlers = {
     const session = await api.storage.session.get("mediaTabs");
     return { tabs: Object.entries(session.mediaTabs || {}).map(([tabId, entry]) => ({ tabId: Number(tabId), ...entry })) };
   },
+  // For the tools page: where traffic comes out and who steers the route.
+  async "network.state"() {
+    const settings = await Shield.loadSettings();
+    const tunnel = await Shield.tunnelStatus();
+    let control = null;
+    let systemProxy = null;
+    if (api.proxy && api.proxy.settings) {
+      try {
+        const current = await api.proxy.settings.get({});
+        control = current.levelOfControl;
+        const value = current.value || {};
+        if (value.mode === "system" || value.mode === "auto_detect") systemProxy = null;
+        else if (value.mode === "fixed_servers" && control !== "controlled_by_this_extension") {
+          const rules = value.rules || {};
+          const server = rules.singleProxy || rules.proxyForHttps || rules.proxyForHttp;
+          systemProxy = server ? `${server.host}:${server.port}` : "a fixed proxy";
+        } else if (value.mode === "pac_script" && control !== "controlled_by_this_extension") systemProxy = "a proxy script";
+      } catch (error) {
+        control = null;
+      }
+    }
+    let exit = null;
+    if (!settings.localOnly && tunnel.state !== "up") {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(Shield.WHOAMI_URL, { cache: "no-store", credentials: "omit", signal: controller.signal });
+        clearTimeout(timer);
+        if (response.ok) {
+          const body = await response.json();
+          exit = { ip: String(body.ip || ""), country: String(body.country || ""), city: String(body.city || "") };
+        }
+      } catch (error) {
+        exit = null;
+      }
+    }
+    return { tunnel, control, systemProxy, exit };
+  },
+  // ---- light: a dimmer and a warmer over every page --------------------------------------------
+  async "light.state"() {
+    const settings = await Shield.loadSettings();
+    return settings.light;
+  },
+  async "light.set"(message) {
+    const light = {
+      preset: String(message.preset || "custom").slice(0, 20),
+      dim: Math.min(0.85, Math.max(0, Number(message.dim) || 0)),
+      warmth: Math.min(1, Math.max(0, Number(message.warmth) || 0)),
+    };
+    await Shield.updateSettings({ light });
+    const tabs = await api.tabs.query({ url: ["http://*/*", "https://*/*"] });
+    for (const tab of tabs) api.tabs.sendMessage(tab.id, { type: "light.apply", light }, () => void api.runtime.lastError);
+    return { light };
+  },
+  // ---- frequency: a tone or a binaural beat under whatever plays ------------------------------
+  async "tone.play"(message) {
+    const state = await toneHost({ action: "play", hz: message.hz, volume: message.volume });
+    await api.storage.session.set({ tone: state });
+    return state;
+  },
+  async "tone.volume"(message) {
+    const state = await toneHost({ action: "volume", volume: message.volume });
+    await api.storage.session.set({ tone: state });
+    return state;
+  },
+  async "tone.stop"() {
+    const state = await toneHost({ action: "stop" }, false);
+    await api.storage.session.set({ tone: state });
+    return state;
+  },
+  async "tone.state"() {
+    const session = await api.storage.session.get("tone");
+    return session.tone || { playing: false, hz: 432, volume: 0.15 };
+  },
+  // ---- the look ---------------------------------------------------------------------------------
+  async "look.set"(message) {
+    const look = message.look;
+    if (!look || typeof look !== "object" || !look.palette) return { error: "not a look" };
+    const image = typeof look.image === "string" ? look.image : null;
+    if (image && !image.startsWith("data:image/jpeg;base64,") && !/^[a-z]+\.jpg$/.test(image)) return { error: "not a picture" };
+    if (image && image.length > 6 * 1024 * 1024) return { error: "the picture is too large; it is shrunk before saving, so try a smaller file" };
+    const clean = { id: String(look.id || "custom").slice(0, 40), name: String(look.name || "").slice(0, 80), image, palette: {} };
+    for (const [key, value] of Object.entries(look.palette)) {
+      if (/^[a-zA-Z]+$/.test(key) && (typeof value === "string" && value.length < 60 || typeof value === "number" || typeof value === "boolean")) clean.palette[key] = value;
+    }
+    await api.storage.local.set({ look: clean });
+    await wearLook(clean);
+    return { look: clean };
+  },
+  async "look.reset"() {
+    await api.storage.local.remove("look");
+    await wearLook(null);
+    return { ok: true };
+  },
+  async "stats.today"() {
+    return Shield.statsSummary();
+  },
   async "tunnel.check"() {
     const server = Shield.activeServer();
     if (!server) return { status: await Shield.tunnelStatus() };
@@ -410,6 +542,8 @@ const handlers = {
       clipboardGuard: security.clipboardGuard && !security.clipboardSites.includes(site),
       clipboardWipe: security.clipboardWipe,
       hiddenFields: security.hiddenFields,
+      typingGuard: security.typingGuard && !trusted,
+      blockKeyListeners: security.blockKeyListeners && !trusted,
       formLeak: security.formLeak && !trusted,
       walletGuard: security.walletGuard && !security.walletSites.includes(site),
       scamPopups: security.scamPopups,
@@ -542,6 +676,27 @@ const handlers = {
   },
   async "site.score"(message) {
     return Shield.privacyScore(Number(message.tabId), String(message.url || ""));
+  },
+  // Is this site worth trusting: has it leaked its users' data before, is it
+  // a lookalike, is it plain http. For the popup only.
+  async "site.trust"(message) {
+    const url = String(message.url || "");
+    const host = Shield.hostOf(url);
+    const site = Shield.siteOf(host);
+    if (!site) return { error: "not a site" };
+    const settings = await Shield.loadSettings();
+    const lookalike = settings.security.allowedLookalikes.includes(site) ? null : Shield.lookalike(host);
+    let breaches = null;
+    let breachError = null;
+    if (settings.localOnly) breachError = "not checked in local-only mode";
+    else {
+      try {
+        breaches = await Shield.breachHistory(site);
+      } catch (error) {
+        breachError = String(error.message || error);
+      }
+    }
+    return { site, https: url.startsWith("https:"), lookalike, breaches, breachError };
   },
   async "alias.make"(message) {
     const settings = await Shield.loadSettings();
@@ -713,7 +868,7 @@ const handlers = {
   },
   async "safety.event"(message, sender) {
     if (!allowRate("safety", sender, 120)) return { ok: false, limited: true };
-    const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads"]);
+    const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "keylog", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads"]);
     const kind = kinds.has(message.kind) ? message.kind : "other";
     await Shield.count(kind, Math.min(50, Math.max(1, Number(message.amount) || 1)), sender.tab ? sender.tab.id : null);
     return { ok: true };
@@ -1152,7 +1307,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

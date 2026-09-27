@@ -63,6 +63,28 @@ async function unshorten(url) {
   out.append(link(result.final, "open it, knowing where it goes"));
 }
 byId("unshorten-go").addEventListener("click", () => unshorten(byId("unshorten-input").value.trim()));
+
+// ---- network --------------------------------------------------------------------------
+(async () => {
+  const exit = byId("network-exit");
+  const control = byId("network-control");
+  const state = await Shield.send({ type: "network.state" });
+  if (!state || state.error) { exit.textContent = "could not look: " + (state && state.error); return; }
+  if (state.tunnel && state.tunnel.state === "up") {
+    const where = [state.tunnel.exit && state.tunnel.exit.city, state.tunnel.exit && state.tunnel.exit.country].filter(Boolean).join(", ");
+    exit.textContent = `Through the VPN: sites see ${state.tunnel.exit ? state.tunnel.exit.ip : "the location's address"}${where ? " in " + where : ""}.`;
+  } else if (state.exit && state.exit.ip) {
+    const where = [state.exit.city, state.exit.country].filter(Boolean).join(", ");
+    exit.textContent = `Direct: sites see ${state.exit.ip}${where ? " in " + where : ""}, the address your network hands out. Turn the VPN on to change that.`;
+  } else {
+    exit.textContent = "Could not ask where the traffic comes out (offline, or local-only mode).";
+  }
+  if (state.control === "controlled_by_this_extension") control.textContent = "noah shield decides the route.";
+  else if (state.control === "controlled_by_other_extensions") { control.textContent = "Another extension decides how this browser connects. If you did not install one for that, remove it: it sees every site you visit."; control.className = "muted bad"; }
+  else if (state.control === "not_controllable") { control.textContent = "A policy on this computer (work or school management) decides how this browser connects and can read what it does."; control.className = "muted bad"; }
+  else if (state.systemProxy) { control.textContent = `The system sends this browser through a proxy (${state.systemProxy}). If you did not set that up, something on this computer is routing your traffic.`; control.className = "muted bad"; }
+  else control.textContent = "Nothing else is steering the route; the browser talks to sites directly.";
+})();
 if (params.get("unshorten")) {
   byId("unshorten-input").value = params.get("unshorten");
   unshorten(params.get("unshorten"));

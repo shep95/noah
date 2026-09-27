@@ -210,6 +210,8 @@
         <label class="switch"><input type="checkbox" data-path="security.clipboardWipe"><span>Wipe the clipboard 30 seconds after copying from a password field</span></label>
         <label class="switch"><input type="checkbox" data-path="security.hiddenFields"><span>Disarm hidden form fields that harvest autofill</span></label>
         <label class="switch"><input type="checkbox" data-path="security.formLeak"><span>Stop what you type from leaving for third parties before you submit</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.typingGuard"><span>Typing guard: what you typed and deleted never leaves for another site, keystroke streams are stopped, and scripts from other sites that listen to every key are named</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.blockKeyListeners"><span>Typing guard, strict: refuse scripts from other sites the whole-page key listener (may break a chat widget's shortcuts)</span></label>
         <label class="switch"><input type="checkbox" data-path="security.walletGuard"><span>Crypto wallet guard: approvals, signatures and address swaps wait for you</span></label>
         <label class="switch"><input type="checkbox" data-path="security.scamPopups"><span>Break fake support pages (alert loops, "call this number")</span></label>
         <label class="switch"><input type="checkbox" data-path="security.hiddenFrames"><span>Remove hidden third-party frames</span></label>
@@ -243,6 +245,23 @@
       <p class="muted">Programs outside the browser (screen recorders, remote access tools) are what noah's <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">device room</a> looks for.</p>
     </section>
 
+    <section id="look">
+      <h2>the look</h2>
+      <p class="muted">
+        A picture sets the look: its colors become the shield's pages, the new tab page and, on Firefox, the browser's
+        own frame and toolbars (Chrome and Edge let no extension recolor theirs). The blacks take the picture's
+        temperature, the words stay readable, and one color from the picture becomes the accent, seen only where it
+        matters. Nothing is uploaded; the picture stays in this browser.
+      </p>
+      <div id="look-presets" class="looks"></div>
+      <div class="row small">
+        <label class="ghost file-button">use a picture of mine<input type="file" id="look-file" accept="image/*" hidden></label>
+        <button id="look-reset" class="ghost">back to noah's look</button>
+        <span id="look-status" class="muted"></span>
+      </div>
+      <div id="look-swatches" class="swatches"></div>
+    </section>
+
     <section>
       <h2>about</h2>
       <p class="muted" id="about"></p>
@@ -251,6 +270,7 @@
   </main>
 
   <script src="lib/common.js"></script>
+  <script src="lib/look.js"></script>
   <script src="lib/cities.js"></script>
   <script src="options.js"></script>
 </body>

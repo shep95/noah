@@ -349,6 +349,89 @@ byId("add-server").addEventListener("submit", async (event) => {
   if (result && !result.error) event.target.reset();
   await load();
 });
+// ---- the look -------------------------------------------------------------------------------
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("that picture could not be read"));
+    image.src = url;
+  });
+}
+
+function showLook(look) {
+  const current = look || Shield.DEFAULT_LOOK;
+  for (const button of document.querySelectorAll("#look-presets button")) button.classList.toggle("on", button.dataset.look === current.id);
+  const swatches = byId("look-swatches");
+  swatches.replaceChildren();
+  for (const key of ["bg", "raise", "muted", "text", "accent", "accentSoft"]) {
+    const swatch = document.createElement("i");
+    swatch.style.background = current.palette[key];
+    swatch.title = key;
+    swatches.append(swatch);
+  }
+  byId("look-status").textContent = current.id === "noah" ? "noah's own look" : `the look of "${current.name}"${current.palette.warm ? " · warm" : " · cool"}`;
+}
+
+async function chooseLook(look) {
+  const result = await Shield.send({ type: "look.set", look });
+  if (result.error) { byId("look-status").textContent = result.error; return; }
+  Shield.applyLook(result.look);
+  showLook(result.look);
+}
+
+(async () => {
+  const presets = byId("look-presets");
+  for (const preset of Shield.LOOKS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.look = preset.id;
+    const image = document.createElement("img");
+    image.src = "looks/" + preset.id + "-thumb.jpg";
+    image.alt = preset.name;
+    const label = document.createElement("span");
+    label.textContent = preset.name;
+    button.append(image, label);
+    button.addEventListener("click", async () => {
+      byId("look-status").textContent = "reading the picture…";
+      const full = await loadImage("looks/" + preset.id + ".jpg");
+      const palette = Shield.paletteFromImage(full);
+      await chooseLook({ id: preset.id, name: preset.name, image: preset.id + ".jpg", palette });
+    });
+    presets.append(button);
+  }
+  showLook(await Shield.loadLook());
+})();
+
+byId("look-file").addEventListener("change", async (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  byId("look-status").textContent = "reading the picture…";
+  try {
+    const url = URL.createObjectURL(file);
+    const image = await loadImage(url);
+    URL.revokeObjectURL(url);
+    // Shrunk to a screen's width and re-encoded, so a phone photo of 12 MB
+    // becomes a few hundred kilobytes and its metadata does not come along.
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.naturalWidth * scale);
+    canvas.height = Math.round(image.naturalHeight * scale);
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+    const palette = Shield.paletteFromImage(image);
+    await chooseLook({ id: "custom", name: file.name.replace(/\.[a-z0-9]+$/i, ""), image: dataUrl, palette });
+  } catch (error) {
+    byId("look-status").textContent = String(error.message || error);
+  }
+  event.target.value = "";
+});
+byId("look-reset").addEventListener("click", async () => {
+  await Shield.send({ type: "look.reset" });
+  Shield.applyLook(Shield.DEFAULT_LOOK);
+  showLook(null);
+});
+
 byId("refresh-feeds").addEventListener("click", async () => {
   byId("feed-servers").textContent = "fetching…";
   await Shield.send({ type: "feeds.refresh" });

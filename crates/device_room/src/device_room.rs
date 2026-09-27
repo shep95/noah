@@ -180,6 +180,8 @@ pub struct DevicePanel {
     show_all_apps: bool,
     show_all_watchers: bool,
     public_address: PublicAddress,
+    wifi_secret: WifiSecret,
+    _wifi_secret_task: Option<Task<()>>,
     _health_task: Option<Task<()>>,
     _checks_task: Option<Task<()>>,
     _intel_task: Option<Task<()>>,
@@ -217,6 +219,8 @@ impl DevicePanel {
                 show_all_apps: false,
                 show_all_watchers: false,
                 public_address: PublicAddress::Unknown,
+                wifi_secret: WifiSecret::Hidden,
+                _wifi_secret_task: None,
                 _health_task: None,
                 _checks_task: None,
                 _intel_task: None,
@@ -294,6 +298,36 @@ impl DevicePanel {
     /// Asks one address service what this device looks like from outside.
     /// This is the room's only request to the internet, and it only happens
     /// on this click.
+    /// Asks the system for the saved password of the wifi this device is on,
+    /// and draws the code a phone scans to join. Only on request: macOS puts
+    /// up a keychain prompt for it.
+    fn reveal_wifi_password(&mut self, cx: &mut Context<Self>) {
+        let Some(link) = self.intel.as_ref().and_then(|intel| intel.wifi.connected.clone()) else {
+            self.wifi_secret = WifiSecret::Failed("not on a named wifi network".into());
+            cx.notify();
+            return;
+        };
+        self.wifi_secret = WifiSecret::Looking;
+        cx.notify();
+        self._wifi_secret_task = Some(cx.spawn(async move |this, cx| {
+            let outcome = cx
+                .background_spawn(async move {
+                    let password = intel::wifi_password(&link.ssid)?;
+                    let qr = intel::wifi_qr(&link.ssid, &password, link.security.as_deref()).ok();
+                    anyhow::Ok((password, qr))
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                this.wifi_secret = match outcome {
+                    Ok((password, qr)) => WifiSecret::Shown { password: password.into(), qr },
+                    Err(error) => WifiSecret::Failed(format!("{error:#}").into()),
+                };
+                cx.notify();
+            })
+            .log_err();
+        }));
+    }
+
     fn find_public_address(&mut self, cx: &mut Context<Self>) {
         self.public_address = PublicAddress::Looking;
         cx.notify();
@@ -1005,7 +1039,7 @@ impl DevicePanel {
         entry
     }
 
-    fn render_wifi(&self) -> impl IntoElement {
+    fn render_wifi(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut section = section("wifi intelligence");
         let Some(intel) = &self.intel else {
             return section.child(muted("looking…"));
@@ -1041,7 +1075,8 @@ impl DevicePanel {
                 )
                 .when_some(link.bssid.clone(), |this, bssid| {
                     this.child(muted(format!("access point {bssid}")))
-                });
+                })
+                .child(self.render_wifi_secret(cx));
         } else if wifi.note.is_none() {
             section = section.child(muted("not on wifi"));
         }
@@ -1742,6 +1777,114 @@ fn render_check(check: &Check) -> impl IntoElement {
         )
 }
 
+/// The wifi password, asked for by a button: hidden, being looked up, shown
+/// with its join code, or refused by the system with the reason.
+enum WifiSecret {
+    Hidden,
+    Looking,
+    Shown { password: SharedString, qr: Option<Vec<Vec<bool>>> },
+    Failed(SharedString),
+}
+
+impl DevicePanel {
+    fn render_wifi_secret(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let colors = cx.theme().colors();
+        match &self.wifi_secret {
+            WifiSecret::Hidden => h_flex()
+                .gap_2()
+                .child(
+                    Button::new("wifi-password", "show the password")
+                        .label_size(LabelSize::XSmall)
+                        .style(ButtonStyle::Outlined)
+                        .tooltip(Tooltip::text(
+                            "the password saved for this network, with a code a phone scans to join",
+                        ))
+                        .on_click(cx.listener(|this, _, _, cx| this.reveal_wifi_password(cx))),
+                )
+                .into_any_element(),
+            WifiSecret::Looking => muted("asking the system for the password…").into_any_element(),
+            WifiSecret::Failed(reason) => h_flex()
+                .gap_2()
+                .child(muted(format!("password: {reason}")))
+                .child(
+                    Button::new("wifi-password-again", "try again")
+                        .label_size(LabelSize::XSmall)
+                        .on_click(cx.listener(|this, _, _, cx| this.reveal_wifi_password(cx))),
+                )
+                .into_any_element(),
+            WifiSecret::Shown { password, qr } => {
+                let copied = password.clone();
+                let modules = qr.clone();
+                let dark = colors.text;
+                let light = colors.background;
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Label::new(format!("password  {password}"))
+                                    .size(LabelSize::Small)
+                                    .buffer_font(cx),
+                            )
+                            .child(
+                                Button::new("wifi-password-copy", "copy")
+                                    .label_size(LabelSize::XSmall)
+                                    .on_click(move |_, _, cx| {
+                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            copied.to_string(),
+                                        ));
+                                    }),
+                            )
+                            .child(
+                                Button::new("wifi-password-hide", "hide")
+                                    .label_size(LabelSize::XSmall)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.wifi_secret = WifiSecret::Hidden;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .when_some(modules, |this, modules| {
+                        // Each module is a small square; a light border around the
+                        // code is what scanners expect.
+                        let count = modules.len().max(1);
+                        let cell = 4.0_f32;
+                        let quiet = 4.0 * cell;
+                        let side = px(count as f32 * cell + 2.0 * quiet);
+                        this.child(muted("a phone's camera joins the network from this code"))
+                            .child(
+                                canvas(
+                                    |_, _, _| {},
+                                    move |bounds, _, window, _| {
+                                        window.paint_quad(fill(bounds, light));
+                                        for (row, cells) in modules.iter().enumerate() {
+                                            for (column, is_dark) in cells.iter().enumerate() {
+                                                if !*is_dark {
+                                                    continue;
+                                                }
+                                                let origin = point(
+                                                    bounds.origin.x + px(quiet + column as f32 * cell),
+                                                    bounds.origin.y + px(quiet + row as f32 * cell),
+                                                );
+                                                window.paint_quad(fill(
+                                                    Bounds::new(origin, size(px(cell), px(cell))),
+                                                    dark,
+                                                ));
+                                            }
+                                        }
+                                    },
+                                )
+                                .w(side)
+                                .h(side),
+                            )
+                    })
+                    .into_any_element()
+            }
+        }
+    }
+}
+
 fn section(title: &'static str) -> gpui::Div {
     v_flex()
         .gap_1()
@@ -1874,7 +2017,7 @@ impl Render for DevicePanel {
             .child(Divider::horizontal())
             .child(self.render_flows(cx))
             .child(Divider::horizontal())
-            .child(self.render_wifi())
+            .child(self.render_wifi(cx))
             .child(Divider::horizontal())
             .child(self.render_neighbours())
             .child(Divider::horizontal())

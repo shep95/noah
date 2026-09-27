@@ -90,6 +90,30 @@ function render(state) {
       grade.className = "grade in " + score.grade.toLowerCase();
       byId("score").textContent = `${score.score}/100 · ${score.thirdParties} third parties, ${score.advertising} of them advertising, ${score.cookies} cookies${score.https ? "" : ", no https"}`;
     });
+    Shield.send({ type: "site.trust", url: site.url }).then((trust) => {
+      const line = byId("trust");
+      if (!trust || trust.error) { line.hidden = true; return; }
+      const parts = [];
+      let tone = "";
+      if (trust.lookalike) { parts.push(`looks like ${trust.lookalike.brand} but is not`); tone = "bad"; }
+      if (!trust.https) { parts.push("no https: what you send can be read on the way"); tone = tone || "warn"; }
+      if (Array.isArray(trust.breaches)) {
+        if (trust.breaches.length) {
+          const last = trust.breaches[0];
+          const year = (last.date || "").slice(0, 4);
+          const what = last.classes.slice(0, 3).map((name) => name.toLowerCase()).join(", ");
+          parts.push(`leaked its users' data ${trust.breaches.length === 1 ? "once" : trust.breaches.length + " times"}${year ? ", last in " + year : ""}${what ? " (" + what + ")" : ""}; use a password you use nowhere else here`);
+          if (!tone || tone === "warn") tone = Number(year) >= new Date().getFullYear() - 2 ? "bad" : "warn";
+        } else {
+          parts.push("no known data leak");
+        }
+      } else if (trust.breachError) {
+        parts.push("leak history " + trust.breachError);
+      }
+      line.hidden = false;
+      line.textContent = (tone === "bad" ? "be careful: " : tone === "warn" ? "worth knowing: " : "trust: ") + parts.join(" · ");
+      line.className = "muted " + tone;
+    });
     Shield.send({ type: "media.list" }).then((media) => {
       const live = (media && media.tabs || []).filter((entry) => entry.camera || entry.microphone);
       const node = byId("media-live");
@@ -134,7 +158,7 @@ function render(state) {
   byId("today").textContent = `${month.trackers || 0} trackers this month`;
   byId("d-trackers").textContent = today.trackers || 0;
   byId("d-cookies").textContent = (today.cookies || 0) + (today.burned || 0);
-  byId("d-scams").textContent = (today.phishing || 0) + (today.popups || 0) + (today.leaks || 0) + (today.wallets || 0) + (today.downloads || 0);
+  byId("d-scams").textContent = (today.phishing || 0) + (today.popups || 0) + (today.leaks || 0) + (today.keylog || 0) + (today.wallets || 0) + (today.downloads || 0);
   byId("d-coupons").textContent = today.coupons || 0;
   byId("d-saved").textContent = today.saved || 0;
   byId("d-annoy").textContent = (today.banners || 0) + (today.overlays || 0);
@@ -149,6 +173,7 @@ function render(state) {
   byId("coupons").checked = settings.shopping.coupons && settings.shopping.autoApply;
   byId("shop-stats").textContent = `${month.compared || 0} products compared and ${month.coupons || 0} codes that worked this month.`;
 
+  showLight(settings.light || { preset: "off", dim: 0, warmth: 0 });
   byId("mode-now").textContent = settings.modes.profile ? settings.modes.profile + (site && settings.modes.siteModes[site.site] ? " · this site: " + settings.modes.siteModes[site.site] : "") : site && settings.modes.siteModes[site.site] ? "this site: " + settings.modes.siteModes[site.site] : "none";
   for (const element of document.querySelectorAll("button[data-profile]")) element.classList.toggle("on", settings.modes.profile === element.dataset.profile);
   byId("guard-screen").checked = settings.capture.guardScreen;
@@ -226,6 +251,78 @@ byId("server").addEventListener("change", async (event) => {
 bindSetting("kill", ["tunnel", "killSwitch"]);
 bindSetting("webrtc", ["tunnel", "webRtcGuard"]);
 byId("fastest").addEventListener("click", () => connect("auto"));
+
+// ---- light -----------------------------------------------------------------------------------
+const LIGHT_PRESETS = { sunny: [0, 0], dark: [0.45, 0.35], restaurant: [0.25, 0.5], night: [0.55, 0.7] };
+const LIGHT_NAMES = { off: "off", sunny: "bright and sunny", dark: "in a dark room", restaurant: "restaurant", night: "night", custom: "your own" };
+function showLight(light) {
+  byId("light-dim").value = Math.round((light.dim || 0) * 100);
+  byId("light-warm").value = Math.round((light.warmth || 0) * 100);
+  byId("light-now").textContent = LIGHT_NAMES[light.preset] || light.preset || "off";
+  for (const button of document.querySelectorAll("button[data-light]")) button.classList.toggle("on", light.preset === button.dataset.light);
+}
+async function setLight(preset, dim, warmth) {
+  const result = await Shield.send({ type: "light.set", preset, dim, warmth });
+  if (result && result.light) { showLight(result.light); if (current) current.settings.light = result.light; }
+}
+for (const button of document.querySelectorAll("button[data-light]")) {
+  button.addEventListener("click", () => {
+    const [dim, warmth] = LIGHT_PRESETS[button.dataset.light];
+    const same = current && current.settings.light && current.settings.light.preset === button.dataset.light;
+    if (same) setLight("off", 0, 0); else setLight(button.dataset.light, dim, warmth);
+  });
+}
+byId("light-dim").addEventListener("input", () => setLight("custom", Number(byId("light-dim").value) / 100, Number(byId("light-warm").value) / 100));
+byId("light-warm").addEventListener("input", () => setLight("custom", Number(byId("light-dim").value) / 100, Number(byId("light-warm").value) / 100));
+
+// ---- frequency -------------------------------------------------------------------------------
+(function tone() {
+  const select = byId("tone-preset");
+  const custom = document.createElement("option");
+  custom.value = "";
+  custom.textContent = "your own frequency";
+  select.append(custom);
+  for (const preset of Shield.TONE_PRESETS) {
+    const option = document.createElement("option");
+    option.value = String(preset.hz);
+    option.textContent = preset.name;
+    select.append(option);
+  }
+  const show = (state) => {
+    if (!state) return;
+    byId("tone-toggle").textContent = state.playing ? "stop" : "play";
+    byId("tone-toggle").classList.toggle("on", Boolean(state.playing));
+    byId("tone-now").textContent = state.playing ? `${state.hz} Hz${state.binaural ? " · binaural, use headphones" : ""}` : "off";
+    if (state.hz) byId("tone-hz").value = state.hz;
+    if (state.volume !== undefined) byId("tone-volume").value = Math.round(state.volume * 100);
+    const match = Shield.TONE_PRESETS.find((preset) => preset.hz === Number(state.hz));
+    select.value = match ? String(match.hz) : "";
+  };
+  Shield.send({ type: "tone.state" }).then(show);
+  select.addEventListener("change", async () => {
+    if (!select.value) return;
+    byId("tone-hz").value = select.value;
+    const state = await Shield.send({ type: "tone.state" });
+    if (state && state.playing) show(await Shield.send({ type: "tone.play", hz: Number(select.value), volume: Number(byId("tone-volume").value) / 100 }));
+  });
+  byId("tone-toggle").addEventListener("click", async () => {
+    const state = await Shield.send({ type: "tone.state" });
+    if (state && state.playing) show(await Shield.send({ type: "tone.stop" }));
+    else show(await Shield.send({ type: "tone.play", hz: Number(byId("tone-hz").value), volume: Number(byId("tone-volume").value) / 100 }));
+  });
+  byId("tone-hz").addEventListener("change", async () => {
+    const hz = Math.min(Shield.TONE_MAX, Math.max(Shield.TONE_MIN, Number(byId("tone-hz").value) || 432));
+    byId("tone-hz").value = hz;
+    const match = Shield.TONE_PRESETS.find((preset) => preset.hz === hz);
+    select.value = match ? String(match.hz) : "";
+    const state = await Shield.send({ type: "tone.state" });
+    if (state && state.playing) show(await Shield.send({ type: "tone.play", hz, volume: Number(byId("tone-volume").value) / 100 }));
+  });
+  byId("tone-volume").addEventListener("input", async () => {
+    const state = await Shield.send({ type: "tone.state" });
+    if (state && state.playing) show(await Shield.send({ type: "tone.volume", volume: Number(byId("tone-volume").value) / 100 }));
+  });
+})();
 // While the VPN is connecting or holding, the card follows along instead of
 // showing the moment the popup opened.
 setInterval(() => {

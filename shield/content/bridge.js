@@ -50,13 +50,20 @@
       }
       api.runtime.sendMessage({ type: "safety.event", kind: String(detail.kind || "other"), amount: Number(detail.amount) || 1 }, () => void api.runtime.lastError);
       if (detail.kind === "leaks") toast(`noah shield stopped this page from sending what you typed to ${detail.to || "another site"}.`);
+      if (detail.kind === "keylog") {
+        toast(detail.how === "stream"
+          ? `noah shield stopped ${detail.to || "another site"} from receiving your keystrokes from this page.`
+          : detail.how === "blocked"
+            ? `noah shield kept ${detail.to || "a script from another site"} from listening to every key you press here.`
+            : `${detail.to || "a script from another site"} listens to every key you press on this page. What you type stays here; turn on "block" under settings to refuse it the listener.`);
+      }
     });
   }, { once: true });
 
   // The introduction is synchronous with document_start on purpose: the guard
   // takes the first one, before any page script runs, and answers with the
   // nonce. The site's real settings follow on the nonce-named event.
-  const defaults = { geolocation: "block", fingerprint: true, guardScreen: true, guardCamera: true, clipboardGuard: true, walletGuard: true, formLeak: true, scamPopups: true };
+  const defaults = { geolocation: "block", fingerprint: true, guardScreen: true, guardCamera: true, clipboardGuard: true, walletGuard: true, formLeak: true, typingGuard: true, blockKeyListeners: false, scamPopups: true };
   document.dispatchEvent(new CustomEvent("noah-shield:config", { detail: JSON.stringify(defaults) }));
 
   function sendUpdate() {

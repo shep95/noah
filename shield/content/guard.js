@@ -239,14 +239,41 @@
     return parts.length <= 2 ? parts.join(".") : parts.slice(-2).join(".");
   };
   const here = siteOf(location.hostname);
+  // What you typed and then deleted is kept too: a keystroke logger sends the
+  // draft you decided against, which is often the more private one.
+  const erased = [];
+  const lastValues = new WeakMap();
+  const remember = (list, value) => {
+    if (value.length < 6 || list.includes(value)) return;
+    list.push(value);
+    if (list.length > 30) list.shift();
+  };
   listen.call(document, "input", (event) => {
     const field = event.target;
-    if (!field || field.tagName !== "INPUT" || !/^(text|email|tel|password|number|search|url)?$/.test(field.type || "")) return;
-    const value = String(field.value || "");
-    if (value.length < 6) return;
-    typed.push(value);
-    if (typed.length > 30) typed.shift();
+    if (!field) return;
+    const editable = field.tagName === "TEXTAREA" || field.isContentEditable
+      || (field.tagName === "INPUT" && /^(text|email|tel|password|number|search|url)?$/.test(field.type || ""));
+    if (!editable) return;
+    const value = String(field.isContentEditable ? field.textContent : field.value || "");
+    const before = lastValues.get(field) || "";
+    lastValues.set(field, value);
+    if (config.typingGuard && before.length >= 6 && !value.includes(before)) {
+      // The part that went away: the longest run of the old text missing from the new.
+      let common = 0;
+      while (common < before.length && common < value.length && before[common] === value[common]) common++;
+      const gone = before.slice(common).trim();
+      remember(erased, gone.length >= 6 ? gone : before);
+    }
+    remember(typed, value);
   }, true);
+  // Keystroke telemetry looks like this whatever the vendor: the same few
+  // field names, many times, headed somewhere else.
+  const KEYSTROKE_SHAPE = /"(key|keyCode|charCode|which|code|inputType|keydown|keyup|keypress)"\s*:/g;
+  const looksLikeKeystrokes = (text) => {
+    if (!config.typingGuard) return false;
+    const hits = text.match(KEYSTROKE_SHAPE);
+    return Boolean(hits && hits.length >= 6);
+  };
   const bodyText = (body) => {
     if (!body) return "";
     if (typeof body === "string") return body;
@@ -255,16 +282,24 @@
     if (body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return "";
     try { return stringify(body); } catch { return ""; }
   };
+  let keystrokeLeaks = 0;
   const leaks = (url, body) => {
-    if (!config.formLeak || !typed.length) return false;
+    if (!config.formLeak && !config.typingGuard) return false;
     let destination;
     try { destination = new URL(String(url), location.href).hostname; } catch { return false; }
     if (siteOf(destination) === here || PROCESSORS.test(destination)) return false;
     // The query string carries leaks as often as the body does.
     const text = String(url) + "\n" + bodyText(body);
     if (!text) return false;
-    const encoded = typed.map((value) => [value, encodeURIComponent(value)]);
-    return encoded.some(([raw, escaped]) => text.includes(raw) || text.includes(escaped));
+    const values = config.formLeak ? typed : [];
+    const drafts = config.typingGuard ? erased : [];
+    const encoded = [...values, ...drafts].map((value) => [value, encodeURIComponent(value)]);
+    if (encoded.some(([raw, escaped]) => text.includes(raw) || text.includes(escaped))) return true;
+    if (looksLikeKeystrokes(text)) {
+      if (keystrokeLeaks++ === 0) report("keylog", { amount: 1, to: destination, how: "stream" });
+      return true;
+    }
+    return false;
   };
   const leakDenied = (url) => {
     let destination = "";
@@ -464,9 +499,64 @@
       configurable: true, writable: true,
     });
   }
-  const realAddEventListener = window.addEventListener.bind(window);
+  // A script from another site that asks to hear every key pressed anywhere
+  // on the page is a keystroke logger until proven otherwise. Its listener is
+  // wrapped: the events reach it in watch mode and are named once; in block
+  // mode they never arrive. The decision is made per event, because the
+  // site's settings arrive a moment after the first scripts run.
+  const KEY_EVENTS = /^(keydown|keyup|keypress|beforeinput|input|compositionend)$/;
+  const keyListeners = new Map();
+  const wrappedHandlers = new WeakMap();
+  const callerHost = () => {
+    let stack = "";
+    try { stack = String(new Error().stack || ""); } catch { return null; }
+    const urls = stack.match(/https?:\/\/[^\s):]+/g) || [];
+    for (const url of urls) {
+      let host;
+      try { host = new URL(url).hostname; } catch { continue; }
+      if (host && host !== location.hostname) return host;
+    }
+    return null;
+  };
+  const isWholePage = (target) => target === window || target === document || target === document.documentElement || target === document.body;
+  const gateKeyListener = (target, type, handler) => {
+    if (!handler || !KEY_EVENTS.test(String(type)) || !isWholePage(target)) return handler;
+    const host = callerHost();
+    if (!host || siteOf(host) === here || PROCESSORS.test(host)) return handler;
+    const known = wrappedHandlers.get(handler);
+    if (known) return known;
+    const wrapped = function (event) {
+      if (!config.typingGuard) return typeof handler === "function" ? handler.call(this, event) : handler.handleEvent && handler.handleEvent(event);
+      const blocked = Boolean(config.blockKeyListeners);
+      if (!keyListeners.has(host)) {
+        keyListeners.set(host, true);
+        report("keylog", { amount: 1, to: host, how: blocked ? "blocked" : "listening" });
+      }
+      if (blocked) return undefined;
+      return typeof handler === "function" ? handler.call(this, event) : handler.handleEvent && handler.handleEvent(event);
+    };
+    wrappedHandlers.set(handler, wrapped);
+    return wrapped;
+  };
+  const realTargetListen = EventTarget.prototype.addEventListener;
+  const realTargetUnlisten = EventTarget.prototype.removeEventListener;
+  define(EventTarget.prototype, "addEventListener", {
+    value: function (type, handler, options) {
+      return realTargetListen.call(this, type, gateKeyListener(this, type, handler), options);
+    },
+    configurable: true, writable: true,
+  });
+  define(EventTarget.prototype, "removeEventListener", {
+    value: function (type, handler, options) {
+      const wrapped = handler && wrappedHandlers.get(handler);
+      return realTargetUnlisten.call(this, type, wrapped || handler, options);
+    },
+    configurable: true, writable: true,
+  });
+  const realAddEventListener = realTargetListen.bind(window);
   define(window, "addEventListener", {
     value: function (type, handler, options) {
+      handler = gateKeyListener(window, type, handler);
       if (type === "beforeunload" && config.scamPopups) {
         return realAddEventListener(type, function (event) {
           if (scam || alerts.length > 3) return undefined;
@@ -754,7 +844,7 @@
       [window, "devicePixelRatio"], [Navigator.prototype, "userAgent"], [Navigator.prototype, "platform"], [Navigator.prototype, "userAgentData"], [Navigator.prototype, "language"], [Navigator.prototype, "languages"],
       [Navigator.prototype, "hardwareConcurrency"], [Navigator.prototype, "deviceMemory"], [Navigator.prototype, "getBattery"],
       [Date.prototype, "getTimezoneOffset"], [Intl, "DateTimeFormat"], [Intl.DateTimeFormat.prototype, "resolvedOptions"],
-      [window, "alert"], [window, "confirm"], [window, "prompt"], [window, "addEventListener"], [window, "onbeforeunload"], [Element.prototype, "requestFullscreen"],
+      [window, "alert"], [window, "confirm"], [window, "prompt"], [window, "addEventListener"], [EventTarget.prototype, "addEventListener"], [EventTarget.prototype, "removeEventListener"], [window, "onbeforeunload"], [Element.prototype, "requestFullscreen"],
       [window, "ethereum"],
     ];
     for (const [object, property] of targets) if (object) registerNative(object, property);

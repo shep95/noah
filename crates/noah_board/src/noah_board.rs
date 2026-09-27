@@ -203,8 +203,10 @@ impl Shape {
                 *width = (*width * factor).clamp(0.5, 60.0);
             }
             Shape::Line { from, to, width, .. } => {
-                scale_point(&mut from[0], &mut from[1]);
-                scale_point(&mut to[0], &mut to[1]);
+                let [from_x, from_y] = from;
+                scale_point(from_x, from_y);
+                let [to_x, to_y] = to;
+                scale_point(to_x, to_y);
                 *width = (*width * factor).clamp(0.5, 60.0);
             }
             Shape::Rect { size, .. } | Shape::Ellipse { size, .. } | Shape::Image { size, .. } => {
@@ -497,7 +499,7 @@ impl BoardView {
         )
     }
 
-    fn set_zoom(&mut self, zoom: f32, anchor: Point<f32>, cx: &mut Context<Self>) {
+    fn set_zoom(&mut self, zoom: f32, anchor: Point<Pixels>, cx: &mut Context<Self>) {
         let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
         if (zoom - self.zoom).abs() < f32::EPSILON {
             return;

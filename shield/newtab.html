@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>new tab</title>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <div id="picture" class="picture"></div>
+  <div class="veil"></div>
+  <main>
+    <p id="clock" class="clock">·</p>
+    <p id="day" class="day"></p>
+    <form id="search" class="search" autocomplete="off">
+      <input id="query" type="search" placeholder="search or enter an address" aria-label="search" autofocus>
+    </form>
+    <p id="numbers" class="numbers"></p>
+  </main>
+  <footer>
+    <a id="change-look" href="#">change the look</a>
+    <a id="shield-settings" href="#">shield settings</a>
+    <label class="plain"><input type="checkbox" id="plain"> plain page</label>
+  </footer>
+  <script src="lib/common.js"></script>
+  <script src="lib/look.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>

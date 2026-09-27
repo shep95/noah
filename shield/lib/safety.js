@@ -124,6 +124,51 @@ Shield.breachCount = async function breachCount(prefix, suffix) {
   return 0;
 };
 
+// Have I Been Pwned's public list of breaches, asked by domain (no key, no
+// account). Kept for a week per site; the site's own name is all that leaves.
+const BREACH_HISTORY_TTL = 7 * 24 * 60 * 60 * 1000;
+Shield.breachHistory = async function breachHistory(site) {
+  const stored = await Shield.api.storage.local.get("breachHistory");
+  const history = stored.breachHistory || {};
+  const cached = history[site];
+  if (cached && Date.now() - cached.at < BREACH_HISTORY_TTL) return cached.breaches;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch("https://haveibeenpwned.com/api/v3/breaches?domain=" + encodeURIComponent(site), {
+      headers: { "user-agent": "noah-shield" },
+      credentials: "omit",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("the breach list answered " + response.status);
+    const breaches = Shield.summarizeBreaches(await response.json());
+    // Only the newest 200 sites are kept, so the cache cannot grow without end.
+    const entries = Object.entries(history).sort((left, right) => right[1].at - left[1].at).slice(0, 199);
+    const next = Object.fromEntries(entries);
+    next[site] = { at: Date.now(), breaches };
+    await Shield.api.storage.local.set({ breachHistory: next });
+    return breaches;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+Shield.summarizeBreaches = function summarizeBreaches(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((breach) => ({
+      name: String(breach.Name || breach.Title || ""),
+      date: String(breach.BreachDate || ""),
+      count: Number(breach.PwnCount) || 0,
+      classes: Array.isArray(breach.DataClasses) ? breach.DataClasses.map(String).slice(0, 8) : [],
+      verified: breach.IsVerified !== false,
+    }))
+    .filter((breach) => breach.name)
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .slice(0, 12);
+};
+
 Shield.breachedEmail = async function breachedEmail(email, key) {
   if (!key) throw new Error("an HIBP API key is needed for email checks (haveibeenpwned.com/API/Key)");
   const response = await fetch("https://haveibeenpwned.com/api/v3/breachedaccount/" + encodeURIComponent(email) + "?truncateResponse=true", {

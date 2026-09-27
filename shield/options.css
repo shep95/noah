@@ -37,6 +37,17 @@ input[type="file"]::file-selector-button {
 }
 input[type="file"]::file-selector-button:hover { background: rgba(180, 210, 190, 0.06); color: #f1f4ef; }
 
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.looks button { padding: 0; border: 2px solid transparent; border-radius: 12px; overflow: hidden; background: var(--raise); cursor: pointer; aspect-ratio: 16 / 10; position: relative; transition: border-color var(--quick), transform var(--calm) var(--ease); }
+.looks button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.looks button span { position: absolute; left: 8px; bottom: 6px; font: 12px var(--body); color: #f1f4ef; text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+.looks button:hover { transform: translateY(-1px); border-color: var(--line-mid); }
+.looks button.on { border-color: var(--accent-bright); }
+.file-button { display: inline-flex; align-items: center; font: 12px var(--body); padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-mid); color: var(--sub); cursor: pointer; transition: background var(--quick), color var(--quick); }
+.file-button:hover { background: rgba(180, 210, 190, 0.06); color: #f1f4ef; }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatches i { display: block; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line-mid); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

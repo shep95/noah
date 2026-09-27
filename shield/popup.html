@@ -21,6 +21,7 @@
       <div class="grow">
         <h2 id="site" class="site-name">this page</h2>
         <p id="score" class="muted">reading the page…</p>
+        <p id="trust" class="muted" hidden></p>
       </div>
       <span id="blocked" class="pill" title="requests to trackers stopped on this tab">0</span>
     </div>
@@ -87,6 +88,34 @@
     <p id="vpn-empty" class="muted" hidden>No locations yet. Add a server you rent or a friend runs under settings, or start Tor on this computer for an anonymous route.</p>
   </section>
 
+  <section id="light-section">
+    <div class="row"><h2>light</h2><span id="light-now" class="muted"></span></div>
+    <div class="row small">
+      <button class="ghost" data-light="sunny" title="Nothing over the page: full brightness">bright and sunny</button>
+      <button class="ghost" data-light="dark" title="Dimmed and warmed for a dark room">in a dark room</button>
+      <button class="ghost" data-light="restaurant" title="A little dim, a little warm">restaurant</button>
+      <button class="ghost" data-light="night" title="Dim and amber for the last hour of the day">night</button>
+    </div>
+    <div class="row small">
+      <label class="slider">dim <input type="range" id="light-dim" min="0" max="85" step="5"></label>
+      <label class="slider">warm <input type="range" id="light-warm" min="0" max="100" step="5"></label>
+    </div>
+    <p class="muted">A veil over every page, not the backlight itself: noah's device room turns the real brightness.</p>
+  </section>
+
+  <section id="tone-section">
+    <div class="row"><h2>frequency</h2><span id="tone-now" class="muted"></span></div>
+    <div class="row">
+      <select id="tone-preset" class="grow"></select>
+      <button id="tone-toggle" class="ghost primary">play</button>
+    </div>
+    <div class="row small">
+      <label class="slider">hz <input type="number" id="tone-hz" min="2" max="963" step="0.01" value="432"></label>
+      <label class="slider">volume <input type="range" id="tone-volume" min="0" max="100" step="5" value="15"></label>
+    </div>
+    <p class="muted">Plays under whatever is on: a pure tone from 20 Hz up; below that a binaural beat, which needs headphones.</p>
+  </section>
+
   <section>
     <div class="row"><h2>mode</h2><span id="mode-now" class="muted"></span></div>
     <div class="row small">
@@ -131,6 +160,8 @@
   </footer>
 
   <script src="lib/common.js"></script>
+  <script src="lib/look.js"></script>
+  <script src="lib/tone.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

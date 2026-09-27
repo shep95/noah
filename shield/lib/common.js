@@ -60,6 +60,11 @@ Shield.DEFAULT_SETTINGS = {
     sync: false,
     linkCleaner: true,
   },
+  light: {
+    preset: "off",
+    dim: 0,
+    warmth: 0,
+  },
   shopping: {
     compare: true,
     coupons: true,
@@ -87,6 +92,8 @@ Shield.DEFAULT_SETTINGS = {
     clipboardWipe: true,
     hiddenFields: true,
     formLeak: true,
+    typingGuard: true,
+    blockKeyListeners: false,
     walletGuard: true,
     scamPopups: true,
     hiddenFrames: true,

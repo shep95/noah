@@ -50,7 +50,9 @@
     "browsingData",
     "idle",
     "history",
-    "contextMenus"
+    "contextMenus",
+    "offscreen",
+    "search"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -169,6 +171,16 @@
         "content/capture.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/light.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "declarative_net_request": {
@@ -240,5 +252,8 @@
       ],
       "use_dynamic_url": true
     }
-  ]
+  ],
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  }
 }

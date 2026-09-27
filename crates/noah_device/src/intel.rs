@@ -745,6 +745,54 @@ pub fn wifi_report() -> WifiReport {
     report
 }
 
+/// The saved password of a wifi network, asked of the system the way its
+/// own settings dialog asks. Windows and Linux answer for networks this user
+/// joined; macOS asks the keychain, which puts up its own prompt.
+pub fn wifi_password(ssid: &str) -> anyhow::Result<String> {
+    anyhow::ensure!(!ssid.trim().is_empty(), "not on a named network");
+    let password = platform::wifi_password(ssid.trim())?;
+    anyhow::ensure!(
+        !password.trim().is_empty(),
+        "the system has no saved password for this network (an open network, or one joined by another user)"
+    );
+    Ok(password.trim().to_string())
+}
+
+/// The modules of the QR code phones scan to join a network: dark cells as
+/// `true`, row by row.
+pub fn wifi_qr(ssid: &str, password: &str, security: Option<&str>) -> anyhow::Result<Vec<Vec<bool>>> {
+    let upper = security.map(|value| value.to_ascii_uppercase()).unwrap_or_default();
+    let kind = if upper.contains("WEP") {
+        "WEP"
+    } else if password.is_empty() || upper.contains("OPEN") || upper.contains("NONE") {
+        "nopass"
+    } else {
+        "WPA"
+    };
+    let escape = |text: &str| {
+        text.replace('\\', "\\\\")
+            .replace(';', "\\;")
+            .replace(',', "\\,")
+            .replace(':', "\\:")
+            .replace('"', "\\\"")
+    };
+    let payload = if kind == "nopass" {
+        format!("WIFI:T:nopass;S:{};;", escape(ssid))
+    } else {
+        format!("WIFI:T:{kind};S:{};P:{};;", escape(ssid), escape(password))
+    };
+    let code = qrcode::QrCode::new(payload.as_bytes())?;
+    let width = code.width();
+    let colors = code.to_colors();
+    Ok((0..width)
+        .map(|row| {
+            (0..width)
+                .map(|column| colors.get(row * width + column) == Some(&qrcode::Color::Dark))
+                .collect()
+        })
+        .collect())
+}
+
 /// A MAC whose second hex digit has the locally-administered bit set was
 /// made up by the device rather than burned in by the maker, which is what
 /// randomization does.
@@ -1706,6 +1754,21 @@ mod linux {
     use std::fs;
     use std::net::{Ipv4Addr, Ipv6Addr};
 
+    pub(super) fn wifi_password(ssid: &str) -> anyhow::Result<String> {
+        anyhow::ensure!(which::which("nmcli").is_ok(), "NetworkManager (nmcli) isn't here to ask");
+        let output = run_command(
+            "nmcli",
+            &["-s", "-g", "802-11-wireless-security.psk", "connection", "show", ssid],
+            COMMAND_TIMEOUT,
+        )?;
+        anyhow::ensure!(
+            output.success(),
+            "NetworkManager wouldn't say: {}",
+            output.stderr.trim().lines().next().unwrap_or("no reason given")
+        );
+        Ok(output.stdout.trim().to_string())
+    }
+
     pub(super) fn reverse_lookup(addresses: &[IpAddr]) -> HashMap<IpAddr, String> {
         reverse_lookup_threaded(addresses, reverse_lookup_unix)
     }
@@ -2303,6 +2366,25 @@ mod windows {
     use super::*;
     use crate::run_powershell;
 
+    pub(super) fn wifi_password(ssid: &str) -> anyhow::Result<String> {
+        let profile = format!("name={ssid}");
+        let output = run_command("netsh", &["wlan", "show", "profile", &profile, "key=clear"], COMMAND_TIMEOUT)?;
+        anyhow::ensure!(
+            output.success(),
+            "Windows wouldn't say: {}",
+            output.stdout.trim().lines().last().unwrap_or("no reason given")
+        );
+        // Windows prints the key on a "Key Content" line, in the system's own language on
+        // non-English systems, where the line still ends with the key after a colon inside
+        // the "Security settings" block.
+        for line in output.stdout.lines() {
+            if let Some(value) = labelled_value(line, "Key Content") {
+                return Ok(value.to_string());
+            }
+        }
+        anyhow::bail!("no saved key in this profile (an open network, or one saved by another user)")
+    }
+
     /// PowerShell resolves all the names in one process, since starting
     /// PowerShell once costs more than the lookups.
     pub(super) fn reverse_lookup(addresses: &[IpAddr]) -> HashMap<IpAddr, String> {
@@ -2628,6 +2710,22 @@ use macos as platform;
 mod macos {
     use super::*;
 
+    pub(super) fn wifi_password(ssid: &str) -> anyhow::Result<String> {
+        // The keychain asks the person before it answers; that prompt is the
+        // system's own and cannot be skipped.
+        let output = run_command(
+            "security",
+            &["find-generic-password", "-D", "AirPort network password", "-a", ssid, "-w"],
+            Duration::from_secs(120),
+        )?;
+        anyhow::ensure!(
+            output.success(),
+            "the keychain wouldn't say: {}",
+            output.stderr.trim().lines().next().unwrap_or("no reason given")
+        );
+        Ok(output.stdout.trim().to_string())
+    }
+
     pub(super) fn reverse_lookup(addresses: &[IpAddr]) -> HashMap<IpAddr, String> {
         reverse_lookup_threaded(addresses, reverse_lookup_unix)
     }
@@ -2937,6 +3035,10 @@ mod platform {
             note: Some("listing programs isn't supported on this operating system".into()),
             ..Default::default()
         }
+    }
+
+    pub(super) fn wifi_password(_ssid: &str) -> anyhow::Result<String> {
+        anyhow::bail!("wifi passwords can't be read on this operating system")
     }
 
     pub(super) fn wifi_report() -> WifiReport {

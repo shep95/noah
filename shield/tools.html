@@ -20,6 +20,14 @@
     </section>
 
     <section>
+      <h2>network</h2>
+      <p class="muted">Where this browser's traffic comes out, and whether something other than you decides the route.</p>
+      <p id="network-exit" class="muted">looking…</p>
+      <p id="network-control" class="muted"></p>
+      <p class="muted">The wifi's name, its password, the router and who answers your DNS are outside a browser's reach: noah's <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">device room</a> shows them, with a QR code for a friend to join.</p>
+    </section>
+
+    <section>
       <h2>where does this link go</h2>
       <p class="muted">Short links and email wrappers hide their destination. One request follows the redirects (the shortener counts a click), then the final address is checked against the lookalike list.</p>
       <p><input id="unshorten-input" type="url" placeholder="https://bit.ly/…" class="mostly"> <button id="unshorten-go" class="ghost">Follow it</button></p>
@@ -81,6 +89,8 @@
     </section>
   </main>
   <script src="lib/common.js"></script>
+  <script src="lib/look.js"></script>
+  <script src="lib/tone.js"></script>
   <script src="lib/vendor/jsQR.js"></script>
   <script src="tools.js"></script>
 </body>
