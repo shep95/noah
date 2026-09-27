@@ -1,0 +1,9 @@
+body.record { max-width: 460px; }
+.stage { position: relative; }
+#stage { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border-radius: 12px; background: #050706; border: 1px solid var(--line); }
+#stage-hint { position: absolute; left: 18px; right: 18px; top: 40%; text-align: center; pointer-events: none; }
+#clock { font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+#clock.live { color: var(--bad); }
+button.ghost.primary { border-color: rgba(114, 168, 104, 0.5); color: var(--accent-soft); }
+button.ghost.primary:hover { background: rgba(95, 138, 88, 0.16); color: #f1f4ef; }
+.count { position: absolute; inset: 0; display: grid; place-items: center; font: 400 72px/1 var(--display); color: #f1f4ef; text-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); pointer-events: none; animation: arrive var(--calm) var(--ease) both; }

@@ -8,31 +8,50 @@ async function activeTab() {
   return tabs && tabs[0] ? tabs[0] : null;
 }
 
+const regionNames = (() => { try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch { return null; } })();
+function countryName(code) {
+  if (!code) return "";
+  try { return (regionNames && regionNames.of(code.toUpperCase())) || code; } catch { return code; }
+}
+function flag(code) {
+  if (!/^[A-Za-z]{2}$/.test(code || "")) return "";
+  return String.fromCodePoint(...code.toUpperCase().split("").map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65)) + " ";
+}
+function placeOf(server) {
+  if (server.id === "tor-local") return "anonymous route (Tor on this computer)";
+  const country = countryName(server.country);
+  const where = [country, server.city].filter(Boolean).join(" · ");
+  return where ? flag(server.country) + where : server.name;
+}
+
+// Plain words: people want to know whether they are covered, where they come
+// out, and what to do if not.
 function describeTunnel(status) {
-  if (!status || status.state === "off") return ["Off. Your traffic takes the normal route.", ""];
-  const server = status.server ? status.server.name : "the server";
+  if (!status || status.state === "off") return ["Off. Sites see your own address.", "", "off"];
+  const place = status.server ? placeOf(status.server) : "the location";
   switch (status.state) {
     case "checking":
-      return ["Connecting through " + server + "…", "checking"];
+      return [`Connecting to ${place}…`, "checking", "connecting"];
     case "up": {
       const exit = status.exit || {};
-      const where = [exit.city, exit.country].filter(Boolean).join(", ");
-      const mismatch = status.mismatch ? " The exit country differs from the server's listing." : "";
-      return [`Up through ${server}. Exit ${exit.ip || "?"}${where ? " in " + where : ""}, ${status.latencyMs} ms.${mismatch}`, status.mismatch ? "held" : "up"];
+      const where = [exit.city, countryName(exit.country)].filter(Boolean).join(", ");
+      const mismatch = status.mismatch ? " That is not the country this location promised." : "";
+      return [`Protected. Sites see ${exit.ip || "the location's address"}${where ? " in " + where : ""}; ${status.latencyMs} ms away.${mismatch}`, status.mismatch ? "held" : "up", "on · " + (where || place)];
     }
     case "held":
-      return [`Holding: ${status.error}. Nothing leaves the browser until ${server} answers or you turn the tunnel off.`, "held"];
+      return [`${place} is not answering (${status.error}). Nothing leaves the browser until it does or you disconnect, so you are not exposed.`, "held", "holding"];
     case "error":
-      return ["Could not take the proxy: " + status.error, "error"];
+      return ["Could not take over the connection: " + status.error, "error", "problem"];
     default:
-      return [status.state, ""];
+      return [status.state, "", status.state];
   }
 }
 
 function serverLabel(server) {
-  const where = [server.city, server.country].filter(Boolean).join(", ");
-  const source = server.source === "vetted" ? "vetted" : server.source === "mine" ? "yours" : "built in";
-  return `${server.name}${where ? " · " + where : ""} · ${server.kind} · ${source}`;
+  const source = server.source === "vetted" ? "vetted" : server.source === "mine" ? "yours" : "";
+  const place = placeOf(server);
+  const name = server.id === "tor-local" || place.includes(server.name) ? "" : " · " + server.name;
+  return `${place}${name}${source ? " · " + source : ""}`;
 }
 
 function render(state) {
@@ -81,24 +100,32 @@ function render(state) {
     siteSection.hidden = true;
   }
 
-  byId("tunnel-on").checked = settings.tunnel.enabled;
+  const connectButton = byId("tunnel-on");
+  connectButton.textContent = settings.tunnel.enabled ? "disconnect" : "connect";
+  connectButton.classList.toggle("on", settings.tunnel.enabled);
   const select = byId("server");
   select.replaceChildren();
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = servers.length ? "choose a server" : "no servers yet: add one in settings";
-  select.append(placeholder);
-  for (const server of servers) {
+  const auto = document.createElement("option");
+  auto.value = "auto";
+  auto.textContent = servers.length ? "fastest location" : "no locations yet";
+  select.append(auto);
+  // Real places first, sorted by country; the anonymous Tor route last.
+  const sorted = [...servers].sort((left, right) => (left.id === "tor-local") - (right.id === "tor-local") || countryName(left.country).localeCompare(countryName(right.country)));
+  for (const server of sorted) {
     const option = document.createElement("option");
     option.value = server.id;
     option.textContent = serverLabel(server);
     select.append(option);
   }
-  select.value = settings.tunnel.serverId || "";
-  const [statusText, statusClass] = describeTunnel(tunnel);
+  select.value = settings.tunnel.serverId && servers.some((server) => server.id === settings.tunnel.serverId) ? settings.tunnel.serverId : "auto";
+  byId("vpn-empty").hidden = servers.length > 0;
+  connectButton.disabled = !servers.length;
+  const [statusText, statusClass, shortState] = describeTunnel(tunnel);
   const statusNode = byId("tunnel-status");
   statusNode.textContent = statusText;
   statusNode.className = "muted " + statusClass;
+  byId("vpn-dot").className = "dot " + statusClass;
+  byId("vpn-state").textContent = shortState;
   byId("kill").checked = settings.tunnel.killSwitch;
   byId("webrtc").checked = settings.tunnel.webRtcGuard;
 
@@ -167,31 +194,59 @@ bindSite("strict", "strictCookies");
 bindSite("capture", "captureAllowed");
 bindSite("shopquiet", "shoppingQuiet");
 
-byId("tunnel-on").addEventListener("change", async (event) => {
-  const serverId = byId("server").value || (current && current.servers[0] && current.servers[0].id) || null;
-  if (event.target.checked && !serverId) {
-    event.target.checked = false;
-    byId("tunnel-status").textContent = "Add a server first (settings and servers).";
+async function connect(serverId) {
+  if (serverId === "auto") {
+    byId("tunnel-status").textContent = "Trying every location once…";
+    const result = await Shield.send({ type: "tunnel.speedTest", pickFastest: true });
+    if (!result || !result.picked) byId("tunnel-status").textContent = "None of the locations answered. Check them under settings.";
+  } else {
+    await Shield.send({ type: "settings.update", change: { tunnel: { enabled: true, serverId } } });
+  }
+  await refresh();
+  setTimeout(refresh, 2500);
+}
+byId("tunnel-on").addEventListener("click", async () => {
+  if (!current) return;
+  if (current.settings.tunnel.enabled) {
+    await Shield.send({ type: "settings.update", change: { tunnel: { enabled: false } } });
+    await refresh();
+    setTimeout(refresh, 2500);
     return;
   }
-  await Shield.send({ type: "settings.update", change: { tunnel: { enabled: event.target.checked, serverId } } });
-  await refresh();
-  setTimeout(refresh, 2500);
+  if (!current.servers.length) {
+    byId("tunnel-status").textContent = "Add a location first, under settings.";
+    return;
+  }
+  await connect(byId("server").value || "auto");
 });
 byId("server").addEventListener("change", async (event) => {
-  await Shield.send({ type: "settings.update", change: { tunnel: { serverId: event.target.value || null } } });
-  await refresh();
-  setTimeout(refresh, 2500);
+  // Choosing a place while connected switches to it at once.
+  if (current && current.settings.tunnel.enabled) await connect(event.target.value || "auto");
 });
 bindSetting("kill", ["tunnel", "killSwitch"]);
 bindSetting("webrtc", ["tunnel", "webRtcGuard"]);
-byId("fastest").addEventListener("click", async () => {
-  byId("tunnel-status").textContent = "Trying every server once…";
-  const result = await Shield.send({ type: "tunnel.speedTest", pickFastest: true });
-  const best = result && result.results && result.results.find((entry) => entry.state === "up");
-  byId("tunnel-status").textContent = best ? `Fastest: ${best.name} at ${best.latencyMs} ms; the tunnel now uses it.` : "None of the servers answered the exit check.";
-  await refresh();
-});
+byId("fastest").addEventListener("click", () => connect("auto"));
+// While the VPN is connecting or holding, the card follows along instead of
+// showing the moment the popup opened.
+setInterval(() => {
+  if (current && current.tunnel && ["checking", "held"].includes(current.tunnel.state)) refresh();
+}, 2000);
+
+// ---- capture ----------------------------------------------------------------------------------
+async function capture(mode) {
+  const status = byId("capture-status");
+  status.textContent = mode === "full" ? "taking the whole page…" : mode === "area" ? "drag over the page…" : "taking…";
+  const result = await Shield.send({ type: "capture.start", mode, blur: byId("capture-blur").checked });
+  if (result.error) status.textContent = result.error;
+  else if (result.cancelled) status.textContent = "";
+  else status.textContent = "saved to Downloads/noah-shield" + (result.blurred ? ` · ${result.blurred} private detail${result.blurred === 1 ? "" : "s"} blurred` : "");
+}
+byId("shot-visible").addEventListener("click", () => capture("visible"));
+byId("shot-full").addEventListener("click", () => capture("full"));
+byId("shot-area").addEventListener("click", () => capture("area"));
+byId("record").addEventListener("click", () => Shield.send({ type: "record.open" }));
+Shield.api.storage.local.get("captureBlur").then((stored) => { byId("capture-blur").checked = stored.captureBlur !== false; });
+byId("capture-blur").addEventListener("change", (event) => Shield.api.storage.local.set({ captureBlur: event.target.checked }));
 byId("route").addEventListener("click", async () => {
   if (!current || !current.site) return;
   const site = current.site.site;
@@ -199,9 +254,10 @@ byId("route").addEventListener("click", async () => {
   if (existing) {
     await Shield.send({ type: "tunnel.route", site, serverId: null });
   } else {
-    const choice = prompt(`Route ${site} through which server? Type a server name from the list, or "direct" to skip the tunnel for it.`, "direct");
+    const choice = prompt(`Send ${site} through which location? Type a country or a name from the list, or "direct" to keep this site off the VPN.`, "direct");
     if (choice === null) return;
-    const server = current.servers.find((entry) => entry.name.toLowerCase() === choice.trim().toLowerCase() || entry.id === choice.trim());
+    const typed = choice.trim().toLowerCase();
+    const server = current.servers.find((entry) => entry.name.toLowerCase() === typed || entry.id === typed || countryName(entry.country).toLowerCase() === typed || (entry.city || "").toLowerCase() === typed);
     await Shield.send({ type: "tunnel.route", site, serverId: choice.trim().toLowerCase() === "direct" ? "direct" : server ? server.id : null });
   }
   await refresh();

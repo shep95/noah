@@ -192,6 +192,16 @@ summary:hover { color: var(--text); }
 .watcher:hover { border-color: var(--line-mid); }
 a { transition: color var(--quick); }
 [hidden] { display: none !important; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; transition: background var(--calm) var(--ease), box-shadow var(--calm) var(--ease); }
+.dot.up { background: var(--accent-bright); box-shadow: 0 0 0 4px rgba(114, 168, 104, 0.18); }
+.dot.checking { background: var(--warn); }
+.dot.held, .dot.error { background: var(--bad); }
+button.ghost.primary { border-color: rgba(114, 168, 104, 0.5); color: var(--accent-soft); }
+button.ghost.primary:hover { background: rgba(95, 138, 88, 0.16); color: #f1f4ef; }
+button.ghost.primary.on { background: rgba(95, 138, 88, 0.22); color: #f1f4ef; }
+button.ghost:disabled { opacity: 0.45; cursor: default; }
+select.grow { flex: 1 1 0; width: 0; min-width: 0; }
+section, .row { min-width: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

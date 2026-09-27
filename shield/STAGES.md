@@ -94,6 +94,21 @@ carry a per-session name; the parental pin is PBKDF2; web-accessible
 resources are the warning page alone. The pages got pill switches, staged
 arrival, focus rings and one easing, all off under reduced motion.
 
+## Stage 8: ads everywhere, capture, recording, a VPN people understand (shipped)
+
+EasyList joins EasyPrivacy: 20,000 ad rules as a second network ruleset,
+plus EasyList's element hiding (13,600 generic selectors on every page, per-site
+ones from a table) injected at navigation, all off for a trusted site. The
+popup gained capture: a screenshot of the screen, the whole page stitched, or
+an area you drag, with private details (emails, numbers, cards, keys,
+filled-in fields) blurred in the page before the shot; and a recorder page:
+screen, window or tab with the camera in a rounded corner, microphone and
+system sound mixed, written straight to Downloads/noah-shield as WebM with the
+muxer, writer and date tags blanked. The tunnel now reads as a VPN: a status
+dot, one connect button, locations by country with flags, "fastest location"
+by default, Tor named as the anonymous route, and statuses in plain words. A
+disconnect can no longer be overwritten by an exit check that finishes late.
+
 ## Not possible from an extension, and what we do instead
 
 * **A real VPN for the whole computer.** An extension can only proxy the

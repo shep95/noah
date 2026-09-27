@@ -164,7 +164,57 @@ if (api.webRequest && api.webRequest.onAuthRequired) {
 if (api.webNavigation) {
   api.webNavigation.onCommitted.addListener((details) => {
     if (details.frameId === 0) Shield.resetTabCount(details.tabId).catch(() => {});
+    if (/^https?:/.test(details.url || "")) hideAds(details).catch(() => {});
   });
+}
+
+// ---- ad slots ---------------------------------------------------------------------------------
+// The network rules stop ad requests; what the page reserved for them (the
+// boxes, the "sponsored" rails) is hidden with EasyList's element rules: one
+// stylesheet of generic selectors on every page, plus the site's own.
+let cosmeticTable = null;
+async function siteHidingCss(host) {
+  if (!cosmeticTable) {
+    const response = await fetch(api.runtime.getURL("rules/cosmetic.json"));
+    cosmeticTable = await response.json();
+  }
+  const labels = host.split(".");
+  const allowed = new Set();
+  const selectors = [];
+  for (let index = 0; index < labels.length - 1; index++) {
+    const domain = labels.slice(index).join(".");
+    for (const selector of cosmeticTable.allow[domain] || []) allowed.add(selector);
+  }
+  for (let index = 0; index < labels.length - 1; index++) {
+    const domain = labels.slice(index).join(".");
+    for (const selector of cosmeticTable.hide[domain] || []) if (!allowed.has(selector)) selectors.push(selector);
+  }
+  if (!selectors.length) return "";
+  const rules = [];
+  for (let start = 0; start < selectors.length; start += 250) {
+    rules.push(":is(" + selectors.slice(start, start + 250).join(", ") + ") { display: none !important; }");
+  }
+  return rules.join("\n");
+}
+
+async function hideAds(details) {
+  if (!api.scripting || !api.scripting.insertCSS) return;
+  const settings = await Shield.loadSettings();
+  if (!settings.privacy.trackers) return;
+  const host = Shield.hostOf(details.url);
+  if (settings.privacy.trustedSites.includes(Shield.siteOf(host))) return;
+  const target = { tabId: details.tabId, frameIds: [details.frameId] };
+  const insert = async (what) => {
+    try {
+      await api.scripting.insertCSS({ target, origin: "USER", ...what });
+    } catch {
+      // Firefox has no USER origin for extension pages' styles; the sheet still applies.
+      await api.scripting.insertCSS({ target, ...what }).catch(() => {});
+    }
+  };
+  await insert({ files: ["rules/cosmetic.css"] });
+  const css = await siteHidingCss(host);
+  if (css) await insert({ css });
 }
 api.tabs.onRemoved.addListener((tabId) => {
   Shield.resetTabCount(tabId).catch(() => {});
@@ -550,6 +600,78 @@ const handlers = {
   },
   async "panic"() {
     await panic();
+    return { ok: true };
+  },
+  // ---- screenshots and the recorder --------------------------------------------------------------
+  // The popup starts a capture for the active tab; the tab's content script
+  // drives it and comes back here for each shot and for the file. A tab may
+  // only do that while a capture the person started is open for it.
+  async "capture.start"(message) {
+    const [tab] = await api.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !/^https?:/.test(tab.url || "")) return { error: "open a web page first; the browser's own pages cannot be captured" };
+    const session = await api.storage.session.get("captureTabs");
+    const captureTabs = session.captureTabs || {};
+    captureTabs[tab.id] = Date.now() + 5 * 60 * 1000;
+    await api.storage.session.set({ captureTabs });
+    const mode = ["visible", "full", "area"].includes(message.mode) ? message.mode : "visible";
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("the page did not answer; reload it and try again")), 6 * 60 * 1000);
+        api.tabs.sendMessage(tab.id, { type: "capture.run", mode, blur: Boolean(message.blur) }, (response) => {
+          clearTimeout(timer);
+          if (api.runtime.lastError) reject(new Error("the page did not answer; reload it and try again"));
+          else resolve(response || {});
+        });
+      });
+      return result;
+    } catch (error) {
+      return { error: String(error.message || error) };
+    } finally {
+      const after = await api.storage.session.get("captureTabs");
+      const remaining = after.captureTabs || {};
+      delete remaining[tab.id];
+      await api.storage.session.set({ captureTabs: remaining });
+    }
+  },
+  async "capture.shot"(message, sender) {
+    if (!sender.tab) return { error: "not a tab" };
+    const session = await api.storage.session.get("captureTabs");
+    const until = (session.captureTabs || {})[sender.tab.id];
+    if (!until || until < Date.now()) return { error: "no capture is open for this page" };
+    try {
+      const dataUrl = await api.tabs.captureVisibleTab(sender.tab.windowId, { format: "png" });
+      return { dataUrl };
+    } catch (error) {
+      return { error: String(error.message || error) };
+    }
+  },
+  async "capture.save"(message, sender) {
+    if (!sender.tab) return { error: "not a tab" };
+    const session = await api.storage.session.get("captureTabs");
+    const until = (session.captureTabs || {})[sender.tab.id];
+    if (!until || until < Date.now()) return { error: "no capture is open for this page" };
+    const dataUrl = String(message.dataUrl || "");
+    const filename = String(message.filename || "");
+    if (!dataUrl.startsWith("data:image/png;base64,")) return { error: "not a picture" };
+    if (!/^noah-shield\/[A-Za-z0-9 ._-]+\.png$/.test(filename)) return { error: "bad file name" };
+    try {
+      const id = await api.downloads.download({ url: dataUrl, filename, saveAs: false, conflictAction: "uniquify" });
+      return { ok: true, id };
+    } catch (error) {
+      return { error: String(error.message || error) };
+    }
+  },
+  async "record.open"() {
+    const url = api.runtime.getURL("record.html");
+    const windows = await api.windows.getAll({ populate: true });
+    for (const window of windows) {
+      const tab = (window.tabs || []).find((entry) => entry.url === url);
+      if (tab) {
+        await api.windows.update(window.id, { focused: true });
+        return { ok: true, reused: true };
+      }
+    }
+    await api.windows.create({ url, type: "popup", width: 470, height: 760 });
     return { ok: true };
   },
   async "capture.ask"(message, sender) {
@@ -1030,7 +1152,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

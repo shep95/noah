@@ -159,6 +159,16 @@
         "content/lock.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/capture.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "declarative_net_request": {
@@ -167,6 +177,11 @@
         "id": "trackers",
         "enabled": true,
         "path": "rules/trackers.json"
+      },
+      {
+        "id": "ads",
+        "enabled": true,
+        "path": "rules/ads.json"
       },
       {
         "id": "headers",

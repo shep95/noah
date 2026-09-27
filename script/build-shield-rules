@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn EasyPrivacy into the declarativeNetRequest ruleset noah shield ships.
+"""Turn EasyPrivacy and EasyList into the rules noah shield ships.
 
 EasyPrivacy (https://easylist.to, GPLv3 / CC BY-SA 3.0) is written in the
 Adblock Plus filter syntax. declarativeNetRequest's `urlFilter` understands the
@@ -8,7 +8,10 @@ one; element hiding, regular expressions and the options the browser cannot
 express (`$csp`, `$rewrite`, `$removeparam`, ...) are left out and counted.
 
 Usage: script/build-shield-rules [--from-dir <dir with the .txt files>]
-Writes shield/rules/trackers.json and prints what was kept and dropped.
+Writes shield/rules/trackers.json (EasyPrivacy), shield/rules/ads.json
+(EasyList network filters), shield/rules/cosmetic.css (EasyList's generic
+element hiding) and shield/rules/cosmetic.json (its per-site hiding), and
+prints what was kept and dropped.
 """
 import json
 import os
@@ -24,8 +27,30 @@ SECTIONS = [
     "easyprivacy_allowlist.txt",
 ]
 SOURCE = "https://raw.githubusercontent.com/easylist/easylist/master/easyprivacy/"
-# Chrome guarantees 30,000 static rules per extension; stay well under it.
-LIMIT = 28000
+# EasyList proper: the ads. Most useful sections first, so the cap keeps the
+# ad servers and the general filters and drops the long tail of site quirks.
+AD_SECTIONS = [
+    "easylist_adservers.txt",
+    "easylist_general_block.txt",
+    "easylist_general_block_dimensions.txt",
+    "easylist_thirdparty.txt",
+    "easylist_adservers_popup.txt",
+    "easylist_general_block_popup.txt",
+    "easylist_thirdparty_popup.txt",
+    "easylist_specific_block.txt",
+    "easylist_specific_block_popup.txt",
+    "easylist_allowlist.txt",
+]
+AD_SOURCE = "https://raw.githubusercontent.com/easylist/easylist/master/easylist/"
+# Element hiding: the generic selectors become one stylesheet, the per-site
+# ones a table the worker reads when a page loads.
+HIDE_GENERAL = "easylist_general_hide.txt"
+HIDE_SPECIFIC = "easylist_specific_hide.txt"
+HIDE_ALLOW = "easylist_allowlist_general_hide.txt"
+# Chrome and Firefox guarantee 30,000 static rules per extension; the lists
+# together stay under that line so every rule is always in force.
+LIMIT = 12000
+AD_LIMIT = 20000
 
 RESOURCE_TYPES = {
     "script": "script",
@@ -105,21 +130,20 @@ def convert(line, next_id):
     return rule, None
 
 
-def main():
-    from_dir = None
-    if len(sys.argv) == 3 and sys.argv[1] == "--from-dir":
-        from_dir = sys.argv[2]
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def fetch(from_dir, source, section):
+    if from_dir:
+        with open(os.path.join(from_dir, section), encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+    with urllib.request.urlopen(source + section, timeout=60) as response:
+        return response.read().decode("utf-8", "replace")
+
+
+def build_network(from_dir, source, sections, limit, first_id):
     rules = []
     dropped = {}
     seen = set()
-    for section in SECTIONS:
-        if from_dir:
-            with open(os.path.join(from_dir, section), encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-        else:
-            with urllib.request.urlopen(SOURCE + section, timeout=60) as response:
-                text = response.read().decode("utf-8", "replace")
+    for section in sections:
+        text = fetch(from_dir, source, section)
         for line in text.splitlines():
             line = line.strip()
             if not line or line[0] in "![" or "##" in line or "#@#" in line or "#?#" in line:
@@ -127,20 +151,106 @@ def main():
             if line in seen:
                 continue
             seen.add(line)
-            rule, reason = convert(line, len(rules) + 1)
+            rule, reason = convert(line, first_id + len(rules))
             if rule is None:
                 dropped[reason] = dropped.get(reason, 0) + 1
                 continue
             rules.append(rule)
-            if len(rules) >= LIMIT:
+            if len(rules) >= limit:
                 break
-    output = os.path.join(root, "shield", "rules", "trackers.json")
+        if len(rules) >= limit:
+            break
+    return rules, dropped
+
+
+# Procedural filters need a script engine; plain CSS is all a stylesheet can
+# hold, and a selector the browser cannot parse would drop its whole rule if it
+# were not wrapped in :is(), which forgives.
+PROCEDURAL = re.compile(r":(has-text|matches-css|matches-path|min-text-length|upward|xpath|watch-attr|remove|style|others|matches-attr|-abp-|nth-ancestor|if\b|if-not)")
+SELECTOR_OK = re.compile(r"^[ -~]+$")
+
+
+def build_hiding(from_dir):
+    general = []
+    for line in fetch(from_dir, AD_SOURCE, HIDE_GENERAL).splitlines():
+        line = line.strip()
+        if not line.startswith("##"):
+            continue
+        selector = line[2:]
+        if PROCEDURAL.search(selector) or not SELECTOR_OK.match(selector) or "{" in selector:
+            continue
+        general.append(selector)
+    # Sites that ask for a generic selector back get it back: their entries
+    # are removed from the general sheet only when the exception is itself
+    # generic; per-site exceptions are kept in the table as "allow".
+    specific = {}
+    for line in fetch(from_dir, AD_SOURCE, HIDE_SPECIFIC).splitlines():
+        line = line.strip()
+        if "##" not in line or line.startswith("!"):
+            continue
+        domains, selector = line.split("##", 1)
+        if PROCEDURAL.search(selector) or not SELECTOR_OK.match(selector) or "{" in selector:
+            continue
+        for domain in domains.split(","):
+            domain = domain.strip().lower()
+            if not domain or domain.startswith("~") or not DOMAIN_OK.match(domain):
+                continue
+            specific.setdefault(domain, []).append(selector)
+    allow = {}
+    for line in fetch(from_dir, AD_SOURCE, HIDE_ALLOW).splitlines():
+        line = line.strip()
+        if "#@#" not in line or line.startswith("!"):
+            continue
+        domains, selector = line.split("#@#", 1)
+        for domain in domains.split(","):
+            domain = domain.strip().lower()
+            if domain and DOMAIN_OK.match(domain):
+                allow.setdefault(domain, []).append(selector)
+    return general, specific, allow
+
+
+def write_stylesheet(path, selectors):
+    chunk = 250
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("/* EasyList general element hiding, built by script/build-shield-rules. */\n")
+        for start in range(0, len(selectors), chunk):
+            group = ", ".join(selectors[start:start + chunk])
+            handle.write(":is(" + group + ") { display: none !important; }\n")
+
+
+def main():
+    from_dir = None
+    if len(sys.argv) == 3 and sys.argv[1] == "--from-dir":
+        from_dir = sys.argv[2]
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    rules_dir = os.path.join(root, "shield", "rules")
+
+    trackers, dropped = build_network(from_dir, SOURCE, SECTIONS, LIMIT, 1)
+    output = os.path.join(rules_dir, "trackers.json")
     with open(output, "w", encoding="utf-8") as handle:
-        json.dump(rules, handle, separators=(",", ":"))
+        json.dump(trackers, handle, separators=(",", ":"))
         handle.write("\n")
-    print(f"{len(rules)} rules written to {output}")
+    print(f"{len(trackers)} tracker rules written to {output}")
     for reason, count in sorted(dropped.items(), key=lambda item: -item[1]):
         print(f"  dropped {count:5} for {reason}")
+
+    ads, dropped = build_network(from_dir, AD_SOURCE, AD_SECTIONS, AD_LIMIT, 1)
+    output = os.path.join(rules_dir, "ads.json")
+    with open(output, "w", encoding="utf-8") as handle:
+        json.dump(ads, handle, separators=(",", ":"))
+        handle.write("\n")
+    print(f"{len(ads)} ad rules written to {output}")
+    for reason, count in sorted(dropped.items(), key=lambda item: -item[1]):
+        print(f"  dropped {count:5} for {reason}")
+
+    general, specific, allow = build_hiding(from_dir)
+    sheet = os.path.join(rules_dir, "cosmetic.css")
+    write_stylesheet(sheet, general)
+    table = os.path.join(rules_dir, "cosmetic.json")
+    with open(table, "w", encoding="utf-8") as handle:
+        json.dump({"hide": specific, "allow": allow}, handle, separators=(",", ":"))
+        handle.write("\n")
+    print(f"{len(general)} general hiding selectors in {sheet}; {len(specific)} sites in {table}")
 
 
 if __name__ == "__main__":

@@ -16,15 +16,17 @@
 
   <main>
     <section>
-      <h2>tunnel servers</h2>
+      <h2>vpn locations</h2>
       <p class="muted">
-        The tunnel is an encrypted proxy the browser sends everything through. It fails closed: when the server does not
-        answer, requests stop instead of slipping out on the normal connection. DNS is resolved by the server and WebRTC
-        is held to proxied routes. It protects this browser, not the rest of the computer.
+        The VPN sends everything the browser does through one location you choose, so sites see that location's address
+        instead of yours. It fails closed: if the location stops answering, requests stop instead of slipping out on your own
+        connection. Names are looked up by the location and WebRTC calls cannot reveal your real address. It protects this
+        browser, not the rest of the computer. Locations come from noah's signed list, from servers you add here, or from Tor on
+        this computer (the anonymous route; its exit country changes on its own).
       </p>
       <table id="servers"></table>
       <details>
-        <summary>Add a server of your own</summary>
+        <summary>Add a location of your own</summary>
         <p class="muted">Any HTTPS proxy or SOCKS5 server works: one you rent, one a friend runs, or Tor on this computer. A plain <code>http</code> proxy across the internet is refused because everyone on the path could read it.</p>
         <form id="add-server" class="grid">
           <label>Name <input name="name" maxlength="80" placeholder="my server in Amsterdam"></label>
@@ -47,7 +49,7 @@
     <section>
       <h2>data protection</h2>
       <div class="grid two">
-        <label class="switch"><input type="checkbox" data-path="privacy.trackers"><span>Stop trackers (EasyPrivacy rules)</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.trackers"><span>Stop ads and trackers (EasyList and EasyPrivacy rules, on every site)</span></label>
         <label class="switch"><input type="checkbox" data-path="privacy.thirdPartyCookies" data-invert><span>Block third-party cookies</span></label>
         <label class="switch"><input type="checkbox" data-path="privacy.purgeTrackerCookies"><span>Delete cookies trackers already left, twice a day</span></label>
         <label class="switch"><input type="checkbox" data-path="privacy.geolocation" data-block><span>Deny location to every site</span></label>

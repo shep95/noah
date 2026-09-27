@@ -45,7 +45,7 @@
   <section>
     <div class="row"><h2>today</h2><span id="today" class="muted"></span></div>
     <div class="dash">
-      <div><b id="d-trackers">0</b><span>trackers stopped</span></div>
+      <div><b id="d-trackers">0</b><span>ads and trackers stopped</span></div>
       <div><b id="d-cookies">0</b><span>cookies burned</span></div>
       <div><b id="d-scams">0</b><span>scams caught</span></div>
       <div><b id="d-coupons">0</b><span>codes that worked</span></div>
@@ -55,20 +55,36 @@
     <p id="week" class="muted"></p>
   </section>
 
-  <section>
-    <div class="row">
-      <h2>tunnel</h2>
-      <label class="switch inline"><input type="checkbox" id="tunnel-on"><span>on</span></label>
+  <section id="capture-section">
+    <div class="row"><h2>capture</h2><span id="capture-status" class="muted"></span></div>
+    <div class="row small">
+      <button id="shot-visible" class="ghost" title="What is on screen right now, saved to Downloads/noah-shield">screenshot</button>
+      <button id="shot-full" class="ghost" title="The whole page, top to bottom, stitched into one picture">full page</button>
+      <button id="shot-area" class="ghost" title="Drag over the part of the page you want">an area</button>
+      <button id="record" class="ghost" title="Record the screen, a window or a tab, with your camera in a corner if you like; the file goes straight to your downloads">record</button>
     </div>
-    <select id="server"></select>
+    <label class="switch"><input type="checkbox" id="capture-blur"><span>blur private details first (emails, numbers, cards, keys, filled-in fields)</span></label>
+  </section>
+
+  <section id="vpn-section">
+    <div class="row">
+      <h2>vpn</h2>
+      <span id="vpn-dot" class="dot"></span>
+      <span id="vpn-state" class="muted">off</span>
+    </div>
+    <div class="row">
+      <select id="server" class="grow"></select>
+      <button id="tunnel-on" class="ghost primary">connect</button>
+    </div>
     <p id="tunnel-status" class="muted"></p>
     <div class="row small">
-      <label class="switch"><input type="checkbox" id="kill"><span>fail closed</span></label>
-      <label class="switch"><input type="checkbox" id="webrtc"><span>guard WebRTC</span></label>
-      <button id="recheck" class="ghost">check exit</button>
-      <button id="fastest" class="ghost" title="Try every server once and keep the fastest">fastest</button>
-      <button id="route" class="ghost" title="Send this site through the chosen server, or straight out">route this site</button>
+      <label class="switch"><input type="checkbox" id="kill"><span>block everything if it drops</span></label>
+      <label class="switch"><input type="checkbox" id="webrtc"><span>hide my real address in calls</span></label>
+      <button id="recheck" class="ghost" title="Ask where the traffic comes out right now">check</button>
+      <button id="fastest" class="ghost" title="Try every location once and keep the fastest">fastest</button>
+      <button id="route" class="ghost" title="Send only this site through a location, or straight out">this site</button>
     </div>
+    <p id="vpn-empty" class="muted" hidden>No locations yet. Add a server you rent or a friend runs under settings, or start Tor on this computer for an anonymous route.</p>
   </section>
 
   <section>
@@ -85,7 +101,7 @@
     <summary class="switches-summary">switches</summary>
     <section>
       <h2>data protection</h2>
-      <label class="switch"><input type="checkbox" id="trackers"><span>stop trackers (EasyPrivacy)</span></label>
+      <label class="switch"><input type="checkbox" id="trackers"><span>stop ads and trackers</span></label>
       <label class="switch"><input type="checkbox" id="cookies"><span>block third-party cookies</span></label>
       <label class="switch"><input type="checkbox" id="geo"><span>deny location to every site</span></label>
       <label class="switch"><input type="checkbox" id="fingerprint"><span>blur fingerprints</span></label>

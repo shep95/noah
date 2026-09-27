@@ -133,6 +133,10 @@ function pacFor(server, killSwitch, bypassLocal, routes = {}) {
 
 let activeServer = null;
 let firefoxListener = null;
+// Each apply gets a number; an exit check that finishes after a newer apply
+// (the person disconnected while Tor was still not answering) must not write
+// its stale verdict over the new state.
+let generation = 0;
 
 async function applyChromium(server, settings) {
   const proxy = Shield.api.proxy;
@@ -243,21 +247,23 @@ Shield.applyTunnel = async function applyTunnel(settings) {
     return setStatus({ state: "error", error: String(error.message || error), server });
   }
   activeServer = server ? withRoutes(server, settings, servers) : null;
+  const mine = ++generation;
   await setWebRtc(Boolean(server) && settings.tunnel.webRtcGuard);
   if (!server) return setStatus({ state: "off" });
   await setStatus({ state: "checking", server });
-  return Shield.checkExit(server);
+  return Shield.checkExit(server, mine);
 };
 
-Shield.checkExit = async function checkExit(server) {
+Shield.checkExit = async function checkExit(server, mine = generation) {
   const started = Date.now();
+  const settle = (status) => (mine === generation ? setStatus(status) : status);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(Shield.WHOAMI_URL, { cache: "no-store", credentials: "omit", signal: controller.signal });
     if (!response.ok) throw new Error("exit check answered " + response.status);
     const exit = await response.json();
-    return setStatus({
+    return settle({
       state: "up",
       server,
       exit: { ip: String(exit.ip || ""), country: String(exit.country || ""), city: String(exit.city || "") },
@@ -265,7 +271,7 @@ Shield.checkExit = async function checkExit(server) {
       mismatch: Boolean(server.country && exit.country && server.country !== exit.country),
     });
   } catch (error) {
-    return setStatus({
+    return settle({
       state: "held",
       server,
       error: controller.signal.aborted ? "no answer through the tunnel in 12 seconds" : String(error.message || error),

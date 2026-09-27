@@ -8,7 +8,7 @@ converter). Four things, each described by what it can honestly do:
   choosing and nowhere else; it fails closed, resolves names remotely and holds
   WebRTC to proxied routes. Tor on this computer is built in. Vetted servers
   come from a signed feed; you can add your own.
-* **data protection**: EasyPrivacy rebuilt as declarativeNetRequest rules,
+* **ads and data protection**: EasyList and EasyPrivacy rebuilt as declarativeNetRequest rules, EasyList's element hiding on every page,
   third-party cookies off, tracker cookies purged, location denied, prompts
   denied, fingerprints blurred, tracking parameters stripped, Global Privacy
   Control sent; per-site trust and per-site no-cookies.
@@ -44,7 +44,10 @@ converter). Four things, each described by what it can honestly do:
     content/annoyances.js cookie banners, overlays, autoplay, countdowns, copy unblock, dark mode
     content/paste.js     sensitive paste guard, upload metadata stripper
     content/lock.js      tab lock curtain
-    rules/*.json         EasyPrivacy (built by script/build-shield-rules), headers, parameters, security, mail, referrer, social login
+    rules/*.json         EasyPrivacy and EasyList (built by script/build-shield-rules), headers, parameters, security, mail, referrer, social login
+    rules/cosmetic.*     EasyList element hiding: a generic stylesheet and a per-site table
+    content/capture.js   screenshots: visible, full page, an area; private details blurred first
+    record.*             the recorder page: screen plus camera bubble, straight to Downloads
     popup.*, options.*, tools.*, warn.*, leak.*  the shield's own pages
     STAGES.md            what shipped in which stage, and what an extension cannot do
 

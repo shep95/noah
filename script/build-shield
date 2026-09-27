@@ -29,7 +29,7 @@ trap 'rm -rf "$stage"' EXIT
 copy_sources() {
     mkdir -p "$1"
     cp -r shield/background.js shield/popup.html shield/popup.css shield/popup.js \
-        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js \
+        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js shield/record.html shield/record.css shield/record.js \
         shield/lib shield/content shield/rules shield/icons "$1/"
 }
 

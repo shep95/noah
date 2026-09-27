@@ -61,7 +61,7 @@ Shield.applyPrivacy = async function applyPrivacy(settings) {
   if (rulesets && rulesets.updateEnabledRulesets) {
     const enable = [];
     const disable = [];
-    (privacy.trackers ? enable : disable).push("trackers");
+    (privacy.trackers ? enable : disable).push("trackers", "ads");
     (privacy.gpc ? enable : disable).push("headers");
     (privacy.stripParameters ? enable : disable).push("parameters");
     const security = settings.security;

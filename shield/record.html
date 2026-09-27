@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · record</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="record.css">
+</head>
+<body class="options record">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>record</h1>
+    <span id="clock" class="muted"></span>
+  </header>
+  <main>
+    <section>
+      <div class="stage">
+        <canvas id="stage" width="640" height="360"></canvas>
+        <p id="stage-hint" class="muted">Press start, then choose a screen, a window or a tab. The picture below is what the file will hold.</p>
+      </div>
+      <div class="row">
+        <button id="start" class="ghost primary">start recording</button>
+        <button id="stop" class="ghost danger" hidden>stop</button>
+        <span id="status" class="muted"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>camera</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" id="camera-on"><span>show me in a corner</span></label>
+        <label class="switch"><input type="checkbox" id="mic-on" checked><span>my microphone</span></label>
+        <label class="switch"><input type="checkbox" id="system-on" checked><span>the sound of what I record</span></label>
+        <label class="switch"><input type="checkbox" id="countdown" checked><span>three-second countdown</span></label>
+      </div>
+      <div class="grid two">
+        <label>corner
+          <select id="corner">
+            <option value="br">bottom right</option>
+            <option value="bl">bottom left</option>
+            <option value="tr">top right</option>
+            <option value="tl">top left</option>
+          </select>
+        </label>
+        <label>size
+          <select id="bubble-size">
+            <option value="0.18">small</option>
+            <option value="0.24" selected>medium</option>
+            <option value="0.32">large</option>
+          </select>
+        </label>
+        <label>shape
+          <select id="bubble-shape">
+            <option value="rounded" selected>rounded rectangle</option>
+            <option value="circle">circle</option>
+            <option value="square">square corners</option>
+          </select>
+        </label>
+        <label>quality
+          <select id="quality">
+            <option value="4000000">good (4 Mbit/s)</option>
+            <option value="8000000" selected>sharp (8 Mbit/s)</option>
+            <option value="16000000">best (16 Mbit/s)</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted">The camera is drawn into the picture as a rounded rectangle, live. Nothing leaves this computer: the file is written straight to your downloads folder as <code>noah-shield/recording …webm</code>, with no name, date or program tag inside it.</p>
+    </section>
+
+    <section>
+      <h2>done</h2>
+      <p id="result" class="muted">Nothing recorded yet.</p>
+      <p id="result-actions" hidden><button id="save-again" class="ghost">save again</button></p>
+    </section>
+  </main>
+  <script src="lib/common.js"></script>
+  <script src="record.js"></script>
+</body>
+</html>
