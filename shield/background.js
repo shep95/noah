@@ -108,18 +108,21 @@ api.alarms.onAlarm.addListener((alarm) => {
 });
 
 // Settings changed anywhere (popup, options, another window): apply again.
+// Settings changes are applied one after another, each against the newest
+// settings, so a slow earlier change cannot undo a later one with stale values.
+let settingsQueue = Promise.resolve();
 api.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes.settings) return;
   const before = changes.settings.oldValue || {};
   const after = changes.settings.newValue || {};
-  (async () => {
-    const settings = Shield.deepMerge(Shield.DEFAULT_SETTINGS, after);
+  settingsQueue = settingsQueue.then(async () => {
+    const settings = await Shield.loadSettings();
     if (JSON.stringify(before.privacy) !== JSON.stringify(after.privacy) || JSON.stringify(before.security) !== JSON.stringify(after.security)) await Shield.applyPrivacy(settings);
     if (JSON.stringify(before.tunnel) !== JSON.stringify(after.tunnel)) await Shield.applyTunnel(settings);
     await Shield.applyHeaderRules(settings);
     if (JSON.stringify(before.modes) !== JSON.stringify(after.modes)) await applyModes(settings);
     await Shield.pushSync(settings).catch((error) => console.warn("shield: sync", error));
-  })().catch((error) => console.error("shield: settings", error));
+  }).catch((error) => console.error("shield: settings", error));
 });
 
 // Requests the rulesets stopped show up here; that is the badge count.
