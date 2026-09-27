@@ -143,6 +143,9 @@ Shield.DEFAULT_SETTINGS = {
     flagLowFollowers: true,
     lowFollowersUnder: 20,
   },
+  profileIntel: {
+    enabled: true,
+  },
   inspect: {
     everSeen: false,
   },

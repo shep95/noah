@@ -217,6 +217,10 @@ function render(state) {
   byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings.";
   Shield.send({ type: "report.weekly" }).then((report) => { if (report && report.text) byId("week").textContent = "This week: " + report.text; });
 
+  const profileIntel = settings.profileIntel || { enabled: true };
+  byId("profile-enabled").checked = Boolean(profileIntel.enabled);
+  byId("profile-status").textContent = profileIntel.enabled ? "on" : "off";
+
   const spaces = settings.spaces || { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
   byId("spaces-enabled").checked = Boolean(spaces.enabled);
   byId("spaces-lowfollow").checked = Boolean(spaces.flagLowFollowers);
@@ -576,6 +580,12 @@ async function pushSpaces(change) {
   await refresh();
 }
 byId("spaces-enabled").addEventListener("change", (event) => pushSpaces({ enabled: event.target.checked }));
+
+async function pushProfile(change) {
+  await Shield.send({ type: "profile.set", change });
+  await refresh();
+}
+byId("profile-enabled").addEventListener("change", (event) => pushProfile({ enabled: event.target.checked }));
 byId("spaces-lowfollow").addEventListener("change", (event) => pushSpaces({ flagLowFollowers: event.target.checked }));
 byId("spaces-days").addEventListener("change", (event) => pushSpaces({ newAccountDays: Math.max(1, Math.min(365, Number(event.target.value) || 30)) }));
 byId("spaces-underfollow").addEventListener("change", (event) => pushSpaces({ lowFollowersUnder: Math.max(0, Math.min(100000, Number(event.target.value) || 20)) }));

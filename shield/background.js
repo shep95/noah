@@ -1236,6 +1236,21 @@ const handlers = {
     } catch {}
     return { spaces: settings.spaces };
   },
+  async "profile.config"() {
+    const settings = await Shield.loadSettings();
+    return { profile: settings.profileIntel };
+  },
+  async "profile.set"(message) {
+    const change = { profileIntel: message.change || {} };
+    const settings = await Shield.updateSettings(change);
+    try {
+      const tabs = await api.tabs.query({ url: ["https://twitter.com/*", "https://*.twitter.com/*", "https://x.com/*", "https://*.x.com/*"] });
+      for (const tab of tabs) {
+        try { await api.tabs.sendMessage(tab.id, { type: "profile.set", profile: settings.profileIntel }); } catch {}
+      }
+    } catch {}
+    return { profile: settings.profileIntel };
+  },
   async "inspect.enabled"(message, sender) {
     const tabId = sender.tab ? sender.tab.id : (message && message.tabId);
     if (tabId == null) return { enabled: false };
@@ -1545,7 +1560,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;
