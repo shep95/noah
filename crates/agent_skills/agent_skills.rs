@@ -43,8 +43,9 @@ pub struct SkillScopeId(pub usize);
 /// operations, potentially exhausting file descriptors or stalling the app.
 const SKILL_IO_CONCURRENCY: usize = 16;
 
-/// Maximum size for a single SKILL.md file (100KB)
-pub const MAX_SKILL_FILE_SIZE: usize = 100 * 1024;
+/// Maximum size for a single SKILL.md file (1 GiB): a skill may carry a whole
+/// reference set, and the machine's memory is the only real limit.
+pub const MAX_SKILL_FILE_SIZE: usize = 1024 * 1024 * 1024;
 
 /// Maximum total size for skill descriptions in system prompt (50KB)
 pub const MAX_SKILL_DESCRIPTIONS_SIZE: usize = 50 * 1024;
@@ -292,8 +293,8 @@ pub fn parse_skill_frontmatter(
 pub fn extract_skill_frontmatter(content: &str) -> Result<(SkillMetadata, &str)> {
     if content.len() > MAX_SKILL_FILE_SIZE {
         anyhow::bail!(
-            "SKILL.md file exceeds maximum size of {}KB",
-            MAX_SKILL_FILE_SIZE / 1024
+            "SKILL.md file exceeds maximum size of {}MB",
+            MAX_SKILL_FILE_SIZE / (1024 * 1024)
         );
     }
 
@@ -618,9 +619,8 @@ async fn find_skill_files(fs: &Arc<dyn Fs>, directory: &Path) -> Vec<PathBuf> {
 /// skill is actually being loaded for the model.
 ///
 /// We load the whole file in one go rather than streaming up to the
-/// closing `---`. `MAX_SKILL_FILE_SIZE` is 100KB and the metadata check
-/// below caps the worst case at that, so the peak transient cost is
-/// trivially small (≤ `MAX_SKILL_FILE_SIZE` × `SKILL_IO_CONCURRENCY`).
+/// closing `---`. The metadata check below refuses anything past
+/// `MAX_SKILL_FILE_SIZE` before a byte is read.
 pub async fn load_skill_frontmatter(
     fs: Arc<dyn Fs>,
     skill_file_path: PathBuf,
@@ -642,8 +642,8 @@ pub async fn load_skill_frontmatter(
         return Err(SkillLoadError {
             path: skill_file_path.clone(),
             message: format!(
-                "SKILL.md file exceeds maximum size of {}KB",
-                MAX_SKILL_FILE_SIZE / 1024
+                "SKILL.md file exceeds maximum size of {}MB",
+                MAX_SKILL_FILE_SIZE / (1024 * 1024)
             ),
         });
     }

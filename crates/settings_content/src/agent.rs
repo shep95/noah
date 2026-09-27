@@ -430,6 +430,13 @@ pub struct AgentSettingsContent {
     /// URL, etc.).
     pub tool_permissions: Option<ToolPermissionsContent>,
 
+    /// When true, shepherd never stops to ask: every tool call is approved,
+    /// whatever `tool_permissions` say. For people who would rather not sit
+    /// and watch. The switch is in the shepherd panel's toolbar.
+    ///
+    /// Default: false
+    pub auto_approve: Option<bool>,
+
     /// Persistent sandbox permission grants for agent-run terminal commands.
     /// These are populated when choosing "Allow always" from a sandbox
     /// escalation prompt.

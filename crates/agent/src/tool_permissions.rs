@@ -469,6 +469,10 @@ pub fn decide_permission_from_settings(
     inputs: &[String],
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
+    // The person asked not to be asked; rules and patterns are skipped.
+    if settings.auto_approve {
+        return ToolPermissionDecision::Allow;
+    }
     ToolPermissionDecision::from_input(
         tool_name,
         inputs,

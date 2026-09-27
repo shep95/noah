@@ -9,8 +9,10 @@ mod browser_panel;
 
 use anyhow::{Context as _, Result};
 use gpui::{App, AppContext as _, Context, Entity, EventEmitter, Global, SharedString, Task};
-use util::ResultExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use util::ResultExt as _;
 
 pub use browser_panel::{BrowserPanel, ToggleFocus};
 
@@ -116,17 +118,97 @@ async fn run_command(arguments: Vec<String>) -> Result<String> {
         }
         command.env("AGENT_BROWSER_ARGS", browser_arguments);
     }
-    let output = command
-        .output()
-        .await
-        .with_context(|| format!("could not start {}", binary.display()))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if output.status.success() {
+    let (status, stdout, stderr) = run_to_exit(&mut command, &binary).await?;
+    let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+    if status.success() {
         return Ok(stdout);
     }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
     let message = if stderr.is_empty() { stdout } else { stderr };
     anyhow::bail!(explain_failure(&message))
+}
+
+/// No command may take longer than this; a page that never finishes loading
+/// must not hold shepherd, or the room, forever.
+const COMMAND_TIMEOUT: Duration = Duration::from_millis(180_000);
+/// How long to keep reading the pipes after the command exited. The first
+/// command starts agent-browser's daemon, which on Windows can inherit the
+/// pipes and keep them open for as long as the browser runs; waiting for
+/// end-of-file there would wait forever, so what the command itself printed
+/// is taken and the rest is left to the daemon.
+const PIPE_GRACE: Duration = Duration::from_millis(600);
+
+/// Runs the command until *it* exits, collecting what it printed on the way,
+/// rather than until its output pipes close.
+async fn run_to_exit(
+    command: &mut util::command::Command,
+    binary: &Path,
+) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
+    use futures::{FutureExt as _, select_biased};
+
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("could not start {}", binary.display()))?;
+    let stdout_buffer: Arc<Mutex<Vec<u8>>> = Arc::default();
+    let stderr_buffer: Arc<Mutex<Vec<u8>>> = Arc::default();
+    async fn collect<R: futures::AsyncRead + Unpin>(reader: Option<R>, sink: Arc<Mutex<Vec<u8>>>) {
+        use futures::AsyncReadExt as _;
+        let Some(mut reader) = reader else {
+            return;
+        };
+        let mut chunk = [0u8; 8192];
+        loop {
+            match reader.read(&mut chunk).await {
+                Ok(0) | Err(_) => break,
+                Ok(count) => {
+                    if let Ok(mut sink) = sink.lock() {
+                        sink.extend_from_slice(&chunk[..count]);
+                    }
+                }
+            }
+        }
+    }
+    let readers = futures::future::join(
+        collect(child.stdout.take(), stdout_buffer.clone()),
+        collect(child.stderr.take(), stderr_buffer.clone()),
+    );
+    let mut readers = Box::pin(readers.fuse());
+    let mut readers_done = false;
+    let outcome = {
+        let mut exit = Box::pin(child.status().fuse());
+        let mut deadline = Box::pin(smol::Timer::after(COMMAND_TIMEOUT).fuse());
+        loop {
+            select_biased! {
+                status = exit => break Some(status),
+                _ = readers => readers_done = true,
+                _ = deadline => break None,
+            }
+        }
+    };
+    let status = match outcome {
+        Some(status) => status.with_context(|| format!("{} failed to run", binary.display()))?,
+        None => {
+            child.kill().log_err();
+            anyhow::bail!(
+                "agent-browser did not answer within {} seconds; the browser may be stuck on a \
+                 page. Close the browser room and open it again.",
+                COMMAND_TIMEOUT.as_secs()
+            );
+        }
+    };
+    if !readers_done {
+        let mut grace = Box::pin(smol::Timer::after(PIPE_GRACE).fuse());
+        select_biased! {
+            _ = readers => {},
+            _ = grace => {},
+        }
+    }
+    let stdout = stdout_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
+    let stderr = stderr_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
+    Ok((status, stdout, stderr))
 }
 
 fn profile_directory() -> PathBuf {
@@ -141,7 +223,7 @@ fn prewarm(cx: &mut App) {
     }
     cx.spawn(async move |cx| {
         cx.background_executor()
-            .timer(std::time::Duration::from_secs(4))
+            .timer(std::time::Duration::from_millis(1500))
             .await;
         run_command(vec!["--json".into(), "stream".into(), "status".into()])
             .await

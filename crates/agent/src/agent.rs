@@ -1178,8 +1178,8 @@ impl NativeAgent {
                             worktree_results.push(Err(SkillLoadError {
                                 path: skill_file.display_path.clone(),
                                 message: format!(
-                                    "SKILL.md file exceeds maximum size of {}KB",
-                                    MAX_SKILL_FILE_SIZE / 1024
+                                    "SKILL.md file exceeds maximum size of {}MB",
+                                    MAX_SKILL_FILE_SIZE / (1024 * 1024)
                                 ),
                             }));
                             continue;

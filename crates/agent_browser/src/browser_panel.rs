@@ -378,12 +378,17 @@ impl BrowserPanel {
             cx.notify();
             this.page_style.clone()
         })?;
-        crate::apply_color_scheme(&style).await.log_err();
+        // The color scheme and the address question are two more helper
+        // processes; they run side by side, so the room waits for one round
+        // trip instead of two before its first page.
+        let (scheme, current) = futures::join!(
+            crate::apply_color_scheme(&style),
+            crate::run_command(vec!["get".into(), "url".into()])
+        );
+        scheme.log_err();
+        let current = current.unwrap_or_default();
         // A browser the stream just started sits on a blank white page; show
         // noah's own start page instead.
-        let current = crate::run_command(vec!["get".into(), "url".into()])
-            .await
-            .unwrap_or_default();
         if current.trim().is_empty() || current.trim() == "about:blank" {
             let start_page = cx
                 .background_spawn(async move { crate::write_start_page(&style) })

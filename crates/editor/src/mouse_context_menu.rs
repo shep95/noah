@@ -3,7 +3,7 @@ use crate::{
     EvaluateSelectedText, FindAllReferences, GoToDeclaration, GoToDefinition, GoToImplementation,
     GoToTypeDefinition, Paste, Rename, RevealInFileManager, RunToCursor, SelectMode,
     SelectionEffects, SelectionExt, ToDisplayPoint, ToggleCodeActions,
-    actions::{Format, FormatSelections},
+    actions::{Format, FormatSelections, SelectAll},
     selections_collection::SelectionsCollection,
 };
 use gpui::prelude::FluentBuilder;
@@ -299,6 +299,7 @@ pub fn deploy_context_menu(
                 .action("Copy", Box::new(Copy))
                 .action("Copy and Trim", Box::new(CopyAndTrim))
                 .action("Paste", Box::new(Paste))
+                .action("Select All", Box::new(SelectAll))
                 .separator()
                 .action_disabled_when(
                     !has_reveal_target,

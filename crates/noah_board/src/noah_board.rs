@@ -12,8 +12,9 @@ use anyhow::{Context as _, Result};
 use gpui::{
     App, AppContext as _, Bounds, ClipboardEntry, Context, Entity, EventEmitter, FocusHandle,
     Focusable, Hsla, ImageSource, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ObjectFit, PathBuilder, PathPromptOptions, Pixels, Point, SharedString,
-    StyledImage as _, Task, TextRun, Window, canvas, fill, img, outline, point, px, quad, size,
+    MouseUpEvent, ObjectFit, PathBuilder, PathPromptOptions, Pixels, Point, ScrollWheelEvent,
+    SharedString, StyledImage as _, Task, TextRun, Window, canvas, fill, img, outline, point, px,
+    quad, size,
 };
 use serde::{Deserialize, Serialize};
 use settings::Settings as _;
@@ -29,6 +30,9 @@ const DEFAULT_TEXT_SIZE: f32 = 16.0;
 const DEFAULT_LINE_WIDTH: f32 = 2.0;
 const DEFAULT_IMAGE_RADIUS: f32 = 12.0;
 const MAX_IMAGE_WIDTH: f32 = 360.0;
+const GRID_STEP: f32 = 24.0;
+const MIN_ZOOM: f32 = 0.2;
+const MAX_ZOOM: f32 = 6.0;
 
 fn default_radius() -> f32 {
     DEFAULT_IMAGE_RADIUS
@@ -53,6 +57,37 @@ pub struct Board {
     pub revision: u64,
     #[serde(default)]
     pub items: Vec<Shape>,
+    /// The paper behind the drawing: none, dots or lines. Shepherd may set
+    /// it too, so it lives in the file.
+    #[serde(default)]
+    pub grid: Grid,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Default, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Grid {
+    #[default]
+    None,
+    Dots,
+    Lines,
+}
+
+impl Grid {
+    fn next(self) -> Self {
+        match self {
+            Grid::None => Grid::Dots,
+            Grid::Dots => Grid::Lines,
+            Grid::Lines => Grid::None,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Grid::None => "no grid (press for dots)",
+            Grid::Dots => "dot grid, shapes snap to it (press for lines)",
+            Grid::Lines => "line grid, shapes snap to it (press for none)",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -151,6 +186,33 @@ impl Shape {
     fn contains(&self, position: Point<f32>) -> bool {
         let (min, max) = self.bounds();
         position.x >= min.x && position.x <= max.x && position.y >= min.y && position.y <= max.y
+    }
+
+    /// Grows or shrinks the shape around its top-left corner.
+    fn scale_by(&mut self, factor: f32) {
+        let (min, _) = self.bounds();
+        let scale_point = |x: &mut f32, y: &mut f32| {
+            *x = min.x + (*x - min.x) * factor;
+            *y = min.y + (*y - min.y) * factor;
+        };
+        match self {
+            Shape::Stroke { points, width, .. } => {
+                for [x, y] in points.iter_mut() {
+                    scale_point(x, y);
+                }
+                *width = (*width * factor).clamp(0.5, 60.0);
+            }
+            Shape::Line { from, to, width, .. } => {
+                scale_point(&mut from[0], &mut from[1]);
+                scale_point(&mut to[0], &mut to[1]);
+                *width = (*width * factor).clamp(0.5, 60.0);
+            }
+            Shape::Rect { size, .. } | Shape::Ellipse { size, .. } | Shape::Image { size, .. } => {
+                size[0] *= factor;
+                size[1] *= factor;
+            }
+            Shape::Text { size, .. } => *size = (*size * factor).clamp(6.0, 200.0),
+        }
     }
 
     fn translate(&mut self, delta: Point<f32>) {
@@ -286,6 +348,7 @@ enum Draft {
     Rect { origin: [f32; 2], size: [f32; 2] },
     Ellipse { origin: [f32; 2], size: [f32; 2] },
     Move { index: usize, last: Point<f32> },
+    Pan { last: Point<Pixels> },
 }
 
 pub struct BoardView {
@@ -297,6 +360,12 @@ pub struct BoardView {
     selected: Option<usize>,
     /// The text item being typed into, if any.
     typing: Option<usize>,
+    /// How big one board unit is on screen, and which board point sits at
+    /// the surface's top-left corner. Zooming and panning are view state,
+    /// never written to the file.
+    zoom: f32,
+    pan: Point<f32>,
+    /// Kept across strokes so a pasted or duplicated item lands in view.
     focus_handle: FocusHandle,
     /// Where the drawing surface sits in the window, kept by the canvas so
     /// mouse positions can be turned into board coordinates.
@@ -345,6 +414,8 @@ impl BoardView {
             draft: None,
             selected: None,
             typing: None,
+            zoom: 1.0,
+            pan: point(0.0, 0.0),
             focus_handle: cx.focus_handle(),
             surface: Rc::new(Cell::new(Bounds::default())),
             modified,
@@ -400,9 +471,133 @@ impl BoardView {
     fn board_position(&self, window_position: Point<Pixels>) -> Point<f32> {
         let origin = self.surface.get().origin;
         point(
-            f32::from(window_position.x - origin.x),
-            f32::from(window_position.y - origin.y),
+            f32::from(window_position.x - origin.x) / self.zoom + self.pan.x,
+            f32::from(window_position.y - origin.y) / self.zoom + self.pan.y,
         )
+    }
+
+    /// The board point under the mouse, on the grid when one is showing.
+    /// Pen strokes never snap; they would turn into staircases.
+    fn snapped(&self, position: Point<f32>) -> Point<f32> {
+        if self.board.grid == Grid::None || self.tool == Tool::Pen {
+            return position;
+        }
+        point(
+            (position.x / GRID_STEP).round() * GRID_STEP,
+            (position.y / GRID_STEP).round() * GRID_STEP,
+        )
+    }
+
+    /// The board point in the middle of the surface, where new things land.
+    fn center(&self) -> Point<f32> {
+        let surface = self.surface.get();
+        point(
+            self.pan.x + f32::from(surface.size.width) / 2.0 / self.zoom,
+            self.pan.y + f32::from(surface.size.height) / 2.0 / self.zoom,
+        )
+    }
+
+    fn set_zoom(&mut self, zoom: f32, anchor: Point<f32>, cx: &mut Context<Self>) {
+        let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
+        if (zoom - self.zoom).abs() < f32::EPSILON {
+            return;
+        }
+        // The board point under the anchor stays under it, so the picture
+        // grows around the cursor instead of sliding away.
+        let surface = self.surface.get();
+        let anchor_x = f32::from(anchor.x - surface.origin.x);
+        let anchor_y = f32::from(anchor.y - surface.origin.y);
+        let board_x = anchor_x / self.zoom + self.pan.x;
+        let board_y = anchor_y / self.zoom + self.pan.y;
+        self.zoom = zoom;
+        self.pan = point(board_x - anchor_x / zoom, board_y - anchor_y / zoom);
+        cx.notify();
+    }
+
+    fn zoom_step(&mut self, factor: f32, cx: &mut Context<Self>) {
+        let surface = self.surface.get();
+        let middle = point(
+            surface.origin.x + surface.size.width / 2.0,
+            surface.origin.y + surface.size.height / 2.0,
+        );
+        self.set_zoom(self.zoom * factor, middle, cx);
+    }
+
+    fn reset_view(&mut self, cx: &mut Context<Self>) {
+        self.zoom = 1.0;
+        self.pan = point(0.0, 0.0);
+        cx.notify();
+    }
+
+    fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let delta = event.delta.pixel_delta(px(24.0));
+        if event.modifiers.control || event.modifiers.platform {
+            let steps = f32::from(delta.y) / 120.0;
+            self.set_zoom(self.zoom * (1.0 + steps * 0.25).max(0.2), event.position, cx);
+            return;
+        }
+        // Shift turns a vertical wheel into a sideways pan, as in image editors.
+        let (dx, dy) = if event.modifiers.shift && f32::from(delta.x) == 0.0 {
+            (f32::from(delta.y), 0.0)
+        } else {
+            (f32::from(delta.x), f32::from(delta.y))
+        };
+        self.pan = point(self.pan.x - dx / self.zoom, self.pan.y - dy / self.zoom);
+        cx.notify();
+    }
+
+    fn duplicate_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(mut copy) = self.board.items.get(index).cloned() else {
+            return;
+        };
+        copy.translate(point(GRID_STEP, GRID_STEP));
+        self.board.items.push(copy);
+        self.selected = Some(self.board.items.len() - 1);
+        self.changed(cx);
+    }
+
+    fn resize_selected(&mut self, factor: f32, cx: &mut Context<Self>) {
+        if let Some(index) = self.selected
+            && let Some(shape) = self.board.items.get_mut(index)
+        {
+            shape.scale_by(factor);
+            self.changed(cx);
+        }
+    }
+
+    fn toggle_fill_selected(&mut self, cx: &mut Context<Self>) {
+        if let Some(index) = self.selected
+            && let Some(Shape::Rect { fill, .. } | Shape::Ellipse { fill, .. }) =
+                self.board.items.get_mut(index)
+        {
+            *fill = !*fill;
+            self.changed(cx);
+        }
+    }
+
+    /// Moves the selected item one step towards the top of the pile, or
+    /// all the way when `to_end`.
+    fn reorder_selected(&mut self, forward: bool, to_end: bool, cx: &mut Context<Self>) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let last = self.board.items.len().saturating_sub(1);
+        let target = match (forward, to_end) {
+            (true, true) => last,
+            (false, true) => 0,
+            (true, false) => (index + 1).min(last),
+            (false, false) => index.saturating_sub(1),
+        };
+        if target == index || index > last {
+            return;
+        }
+        let shape = self.board.items.remove(index);
+        self.board.items.insert(target, shape);
+        self.selected = Some(target);
+        self.changed(cx);
     }
 
     fn hit(&self, position: Point<f32>) -> Option<usize> {
@@ -423,12 +618,18 @@ impl BoardView {
     }
 
     fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if event.button == MouseButton::Middle {
+            self.draft = Some(Draft::Pan { last: event.position });
+            cx.notify();
+            return;
+        }
         if event.button != MouseButton::Left {
             return;
         }
         self.focus_handle.focus(window, cx);
         self.finish_typing(cx);
-        let position = self.board_position(event.position);
+        let raw = self.board_position(event.position);
+        let position = self.snapped(raw);
         let at = [position.x, position.y];
         match self.tool {
             Tool::Pen => self.draft = Some(Draft::Stroke(vec![at])),
@@ -446,16 +647,19 @@ impl BoardView {
                 self.selected = self.typing;
             }
             Tool::Eraser => {
-                if let Some(index) = self.hit(position) {
+                if let Some(index) = self.hit(raw) {
                     self.board.items.remove(index);
                     self.selected = None;
                     self.changed(cx);
                 }
             }
             Tool::Select => {
-                self.selected = self.hit(position);
-                if let Some(index) = self.selected {
-                    self.draft = Some(Draft::Move { index, last: position });
+                self.selected = self.hit(raw);
+                match self.selected {
+                    Some(index) => self.draft = Some(Draft::Move { index, last: raw }),
+                    // Dragging empty space with the select tool pans, as on
+                    // every other whiteboard.
+                    None => self.draft = Some(Draft::Pan { last: event.position }),
                 }
             }
         }
@@ -466,8 +670,10 @@ impl BoardView {
         if !event.dragging() {
             return;
         }
-        let position = self.board_position(event.position);
+        let raw = self.board_position(event.position);
+        let position = self.snapped(raw);
         let at = [position.x, position.y];
+        let zoom = self.zoom;
         let Some(draft) = self.draft.as_mut() else {
             return;
         };
@@ -488,9 +694,17 @@ impl BoardView {
                 *size = [at[0] - origin[0], at[1] - origin[1]];
             }
             Draft::Move { index, last } => {
-                let delta = point(position.x - last.x, position.y - last.y);
-                *last = position;
+                let delta = point(raw.x - last.x, raw.y - last.y);
+                *last = raw;
                 moved = Some((*index, delta));
+            }
+            Draft::Pan { last } => {
+                let delta = event.position - *last;
+                *last = event.position;
+                self.pan = point(
+                    self.pan.x - f32::from(delta.x) / zoom,
+                    self.pan.y - f32::from(delta.y) / zoom,
+                );
             }
         }
         if let Some((index, delta)) = moved
@@ -505,6 +719,18 @@ impl BoardView {
         let Some(draft) = self.draft.take() else {
             return;
         };
+        if let Draft::Move { index, .. } = &draft
+            && self.board.grid != Grid::None
+            && let Some(shape) = self.board.items.get_mut(*index)
+        {
+            // A moved shape settles onto the grid by its top-left corner.
+            let (min, _) = shape.bounds();
+            let snapped = point(
+                (min.x / GRID_STEP).round() * GRID_STEP,
+                (min.y / GRID_STEP).round() * GRID_STEP,
+            );
+            shape.translate(point(snapped.x - min.x, snapped.y - min.y));
+        }
         let color = self.color.clone();
         let shape = match draft {
             Draft::Stroke(points) if points.len() >= 2 => Some(Shape::Stroke {
@@ -545,6 +771,7 @@ impl BoardView {
                 self.changed(cx);
                 None
             }
+            Draft::Pan { .. } => None,
         };
         if let Some(shape) = shape {
             self.board.items.push(shape);
@@ -562,6 +789,27 @@ impl BoardView {
         }
         if command && keystroke.key == "z" {
             self.undo(cx);
+            return;
+        }
+        if command && (keystroke.key == "=" || keystroke.key == "+") {
+            self.zoom_step(1.25, cx);
+            return;
+        }
+        if command && keystroke.key == "-" {
+            self.zoom_step(0.8, cx);
+            return;
+        }
+        if command && keystroke.key == "0" {
+            self.reset_view(cx);
+            return;
+        }
+        if command && keystroke.key == "d" && self.typing.is_none() {
+            self.duplicate_selected(cx);
+            return;
+        }
+        if command && keystroke.key == "g" {
+            self.board.grid = self.board.grid.next();
+            self.changed(cx);
             return;
         }
         if let Some(index) = self.typing {
@@ -596,6 +844,26 @@ impl BoardView {
             "escape" => {
                 self.selected = None;
                 cx.notify();
+            }
+            "]" if self.selected.is_some() => self.reorder_selected(true, keystroke.modifiers.shift, cx),
+            "[" if self.selected.is_some() => self.reorder_selected(false, keystroke.modifiers.shift, cx),
+            "." if self.selected.is_some() => self.resize_selected(1.1, cx),
+            "," if self.selected.is_some() => self.resize_selected(1.0 / 1.1, cx),
+            "f" if self.selected.is_some() => self.toggle_fill_selected(cx),
+            "left" | "right" | "up" | "down" if self.selected.is_some() => {
+                let step = if keystroke.modifiers.shift { GRID_STEP } else { 1.0 };
+                let delta = match keystroke.key.as_str() {
+                    "left" => point(-step, 0.0),
+                    "right" => point(step, 0.0),
+                    "up" => point(0.0, -step),
+                    _ => point(0.0, step),
+                };
+                if let Some(index) = self.selected
+                    && let Some(shape) = self.board.items.get_mut(index)
+                {
+                    shape.translate(delta);
+                    self.changed(cx);
+                }
             }
             _ => {}
         }
@@ -707,11 +975,8 @@ impl BoardView {
             .unwrap_or((320.0, 240.0));
         let scale = (MAX_IMAGE_WIDTH / width.max(1.0)).min(1.0);
         let size = [width * scale, height * scale];
-        let surface = self.surface.get();
-        let origin = [
-            (f32::from(surface.size.width) / 2.0 - size[0] / 2.0).max(16.0),
-            (f32::from(surface.size.height) / 2.0 - size[1] / 2.0).max(16.0),
-        ];
+        let center = self.center();
+        let origin = [center.x - size[0] / 2.0, center.y - size[1] / 2.0];
         let relative = path
             .strip_prefix(&self.root)
             .map(|relative| relative.to_string_lossy().replace('\\', "/"))
@@ -794,6 +1059,95 @@ impl BoardView {
                         cx.notify();
                     }))
             }))
+            .child(div().w_2())
+            .child(
+                IconButton::new("board-grid", IconName::Hash)
+                    .icon_size(IconSize::Small)
+                    .icon_color(if self.board.grid == Grid::None { Color::Muted } else { Color::Default })
+                    .toggle_state(self.board.grid != Grid::None)
+                    .tooltip(Tooltip::text(format!("{} (ctrl-g)", self.board.grid.label())))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.board.grid = this.board.grid.next();
+                        this.changed(cx);
+                    })),
+            )
+            .child(
+                IconButton::new("board-zoom-out", IconName::Dash)
+                    .icon_size(IconSize::Small)
+                    .icon_color(Color::Muted)
+                    .tooltip(Tooltip::text("zoom out (ctrl-minus, or ctrl and the wheel)"))
+                    .on_click(cx.listener(|this, _, _, cx| this.zoom_step(0.8, cx))),
+            )
+            .child(
+                div()
+                    .id("board-zoom-reset")
+                    .px_1()
+                    .min_w(px(40.0))
+                    .text_xs()
+                    .text_color(colors.text_muted)
+                    .cursor_pointer()
+                    .tooltip(Tooltip::text("back to 100% and the origin (ctrl-0)"))
+                    .child(format!("{}%", (self.zoom * 100.0).round() as i32))
+                    .on_click(cx.listener(|this, _, _, cx| this.reset_view(cx))),
+            )
+            .child(
+                IconButton::new("board-zoom-in", IconName::Plus)
+                    .icon_size(IconSize::Small)
+                    .icon_color(Color::Muted)
+                    .tooltip(Tooltip::text("zoom in (ctrl-plus, or ctrl and the wheel)"))
+                    .on_click(cx.listener(|this, _, _, cx| this.zoom_step(1.25, cx))),
+            )
+            .when(self.selected.is_some(), |this| {
+                let fillable = matches!(
+                    self.selected.and_then(|index| self.board.items.get(index)),
+                    Some(Shape::Rect { .. } | Shape::Ellipse { .. })
+                );
+                this.child(div().w_2())
+                    .child(
+                        IconButton::new("board-duplicate", IconName::Copy)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(Tooltip::text("duplicate (ctrl-d)"))
+                            .on_click(cx.listener(|this, _, _, cx| this.duplicate_selected(cx))),
+                    )
+                    .child(
+                        IconButton::new("board-bigger", IconName::Maximize)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(Tooltip::text("bigger (.)  ·  smaller (,)"))
+                            .on_click(cx.listener(|this, _, _, cx| this.resize_selected(1.1, cx))),
+                    )
+                    .child(
+                        IconButton::new("board-smaller", IconName::Minimize)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(Tooltip::text("smaller (,)"))
+                            .on_click(cx.listener(|this, _, _, cx| this.resize_selected(1.0 / 1.1, cx))),
+                    )
+                    .child(
+                        IconButton::new("board-forward", IconName::ArrowUp)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(Tooltip::text("bring forward ( ] )  ·  to the front (shift-])"))
+                            .on_click(cx.listener(|this, _, _, cx| this.reorder_selected(true, false, cx))),
+                    )
+                    .child(
+                        IconButton::new("board-backward", IconName::ArrowDown)
+                            .icon_size(IconSize::Small)
+                            .icon_color(Color::Muted)
+                            .tooltip(Tooltip::text("send backward ( [ )  ·  to the back (shift-[)"))
+                            .on_click(cx.listener(|this, _, _, cx| this.reorder_selected(false, false, cx))),
+                    )
+                    .when(fillable, |this| {
+                        this.child(
+                            IconButton::new("board-fill", IconName::Circle)
+                                .icon_size(IconSize::Small)
+                                .icon_color(Color::Muted)
+                                .tooltip(Tooltip::text("fill or outline (f)"))
+                                .on_click(cx.listener(|this, _, _, cx| this.toggle_fill_selected(cx))),
+                        )
+                    })
+            })
             .child(div().flex_1())
             .child(
                 IconButton::new("board-undo", IconName::Undo)
@@ -846,6 +1200,11 @@ impl BoardView {
             .collect();
         let selection_color = colors.text_accent;
         let font = theme_settings::ThemeSettings::get_global(cx).ui_font.clone();
+        let zoom = self.zoom;
+        let pan = self.pan;
+        let grid = self.board.grid;
+        let grid_color = colors.text_muted.opacity(if grid == Grid::Dots { 0.35 } else { 0.14 });
+        let cursor_pan = matches!(self.draft, Some(Draft::Pan { .. }));
 
         div()
             .id("board-surface")
@@ -853,7 +1212,7 @@ impl BoardView {
             .flex_1()
             .size_full()
             .overflow_hidden()
-            .cursor_crosshair()
+            .map(|this| if cursor_pan || self.tool == Tool::Select { this.cursor_default() } else { this.cursor_crosshair() })
             .child(
                 img(wallpaper_source)
                     .absolute()
@@ -870,11 +1229,11 @@ impl BoardView {
                 Some(
                     div()
                         .absolute()
-                        .left(px(origin[0]))
-                        .top(px(origin[1]))
-                        .w(px(image_size[0]))
-                        .h(px(image_size[1]))
-                        .rounded(px(*radius))
+                        .left(px((origin[0] - pan.x) * zoom))
+                        .top(px((origin[1] - pan.y) * zoom))
+                        .w(px(image_size[0] * zoom))
+                        .h(px(image_size[1] * zoom))
+                        .rounded(px(*radius * zoom))
                         .overflow_hidden()
                         .when(selected == Some(index), |this| {
                             this.border_1().border_color(selection_color)
@@ -882,7 +1241,7 @@ impl BoardView {
                         .child(
                             img(ImageSource::from(absolute))
                                 .size_full()
-                                .rounded(px(*radius))
+                                .rounded(px(*radius * zoom))
                                 .object_fit(ObjectFit::Cover),
                         ),
                 )
@@ -895,14 +1254,65 @@ impl BoardView {
                     },
                     move |bounds, _, window, cx| {
                         let origin = bounds.origin;
-                        let to_window = |p: [f32; 2]| point(origin.x + px(p[0]), origin.y + px(p[1]));
+                        let to_window = |p: [f32; 2]| {
+                            point(origin.x + px((p[0] - pan.x) * zoom), origin.y + px((p[1] - pan.y) * zoom))
+                        };
+                        // The paper: dots or lines every GRID_STEP board units,
+                        // only across what is on screen.
+                        if grid != Grid::None {
+                            let step = GRID_STEP * zoom;
+                            let width = f32::from(bounds.size.width);
+                            let height = f32::from(bounds.size.height);
+                            let first_x = ((pan.x / GRID_STEP).ceil() * GRID_STEP - pan.x) * zoom;
+                            let first_y = ((pan.y / GRID_STEP).ceil() * GRID_STEP - pan.y) * zoom;
+                            if step >= 6.0 {
+                                match grid {
+                                    Grid::Dots => {
+                                        let mut y = first_y;
+                                        while y <= height {
+                                            let mut x = first_x;
+                                            while x <= width {
+                                                let dot = Bounds::new(
+                                                    point(origin.x + px(x - 1.0), origin.y + px(y - 1.0)),
+                                                    size(px(2.0), px(2.0)),
+                                                );
+                                                window.paint_quad(fill(dot, grid_color));
+                                                x += step;
+                                            }
+                                            y += step;
+                                        }
+                                    }
+                                    Grid::Lines => {
+                                        let mut x = first_x;
+                                        while x <= width {
+                                            let line = Bounds::new(
+                                                point(origin.x + px(x), origin.y),
+                                                size(px(1.0), px(height)),
+                                            );
+                                            window.paint_quad(fill(line, grid_color));
+                                            x += step;
+                                        }
+                                        let mut y = first_y;
+                                        while y <= height {
+                                            let line = Bounds::new(
+                                                point(origin.x, origin.y + px(y)),
+                                                size(px(width), px(1.0)),
+                                            );
+                                            window.paint_quad(fill(line, grid_color));
+                                            y += step;
+                                        }
+                                    }
+                                    Grid::None => {}
+                                }
+                            }
+                        }
                         for (index, (shape, color)) in painted.iter().enumerate() {
                             match shape {
                                 Shape::Stroke { points, width, .. } => {
                                     if points.len() < 2 {
                                         continue;
                                     }
-                                    let mut builder = PathBuilder::stroke(px(*width));
+                                    let mut builder = PathBuilder::stroke(px(*width * zoom));
                                     builder.move_to(to_window(points[0]));
                                     for p in &points[1..] {
                                         builder.line_to(to_window(*p));
@@ -912,7 +1322,7 @@ impl BoardView {
                                     }
                                 }
                                 Shape::Line { from, to, width, .. } => {
-                                    let mut builder = PathBuilder::stroke(px(*width));
+                                    let mut builder = PathBuilder::stroke(px(*width * zoom));
                                     builder.move_to(to_window(*from));
                                     builder.line_to(to_window(*to));
                                     if let Ok(path) = builder.build() {
@@ -920,15 +1330,15 @@ impl BoardView {
                                     }
                                 }
                                 Shape::Rect { origin: o, size: s, width, fill: filled, .. } => {
-                                    let rect = Bounds::new(to_window(*o), size(px(s[0]), px(s[1])));
+                                    let rect = Bounds::new(to_window(*o), size(px(s[0] * zoom), px(s[1] * zoom)));
                                     if *filled {
                                         window.paint_quad(fill(rect, *color));
                                     } else {
                                         window.paint_quad(quad(
                                             rect,
-                                            px(3.0),
+                                            px(3.0 * zoom),
                                             gpui::transparent_black(),
-                                            px(*width),
+                                            px(*width * zoom),
                                             *color,
                                             gpui::BorderStyle::Solid,
                                         ));
@@ -940,7 +1350,7 @@ impl BoardView {
                                     let mut builder = if *filled {
                                         PathBuilder::fill()
                                     } else {
-                                        PathBuilder::stroke(px(*width))
+                                        PathBuilder::stroke(px(*width * zoom))
                                     };
                                     const SEGMENTS: usize = 64;
                                     for step in 0..=SEGMENTS {
@@ -978,13 +1388,13 @@ impl BoardView {
                                     };
                                     let line = window.text_system().shape_line(
                                         shown,
-                                        px(*text_size),
+                                        px(*text_size * zoom),
                                         &[run],
                                         None,
                                     );
                                     line.paint(
                                         to_window(*o),
-                                        px(*text_size * 1.4),
+                                        px(*text_size * 1.4 * zoom),
                                         gpui::TextAlign::Left,
                                         None,
                                         window,
@@ -998,7 +1408,7 @@ impl BoardView {
                                 let (min, max) = shape.bounds();
                                 let rect = Bounds::new(
                                     to_window([min.x - 2.0, min.y - 2.0]),
-                                    size(px(max.x - min.x + 4.0), px(max.y - min.y + 4.0)),
+                                    size(px((max.x - min.x + 4.0) * zoom), px((max.y - min.y + 4.0) * zoom)),
                                 );
                                 window.paint_quad(outline(rect, selection_color, gpui::BorderStyle::Dashed));
                             }
@@ -1010,8 +1420,11 @@ impl BoardView {
                 .size_full(),
             )
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+            .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_mouse_up))
+            .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
     }
 
     /// The shape being drawn right now, so it shows before the mouse is
@@ -1050,7 +1463,7 @@ impl BoardView {
                     fill: false,
                 })
             }
-            Draft::Move { .. } => None,
+            Draft::Move { .. } | Draft::Pan { .. } => None,
         }
     }
 }

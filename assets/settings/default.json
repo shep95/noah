@@ -1237,6 +1237,9 @@
     // (commands, paths, URLs, etc.). For `copy_path` and `move_path`,
     // patterns are matched independently against each path (source and
     // destination).
+    // When true, shepherd never stops to ask: every tool call is approved,
+    // whatever tool_permissions say. The switch is in shepherd's toolbar.
+    "auto_approve": false,
     "tool_permissions": {
       // Global default permission when no tool-specific rules match.
       // "allow" - Auto-approve without prompting

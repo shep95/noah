@@ -255,6 +255,8 @@ pub struct AgentSettings {
     pub show_turn_stats: bool,
     pub show_merge_conflict_indicator: bool,
     pub tool_permissions: ToolPermissions,
+    /// Every tool call is approved without asking when this is on.
+    pub auto_approve: bool,
     pub sandbox_permissions: SandboxPermissions,
 }
 
@@ -857,6 +859,7 @@ impl Settings for AgentSettings {
             show_turn_stats: agent.show_turn_stats.unwrap(),
             show_merge_conflict_indicator: agent.show_merge_conflict_indicator.unwrap(),
             tool_permissions: compile_tool_permissions(agent.tool_permissions),
+            auto_approve: agent.auto_approve.unwrap_or(false),
             sandbox_permissions: compile_sandbox_permissions(agent.sandbox_permissions),
         }
     }

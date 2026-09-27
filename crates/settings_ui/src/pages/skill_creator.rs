@@ -987,8 +987,8 @@ async fn fetch_imported_skill_from_url_with_github_token(
 
     if body.len() > MAX_SKILL_FILE_SIZE {
         anyhow::bail!(
-            "SKILL.md file exceeds maximum size of {}KB",
-            MAX_SKILL_FILE_SIZE / 1024
+            "SKILL.md file exceeds maximum size of {}MB",
+            MAX_SKILL_FILE_SIZE / (1024 * 1024)
         );
     }
 

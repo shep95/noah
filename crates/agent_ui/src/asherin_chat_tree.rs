@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use gpui::{
     Action, Animation, AnimationExt as _, AnyElement, App, Context, Entity, EntityId, EventEmitter,
-    FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels, Subscription, Task, WeakEntity,
-    Window, ease_out_quint, px, relative,
+    FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels, ScrollHandle, Subscription, Task,
+    WeakEntity, Window, ease_out_quint, px, relative,
 };
 use ui::{ContextMenu, Tooltip, prelude::*, right_click_menu};
 use util::ResultExt as _;
@@ -25,11 +25,13 @@ use crate::asherin_chat::{
     self as room, ActivateChatTab, CloseChatTab, NewChatTab, NextChatTab, OpenChatBeside,
     PreviousChatTab, ReopenChatTab, ToggleTree,
 };
+use crate::thread_metadata_store::ThreadMetadataStore;
 use crate::{AgentPanel, NewThread};
 
 const INDENT: f32 = 14.;
 /// Past this many unpinned tabs, the oldest collapse into the overflow menu.
-const MAX_VISIBLE_TABS: usize = 8;
+/// Tabs past this many go to the "+N" menu; up to here the strip scrolls.
+const MAX_VISIBLE_TABS: usize = 40;
 
 #[derive(Clone, PartialEq)]
 struct ChatTab {
@@ -100,6 +102,8 @@ pub struct ChatTreePanel {
     tabs: Vec<ChatTab>,
     /// Recently closed tabs, newest last, for reopening.
     closed_tabs: Vec<acp::SessionId>,
+    /// The tab strip's horizontal scroll, so a wheel over it moves the tabs.
+    strip_scroll: ScrollHandle,
     /// Watches the window until its shepherd panel arrives.
     _agent_panel_watch: Option<Subscription>,
     /// Watches the conversation on screen, keyed by its entity.
@@ -138,6 +142,7 @@ impl ChatTreePanel {
             observing_agent_panel: false,
             tabs: Vec::new(),
             closed_tabs: Vec::new(),
+            strip_scroll: ScrollHandle::new(),
             _agent_panel_watch: None,
             _active_view_watch: None,
             _load: None,
@@ -774,6 +779,39 @@ impl ChatTreePanel {
         cx.notify();
     }
 
+    /// Removes the conversation for good: its tab, its entry in the history
+    /// and its messages in the threads database (which overwrites deleted
+    /// rows). Nothing is archived and nothing is kept.
+    fn delete_conversation(
+        &mut self,
+        id: &acp::SessionId,
+        active: Option<&acp::SessionId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.close_tab(id, active, window, cx);
+        self.closed_tabs.retain(|closed| closed != id);
+        let store = ThreadMetadataStore::global(cx);
+        let thread_id = store.read(cx).entry_by_session(id).map(|entry| entry.thread_id);
+        if let Some(thread_id) = thread_id {
+            store.update(cx, |store, cx| store.delete(thread_id, cx));
+            let workspace_thread = thread_id;
+            cx.spawn(async move |_, cx| {
+                crate::thread_worktree_archive::cleanup_thread_archived_worktrees(
+                    workspace_thread,
+                    cx,
+                )
+                .await;
+            })
+            .detach();
+        }
+        agent::ThreadStore::global(cx)
+            .update(cx, |threads, cx| threads.delete_thread(id.clone(), cx))
+            .detach_and_log_err(cx);
+        self.conversations.remove(id);
+        cx.notify();
+    }
+
     fn reopen_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.closed_tabs.pop() {
             // The tab is known before the conversation has loaded, so it goes
@@ -968,6 +1006,9 @@ impl ChatTreePanel {
                             let beside_id = id.clone();
                             let close_panel = panel.clone();
                             let close_id = id.clone();
+                            let delete_panel = panel.clone();
+                            let delete_id = id.clone();
+                            let delete_active = active.clone();
                             let active = active.clone();
                             menu.entry(
                                 if pinned { "unpin tab" } else { "pin tab" },
@@ -987,6 +1028,21 @@ impl ChatTreePanel {
                                 move |window, cx| {
                                     close_panel.update(cx, |panel, cx| {
                                         panel.close_tab(&close_id, active.as_ref(), window, cx)
+                                    });
+                                },
+                            )
+                            .separator()
+                            .entry(
+                                "delete conversation from this device",
+                                None,
+                                move |window, cx| {
+                                    delete_panel.update(cx, |panel, cx| {
+                                        panel.delete_conversation(
+                                            &delete_id,
+                                            delete_active.as_ref(),
+                                            window,
+                                            cx,
+                                        )
                                     });
                                 },
                             )
@@ -1034,7 +1090,18 @@ impl ChatTreePanel {
                 .border_b_1()
                 .border_color(border)
                 .overflow_hidden()
-                .children(tabs)
+                .child(
+                    // The tabs scroll sideways under the wheel; the "+N" menu
+                    // and the new-chat button stay put at the end.
+                    h_flex()
+                        .id("chat-tab-strip")
+                        .flex_1()
+                        .min_w_0()
+                        .gap_3()
+                        .overflow_x_scroll()
+                        .track_scroll(&this.strip_scroll)
+                        .children(tabs),
+                )
                 .children(overflow_menu)
                 .child(
                     IconButton::new("chat-tab-new", IconName::Plus)

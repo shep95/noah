@@ -193,6 +193,32 @@ pub struct PromptBuilder {
     handlebars: Arc<Mutex<Handlebars<'static>>>,
 }
 
+/// shepherd's brain for the inline and terminal assistants: the same text the
+/// agent thinks with, so every place noah asks a model speaks as shepherd. The
+/// person's own file at [`paths::shepherd_brain_file`] replaces the built-in
+/// copy, as it does for the agent. A helper rather than a partial, so `{{` in
+/// the brain text is sent verbatim.
+fn brain(
+    _: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    let replacement = std::fs::read_to_string(paths::shepherd_brain_file())
+        .ok()
+        .filter(|text| !text.trim().is_empty());
+    let built_in = Assets
+        .load("shepherd/shepherd_brain.txt")
+        .ok()
+        .flatten()
+        .map(|bytes| String::from_utf8_lossy(bytes.as_ref()).into_owned());
+    if let Some(text) = replacement.or(built_in) {
+        out.write(text.trim_end())?;
+    }
+    Ok(())
+}
+
 impl PromptBuilder {
     pub fn load(fs: Arc<dyn Fs>, stdout_is_a_pty: bool, cx: &mut App) -> Arc<Self> {
         Self::new(Some(PromptLoadingParams {
@@ -209,6 +235,7 @@ impl PromptBuilder {
 
     pub fn new(loading_params: Option<PromptLoadingParams>) -> Result<Self> {
         let mut handlebars = Handlebars::new();
+        handlebars.register_helper("brain", Box::new(brain));
         Self::register_built_in_templates(&mut handlebars)?;
 
         let handlebars = Arc::new(Mutex::new(handlebars));

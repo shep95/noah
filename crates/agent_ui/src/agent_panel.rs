@@ -6287,6 +6287,31 @@ impl AgentPanel {
 
         let max_content_width = AgentSettings::get_global(cx).max_content_width;
 
+        // One switch for people who do not want to sit and approve: on, every
+        // tool call goes through without a question. The accent marks it on.
+        let auto_approve = AgentSettings::get_global(cx).auto_approve;
+        let auto_approve_button = IconButton::new("toggle-auto-approve", IconName::CheckDouble)
+            .icon_size(IconSize::Small)
+            .icon_color(if auto_approve { Color::Accent } else { Color::Muted })
+            .toggle_state(auto_approve)
+            .tooltip(move |_, cx| {
+                Tooltip::with_meta(
+                    if auto_approve { "auto-approve is on" } else { "auto-approve" },
+                    None,
+                    if auto_approve {
+                        "shepherd acts without asking; press to be asked again"
+                    } else {
+                        "let shepherd do everything without asking you first"
+                    },
+                    cx,
+                )
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                update_settings_file(this.fs.clone(), cx, move |settings, _| {
+                    settings.agent.get_or_insert_default().auto_approve = Some(!auto_approve);
+                });
+            }));
+
         let base_container = h_flex()
             .size_full()
             .when(
@@ -6354,6 +6379,7 @@ impl AgentPanel {
                         .gap_1()
                         .children(sandbox_status)
                         .when(can_create_entries, |this| this.child(new_thread_menu))
+                        .child(auto_approve_button)
                         .child(full_screen_button)
                         .child(self.render_panel_options_menu(window, cx)),
                 )

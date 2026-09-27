@@ -447,6 +447,11 @@ impl ThreadsDatabase {
             Connection::open_file(&sqlite_path.to_string_lossy())
         };
 
+        // A deleted conversation is overwritten in the file, not left in
+        // free pages for a recovery tool to read back.
+        connection.exec("PRAGMA secure_delete = ON")?()
+            .map_err(|e| e.context("Failed to enable secure_delete on the threads database"))?;
+
         connection.exec(indoc! {"
             CREATE TABLE IF NOT EXISTS threads (
                 id TEXT PRIMARY KEY,
