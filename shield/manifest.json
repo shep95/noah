@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "noah shield",
-  "version": "2026.9.27.1",
+  "version": "2026.9.27.2",
   "description": "A tunnel that fails closed instead of leaking, trackers and data grabs stopped on every page, cheaper prices and working coupons while you shop, and a watch on anything that could record your screen.",
   "author": "House of Asher",
   "homepage_url": "https://noah.asherin.com/shield",
@@ -52,7 +52,8 @@
     "history",
     "contextMenus",
     "offscreen",
-    "search"
+    "search",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -181,6 +182,58 @@
         "content/light.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.google.co.uk/*",
+        "*://*.google.de/*",
+        "*://*.google.fr/*",
+        "*://*.google.ca/*",
+        "*://*.google.com.au/*",
+        "*://*.google.co.in/*",
+        "*://*.google.es/*",
+        "*://*.google.it/*",
+        "*://*.google.nl/*",
+        "*://*.google.com.br/*",
+        "*://*.google.com.mx/*",
+        "*://*.google.co.jp/*",
+        "*://*.google.ch/*",
+        "*://*.google.at/*",
+        "*://*.google.be/*",
+        "*://*.google.se/*",
+        "*://*.google.pl/*",
+        "*://*.google.ie/*",
+        "*://*.google.pt/*",
+        "*://*.google.dk/*",
+        "*://*.google.no/*",
+        "*://*.google.fi/*",
+        "*://*.google.cz/*",
+        "*://*.google.gr/*",
+        "*://*.google.hu/*",
+        "*://*.google.ro/*",
+        "*://*.google.co.nz/*",
+        "*://*.google.co.za/*",
+        "*://*.google.com.sg/*",
+        "*://*.google.com.tr/*",
+        "*://*.google.com.ar/*",
+        "*://*.google.cl/*",
+        "*://*.google.co.kr/*",
+        "*://*.google.com.hk/*",
+        "*://*.google.com.tw/*",
+        "*://*.bing.com/*",
+        "*://duckduckgo.com/*",
+        "*://*.duckduckgo.com/*",
+        "*://search.brave.com/*",
+        "*://search.yahoo.com/*",
+        "*://*.search.yahoo.com/*",
+        "*://*.startpage.com/*",
+        "*://*.ecosia.org/*"
+      ],
+      "js": [
+        "content/search.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "declarative_net_request": {
@@ -224,6 +277,11 @@
         "id": "sociallogin",
         "enabled": false,
         "path": "rules/sociallogin.json"
+      },
+      {
+        "id": "ads_more",
+        "enabled": false,
+        "path": "rules/ads_more.json"
       }
     ]
   },
@@ -251,9 +309,18 @@
         "<all_urls>"
       ],
       "use_dynamic_url": true
+    },
+    {
+      "resources": [
+        "looks/*.jpg"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuvtDdHVKklSRMDIuELABLtR8dzPZ9chWLYQ5yY8kp2PZDmzyLQZwoayEAx3tVOSobakF1uUaohUfoNYNSEc5oCs8Jqapz7HYC3rG6mYEc/8nvzWkDCm3sDLWFZX6boqitqG9M+gm4JUZ1pfeWcdgggfcBhx8PRwdRsnRjuLCac9hDTQievnMrOC+EpKnPcNpKkZ3HspkPguRgZH6b3t3BaMFWXII8YQFCbEjSqEhCkgU+5SZ8meRc6dM29+vL2lwCN3gdcezDgQJRyHtlg1FyTiEtZgQ4SrER5HOg7W8IGIv6mGe+mdHX0dzy/mQ8YpqyhSKjFNT7GQPhiIjbVMehwIDAQAB"
 }

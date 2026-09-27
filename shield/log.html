@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · log</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+  <style>
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .filters select, .filters input { min-width: 160px; }
+    .count { font-size: 12px; color: var(--muted); }
+    table.log td:first-child { white-space: nowrap; color: var(--muted); width: 1%; }
+    table.log td:nth-child(2) { white-space: nowrap; width: 1%; }
+    table.log td.kind span { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-mid); color: var(--sub); }
+    table.log td.kind span.warn { color: var(--warn); border-color: rgba(220, 200, 150, .3); }
+    table.log td.kind span.bad { color: var(--bad); border-color: rgba(230, 150, 150, .3); }
+    table.log td.kind span.good { color: var(--accent-soft); border-color: rgba(114, 168, 104, .35); }
+    table.log .detail { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; word-break: break-word; }
+    .empty { color: var(--muted); padding: 24px 0; }
+  </style>
+</head>
+<body class="options">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>log</h1>
+    <span id="clock" class="muted"></span>
+  </header>
+  <main>
+    <section>
+      <p class="muted">Everything the shield stopped, warned about or did, in words, newest first. It stays on this device; nothing here is sent anywhere.</p>
+      <div class="filters">
+        <select id="kind">
+          <option value="">everything</option>
+        </select>
+        <input type="text" id="site" placeholder="a site, for example shop.example">
+        <input type="search" id="find" placeholder="find a word">
+        <button id="refresh" class="ghost">refresh</button>
+        <button id="export" class="ghost" title="Save the log as a text file">save as text</button>
+        <button id="clear" class="ghost danger">clear the log</button>
+        <span id="count" class="count"></span>
+      </div>
+      <table class="log">
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="empty" hidden>Nothing logged yet under these filters.</p>
+    </section>
+  </main>
+  <script src="lib/common.js"></script>
+  <script src="lib/look.js"></script>
+  <script src="log.js"></script>
+</body>
+</html>

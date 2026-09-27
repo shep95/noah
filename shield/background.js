@@ -4,7 +4,7 @@
 "use strict";
 
 if (typeof importScripts === "function") {
-  importScripts("lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "lib/look.js");
+  importScripts("lib/common.js", "lib/feeds.js", "lib/host.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "lib/look.js");
 }
 
 const api = Shield.api;
@@ -24,6 +24,8 @@ async function applyAll(reason) {
 }
 
 async function notify(id, title, message) {
+  // Every notice is in the log too, so one that flashed by can be read again.
+  await Shield.log({ kind: "notice", text: title, detail: message });
   const settings = await Shield.loadSettings();
   if (settings.quiet || !api.notifications) return;
   try {
@@ -31,6 +33,11 @@ async function notify(id, title, message) {
   } catch {
     // A browser that refuses notifications is not worth failing over.
   }
+}
+
+function openLog(filter = {}) {
+  const query = new URLSearchParams(Object.entries(filter).filter(([, value]) => value)).toString();
+  return api.tabs.create({ url: api.runtime.getURL("log.html") + (query ? "?" + query : "") });
 }
 
 async function noteUpdate(status) {
@@ -46,6 +53,7 @@ if (api.notifications && api.notifications.onClicked) {
       const session = await api.storage.session.get("reminderLinks");
       const url = (session.reminderLinks || {})[id];
       if (url && /^https?:\/\//.test(url)) await api.tabs.create({ url });
+      else await openLog();
       api.notifications.clear(id);
     })().catch(() => {});
   });
@@ -146,6 +154,7 @@ if (api.webRequest && api.webRequest.onErrorOccurred) {
       if (details.error !== "net::ERR_BLOCKED_BY_CLIENT" && details.error !== "NS_ERROR_ABORT") return;
       if (details.type === "main_frame") return;
       Shield.count("trackers", 1, details.tabId).catch(() => {});
+      if (details.tabId >= 0) Shield.noteBlocked(details.tabId, details.url, details.type).catch(() => {});
       const tabSite = Shield.siteOf(Shield.hostOf(details.initiator || details.documentUrl || ""));
       if (tabSite) Shield.noteThirdParty(details.tabId, tabSite, Shield.hostOf(details.url), true).catch(() => {});
     },
@@ -163,7 +172,10 @@ if (api.webRequest && api.webRequest.onAuthRequired) {
 
 if (api.webNavigation) {
   api.webNavigation.onCommitted.addListener((details) => {
-    if (details.frameId === 0) Shield.resetTabCount(details.tabId).catch(() => {});
+    if (details.frameId === 0) {
+      Shield.resetTabCount(details.tabId).catch(() => {});
+      Shield.forgetBlocked(details.tabId).catch(() => {});
+    }
     if (/^https?:/.test(details.url || "")) hideAds(details).catch(() => {});
   });
 }
@@ -253,6 +265,7 @@ async function hideAds(details) {
 }
 api.tabs.onRemoved.addListener((tabId) => {
   Shield.resetTabCount(tabId).catch(() => {});
+  Shield.forgetBlocked(tabId).catch(() => {});
   api.storage.session.get("mediaTabs").then((session) => {
     const mediaTabs = session.mediaTabs || {};
     if (mediaTabs[tabId]) { delete mediaTabs[tabId]; return api.storage.session.set({ mediaTabs }); }
@@ -348,6 +361,20 @@ const handlers = {
     await Shield.applyHeaderRules(settings);
     return { status };
   },
+  async "tunnel.connect"(message) {
+    const serverId = String(message.serverId || "");
+    if (serverId === Shield.NOAH_TOR_ID) {
+      // The popup closes long before Tor is up; the connect goes on without it.
+      Shield.connectNoahTor(message.country).catch((error) => console.warn("shield: noah tor", error));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return { status: await Shield.tunnelStatus() };
+    }
+    const settings = await Shield.updateSettings({ tunnel: { enabled: true, serverId } });
+    return { status: await Shield.applyTunnel(settings) };
+  },
+  async "tunnel.disconnect"() {
+    return { status: await Shield.disconnectTunnel() };
+  },
   async "tunnel.speedTest"(message) {
     const settings = await Shield.loadSettings();
     const results = await Shield.speedTest(settings, Array.isArray(message.ids) ? message.ids : null);
@@ -423,21 +450,94 @@ const handlers = {
     }
     return { tunnel, control, systemProxy, exit };
   },
-  // ---- light: a dimmer and a warmer over every page --------------------------------------------
+  // ---- light: the screen's real brightness, through noah -------------------------------------
   async "light.state"() {
     const settings = await Shield.loadSettings();
     return settings.light;
   },
+  async "light.read"() {
+    const info = await Shield.hostInfo();
+    if (!info.present) return { present: false, error: info.error };
+    const answer = await Shield.host({ type: "brightness.get" });
+    return { present: true, supported: !answer.error, level: answer.level, error: answer.error };
+  },
   async "light.set"(message) {
+    const settings = await Shield.loadSettings();
     const light = {
       preset: String(message.preset || "custom").slice(0, 20),
-      dim: Math.min(0.85, Math.max(0, Number(message.dim) || 0)),
-      warmth: Math.min(1, Math.max(0, Number(message.warmth) || 0)),
+      brightness: message.brightness === null || message.brightness === undefined ? null : Math.min(100, Math.max(0, Math.round(Number(message.brightness) || 0))),
+      warmth: Math.min(1, Math.max(0, Number(message.warmth === undefined ? settings.light.warmth : message.warmth) || 0)),
     };
+    let outcome = { ok: true };
+    if (light.brightness !== null) {
+      const info = await Shield.hostInfo();
+      if (!info.present) outcome = { ok: false, error: "the screen's brightness needs noah on this computer" };
+      else {
+        const answer = await Shield.host({ type: "brightness.set", level: light.brightness });
+        outcome = answer.error ? { ok: false, error: answer.error } : { ok: true };
+      }
+    }
     await Shield.updateSettings({ light });
     const tabs = await api.tabs.query({ url: ["http://*/*", "https://*/*"] });
     for (const tab of tabs) api.tabs.sendMessage(tab.id, { type: "light.apply", light }, () => void api.runtime.lastError);
-    return { light };
+    await Shield.log({
+      kind: "light",
+      text: light.brightness === null ? "light: scene off" : outcome.ok ? `screen brightness set to ${light.brightness}%` : `screen brightness could not be set`,
+      detail: [light.preset !== "custom" ? "scene: " + light.preset : "", light.warmth ? `warm tint ${Math.round(light.warmth * 100)}%` : "", outcome.error || ""].filter(Boolean).join(" · "),
+    });
+    return { light, ...outcome };
+  },
+  // ---- the log: what the shield did, in words ---------------------------------------------------
+  async "log.list"(message) {
+    return { entries: await Shield.logEntries({ kind: String(message.kind || ""), site: String(message.site || ""), tabId: Number.isInteger(message.tabId) ? message.tabId : null, limit: Math.min(3000, Number(message.limit) || 500) }) };
+  },
+  async "log.clear"() {
+    await Shield.clearLog();
+    return { ok: true };
+  },
+  async "log.open"(message, sender) {
+    await openLog({ site: sender && sender.tab ? Shield.siteOf(Shield.hostOf(sender.tab.url || "")) : String(message.site || "") });
+    return { ok: true };
+  },
+  // What was stopped on one tab, grouped by who was on the other end.
+  async "tab.blocked"(message) {
+    const tabId = Number(message.tabId);
+    const entries = await Shield.blockedOnTab(tabId);
+    const groups = new Map();
+    for (const entry of entries) {
+      const key = Shield.siteOf(entry.host) || entry.host;
+      const group = groups.get(key) || { site: key, hosts: new Set(), count: 0, types: new Set(), owner: Shield.ownerOf ? Shield.ownerOf(entry.host) : null, last: 0 };
+      group.hosts.add(entry.host);
+      group.count += 1;
+      group.types.add(entry.type);
+      group.last = Math.max(group.last, entry.at);
+      groups.set(key, group);
+    }
+    const list = Array.from(groups.values()).map((group) => ({ ...group, hosts: Array.from(group.hosts).slice(0, 6), types: Array.from(group.types) })).sort((left, right) => right.count - left.count);
+    return { total: entries.length, groups: list };
+  },
+  // ---- search: cleaned results ---------------------------------------------------------------
+  async "search.state"() {
+    const settings = await Shield.loadSettings();
+    const stored = await api.storage.local.get("look");
+    const look = stored.look || null;
+    const image = look && look.image ? (look.image.startsWith("data:") ? look.image : api.runtime.getURL("looks/" + look.image)) : null;
+    return { clean: settings.search.clean, farms: settings.search.farms, look: settings.search.look && Boolean(image), image, palette: look ? look.palette : null };
+  },
+  async "search.hidden"(message, sender) {
+    if (!allowRate("search", sender, 30)) return { ok: false };
+    const paid = Math.min(100, Math.max(0, Number(message.paid) || 0));
+    const farms = Math.min(100, Math.max(0, Number(message.farms) || 0));
+    const dimmed = Math.min(100, Math.max(0, Number(message.dimmed) || 0));
+    if (paid) await Shield.count("paidResults", paid, sender.tab ? sender.tab.id : null);
+    if (farms) await Shield.count("farmResults", farms, sender.tab ? sender.tab.id : null);
+    const parts = [paid && `${paid} paid result${paid === 1 ? "" : "s"} hidden`, farms && `${farms} content-farm page${farms === 1 ? "" : "s"} hidden`, dimmed && `${dimmed} faded as written for the engine`].filter(Boolean);
+    await Shield.log({ kind: "search", site: Shield.siteOf(Shield.hostOf(sender.url || "")), tabId: sender.tab ? sender.tab.id : null, text: `${String(message.engine || "search")}: ${parts.join(", ")}`, detail: message.query ? `search: ${String(message.query).slice(0, 120)}` : "" });
+    return { ok: true };
+  },
+  // ---- noah on this computer ----------------------------------------------------------------------
+  async "host.info"(message) {
+    return Shield.hostInfo(Boolean(message.fresh));
   },
   // ---- frequency: a tone or a binaural beat under whatever plays ------------------------------
   async "tone.play"(message) {
@@ -770,6 +870,22 @@ const handlers = {
     await api.storage.session.set({ captureTabs });
     const mode = ["visible", "full", "area"].includes(message.mode) ? message.mode : "visible";
     try {
+      // A tab open since before the shield was installed or updated has no
+      // capture script yet; it is put in now rather than asking for a reload.
+      const ready = !message.inject && await new Promise((resolve) => {
+        api.tabs.sendMessage(tab.id, { type: "capture.ping" }, (response) => {
+          void api.runtime.lastError;
+          resolve(Boolean(response && response.ready));
+        });
+      });
+      if (!ready) {
+        if (!api.scripting || !api.scripting.executeScript) throw new Error("reload the page once, then try again");
+        try {
+          await api.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/capture.js"] });
+        } catch (error) {
+          throw new Error("this page does not let extensions in (" + String(error.message || error).replace(/^Error: /, "") + ")");
+        }
+      }
       const result = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("the page did not answer; reload it and try again")), 6 * 60 * 1000);
         api.tabs.sendMessage(tab.id, { type: "capture.run", mode, blur: Boolean(message.blur) }, (response) => {
@@ -778,8 +894,12 @@ const handlers = {
           else resolve(response || {});
         });
       });
+      const site = Shield.siteOf(Shield.hostOf(tab.url));
+      if (result.error) await Shield.log({ kind: "capture", site, tabId: tab.id, text: `screenshot (${mode}) failed`, detail: result.error });
+      else if (!result.cancelled) await Shield.log({ kind: "capture", site, tabId: tab.id, text: `screenshot (${mode === "full" ? "whole page" : mode === "area" ? "an area" : "what was on screen"}) saved to Downloads/noah-shield`, detail: result.blurred ? `${result.blurred} private detail(s) blurred first` : "nothing needed blurring" });
       return result;
     } catch (error) {
+      await Shield.log({ kind: "capture", site: Shield.siteOf(Shield.hostOf(tab.url)), tabId: tab.id, text: `screenshot (${mode}) failed`, detail: String(error.message || error) });
       return { error: String(error.message || error) };
     } finally {
       const after = await api.storage.session.get("captureTabs");
@@ -870,7 +990,33 @@ const handlers = {
     if (!allowRate("safety", sender, 120)) return { ok: false, limited: true };
     const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "keylog", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads"]);
     const kind = kinds.has(message.kind) ? message.kind : "other";
-    await Shield.count(kind, Math.min(50, Math.max(1, Number(message.amount) || 1)), sender.tab ? sender.tab.id : null);
+    const amount = Math.min(50, Math.max(1, Number(message.amount) || 1));
+    await Shield.count(kind, amount, sender.tab ? sender.tab.id : null);
+    const words = {
+      phishing: "a page that imitates another site was stopped",
+      passwordHttp: "a password field on a page without https was flagged",
+      reuse: "a password you use elsewhere was typed here",
+      breached: "a password known from a breach was typed here",
+      hiddenFields: "hidden form fields were cleared before sending",
+      frames: "hidden frames were removed",
+      popups: "a scam pop-up was closed",
+      leaks: "a form leak to a third party was stopped",
+      keylog: "a script recording keystrokes was caught",
+      wallets: "a page reached for a crypto wallet",
+      clipboard: "a page read the clipboard without being asked",
+      fees: "a hidden fee was pointed out at checkout",
+      darkPatterns: "a dark pattern was flagged",
+      traps: "a subscription trap was flagged",
+      reviewsChecked: "reviews were checked",
+      banners: "a cookie banner was answered with no",
+      overlays: "an overlay was removed",
+      autoplay: "autoplay was stopped",
+      timers: "a fake countdown was removed",
+      pastes: "a paste was checked",
+      uploads: "an upload had its hidden data stripped",
+    };
+    const detail = message.detail && typeof message.detail === "object" ? Object.entries(message.detail).map(([key, value]) => `${key}: ${String(value).slice(0, 120)}`).join(" · ") : String(message.detail || "").slice(0, 300);
+    await Shield.log({ kind, site: Shield.siteOf(Shield.hostOf(sender.url || "")), tabId: sender.tab ? sender.tab.id : null, text: (amount > 1 ? amount + "× " : "") + (words[kind] || kind), detail });
     return { ok: true };
   },
   async "lookalike.check"(message) {
@@ -1126,7 +1272,7 @@ function fillDecoy(identity) {
 Shield.panic = panic;
 async function panic() {
   const settings = await Shield.loadSettings();
-  if (settings.tunnel.enabled) await Shield.updateSettings({ tunnel: { enabled: false } });
+  if (settings.tunnel.enabled) await Shield.disconnectTunnel();
   const tabs = await api.tabs.query({});
   await api.tabs.create({ url: "about:blank" });
   await api.tabs.remove(tabs.map((tab) => tab.id));
@@ -1230,6 +1376,7 @@ if (api.webNavigation) {
       const page = api.runtime.getURL("warn.html") + "?" + new URLSearchParams({ kind: "lookalike", url: details.url, brand: found.brand, real: found.real, reason: found.reason });
       await api.tabs.update(details.tabId, { url: page });
       await Shield.count("phishing", 1, details.tabId);
+      await Shield.log({ kind: "phishing", site, tabId: details.tabId, text: `stopped before ${site}: it looks like ${found.brand} but is not`, detail: `${found.reason}; the real site is ${found.real}` });
     })().catch((error) => console.warn("shield: navigation guard", error));
   });
 }
@@ -1307,7 +1454,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

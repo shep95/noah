@@ -1,39 +1,26 @@
-// Light: a dimmer and a warmer over every page, by scene ("in a dark room",
-// "at a restaurant") or by hand. A page cannot turn a backlight down; a dark
-// veil over what the screen shows is the next best thing, and the warmth
-// takes the blue out of it at night.
+// Light: the shield turns the screen's real brightness through noah, never
+// the page. The one thing left on the page is the optional warm tint, a
+// candle-coloured layer that takes the blue out at night, and only when the
+// person asked for it.
 (() => {
   "use strict";
   if (window.top !== window) return;
   const api = globalThis.chrome ?? globalThis.browser;
-  let veil = null;
   let warmth = null;
 
-  function ensure() {
-    if (veil && veil.isConnected) return;
-    veil = document.createElement("div");
-    warmth = document.createElement("div");
-    for (const layer of [veil, warmth]) {
-      Object.assign(layer.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: "2147483645", transition: "opacity .5s ease, background .5s ease" });
-      layer.style.setProperty("mix-blend-mode", "multiply");
-    }
-    veil.style.background = "#000";
-    veil.style.opacity = "0";
-    warmth.style.background = "#ffb45c";
-    warmth.style.opacity = "0";
-    (document.documentElement).append(veil, warmth);
-  }
-
   function apply(light) {
-    const dim = Math.min(0.85, Math.max(0, Number(light && light.dim) || 0));
     const warm = Math.min(1, Math.max(0, Number(light && light.warmth) || 0));
-    if (!dim && !warm) {
-      if (veil) { veil.remove(); warmth.remove(); veil = warmth = null; }
+    if (!warm) {
+      if (warmth) { warmth.remove(); warmth = null; }
       return;
     }
-    ensure();
-    veil.style.opacity = String(dim);
-    // Multiplying by amber at full strength is far too orange; a quarter is a candle.
+    if (!warmth || !warmth.isConnected) {
+      warmth = document.createElement("div");
+      Object.assign(warmth.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: "2147483645", background: "#ffb45c", opacity: "0", transition: "opacity .5s ease" });
+      warmth.style.setProperty("mix-blend-mode", "multiply");
+      document.documentElement.append(warmth);
+    }
+    // Multiplying by amber at full strength is far too orange; a third is a candle.
     warmth.style.opacity = String(warm * 0.32);
   }
 

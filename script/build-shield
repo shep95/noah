@@ -29,7 +29,7 @@ trap 'rm -rf "$stage"' EXIT
 copy_sources() {
     mkdir -p "$1"
     cp -r shield/background.js shield/popup.html shield/popup.css shield/popup.js \
-        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js shield/record.html shield/record.css shield/record.js shield/newtab.html shield/newtab.css shield/newtab.js shield/offscreen.html \
+        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js shield/record.html shield/record.css shield/record.js shield/newtab.html shield/newtab.css shield/newtab.js shield/offscreen.html shield/log.html shield/log.js \
         shield/lib shield/content shield/rules shield/icons shield/looks "$1/"
 }
 
@@ -45,13 +45,15 @@ python3 - shield/manifest.json "$stage/firefox/manifest.json" <<'PY'
 import json, sys
 manifest = json.load(open(sys.argv[1]))
 manifest["background"] = {"scripts": [
-    "lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "lib/look.js", "background.js",
+    "lib/common.js", "lib/feeds.js", "lib/host.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "lib/look.js", "background.js",
 ]}
 unknown = {"contentSettings", "webRequestAuthProvider", "declarativeNetRequestFeedback", "offscreen"}
 # Firefox can wear the look on its own frame and toolbars.
 manifest["permissions"] = manifest["permissions"] + ["theme"]
 manifest["permissions"] = [p for p in manifest["permissions"] if p not in unknown] + ["webRequestBlocking", "contextualIdentities"]
 manifest.pop("minimum_chrome_version", None)
+# The key fixes the id in Chromium browsers; Firefox has its own id below.
+manifest.pop("key", None)
 manifest["browser_specific_settings"] = {
     "gecko": {
         "id": "shield@noah.asherin.com",
@@ -76,6 +78,7 @@ python3 - shield/manifest.json "$stage/safari/manifest.json" <<'PY'
 import json, sys
 manifest = json.load(open(sys.argv[1]))
 manifest.pop("minimum_chrome_version", None)
+manifest.pop("key", None)
 json.dump(manifest, open(sys.argv[2], "w"), indent=2)
 PY
 (cd "$stage/safari" && rm -f "$OLDPWD/dist/noah-shield-safari.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-safari.zip" .)

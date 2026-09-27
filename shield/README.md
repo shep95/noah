@@ -18,6 +18,10 @@ converter). Four things, each described by what it can honestly do:
 * **recording watch**: pages must ask before screen or camera capture; the
   other installed extensions are audited for capture reach and can be disabled.
 
+Everything it does is written down in its log (`log.html`), and with noah
+installed on the computer it also turns the screen's real brightness and runs
+Tor for the tunnel through noah's native messaging host (see STAGES.md, stage 11).
+
 ## Layout
 
     manifest.json        Chromium manifest (Firefox and Safari ones are derived)

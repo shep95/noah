@@ -285,6 +285,17 @@ fn main() {
         return;
     }
 
+    // noah shield reaches this computer's brightness and Tor through the
+    // command-line binary; every launch refreshes where the browsers find it,
+    // so an update or a move never leaves a stale path behind.
+    if let Ok(cli_path) = util::get_zed_cli_path() {
+        std::thread::spawn(move || {
+            if let Err(error) = cli::shield_host::register(&cli_path) {
+                log::warn!("noah shield host could not be registered: {error:#}");
+            }
+        });
+    }
+
     zlog::init();
 
     if stdout_is_a_pty() {

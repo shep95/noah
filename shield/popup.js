@@ -19,6 +19,7 @@ function flag(code) {
 }
 function placeOf(server) {
   if (server.id === "tor-local") return "anonymous route (Tor on this computer)";
+  if (server.id === Shield.NOAH_TOR_ID) return server.country ? flag(server.country) + countryName(server.country) + " · through noah" : "fastest location · through noah";
   const country = countryName(server.country);
   const where = [country, server.city].filter(Boolean).join(" · ");
   return where ? flag(server.country) + where : server.name;
@@ -30,8 +31,11 @@ function describeTunnel(status) {
   if (!status || status.state === "off") return ["Off. Sites see your own address.", "", "off"];
   const place = status.server ? placeOf(status.server) : "the location";
   switch (status.state) {
-    case "checking":
-      return [`Connecting to ${place}…`, "checking", "connecting"];
+    case "checking": {
+      const percent = Number.isFinite(status.progress) ? ` ${status.progress}%` : "";
+      const note = status.note ? ` · ${status.note}` : "";
+      return [`Connecting to ${place}…${percent}${note}`, "checking", "connecting" + percent];
+    }
     case "up": {
       const exit = status.exit || {};
       const where = [exit.city, countryName(exit.country)].filter(Boolean).join(", ");
@@ -129,20 +133,46 @@ function render(state) {
   connectButton.classList.toggle("on", settings.tunnel.enabled);
   const select = byId("server");
   select.replaceChildren();
-  const auto = document.createElement("option");
-  auto.value = "auto";
-  auto.textContent = servers.length ? "fastest location" : "no locations yet";
-  select.append(auto);
-  // Real places first, sorted by country; the anonymous Tor route last.
-  const sorted = [...servers].sort((left, right) => (left.id === "tor-local") - (right.id === "tor-local") || countryName(left.country).localeCompare(countryName(right.country)));
-  for (const server of sorted) {
-    const option = document.createElement("option");
-    option.value = server.id;
-    option.textContent = serverLabel(server);
-    select.append(option);
+  const noah = servers.find((server) => server.id === Shield.NOAH_TOR_ID);
+  byId("vpn-noah").hidden = Boolean(noah);
+  if (noah) {
+    // noah's route first: the fastest exit, then a country to come out in.
+    const fastest = document.createElement("option");
+    fastest.value = Shield.NOAH_TOR_ID + ":";
+    fastest.textContent = "fastest location · through noah";
+    select.append(fastest);
+    const group = document.createElement("optgroup");
+    group.label = "come out in";
+    for (const code of Shield.TOR_COUNTRIES) {
+      const option = document.createElement("option");
+      option.value = Shield.NOAH_TOR_ID + ":" + code;
+      option.textContent = flag(code) + countryName(code);
+      group.append(option);
+    }
+    select.append(group);
+  } else {
+    const auto = document.createElement("option");
+    auto.value = "auto";
+    auto.textContent = "fastest of the locations below";
+    select.append(auto);
   }
-  select.value = settings.tunnel.serverId && servers.some((server) => server.id === settings.tunnel.serverId) ? settings.tunnel.serverId : "auto";
-  byId("vpn-empty").hidden = servers.length > 0;
+  const others = servers.filter((server) => server.id !== Shield.NOAH_TOR_ID).sort((left, right) => (left.id === "tor-local") - (right.id === "tor-local") || countryName(left.country).localeCompare(countryName(right.country)));
+  if (others.length) {
+    const group = document.createElement("optgroup");
+    group.label = noah ? "other routes" : "routes";
+    for (const server of others) {
+      const option = document.createElement("option");
+      option.value = server.id;
+      option.textContent = serverLabel(server);
+      group.append(option);
+    }
+    select.append(group);
+  }
+  const chosen = settings.tunnel.serverId === Shield.NOAH_TOR_ID
+    ? Shield.NOAH_TOR_ID + ":" + (settings.tunnel.torCountry || "")
+    : settings.tunnel.serverId && servers.some((server) => server.id === settings.tunnel.serverId) ? settings.tunnel.serverId : select.options[0].value;
+  select.value = chosen;
+  if (select.value !== chosen) select.selectedIndex = 0;
   connectButton.disabled = !servers.length;
   const [statusText, statusClass, shortState] = describeTunnel(tunnel);
   const statusNode = byId("tunnel-status");
@@ -173,7 +203,11 @@ function render(state) {
   byId("coupons").checked = settings.shopping.coupons && settings.shopping.autoApply;
   byId("shop-stats").textContent = `${month.compared || 0} products compared and ${month.coupons || 0} codes that worked this month.`;
 
-  showLight(settings.light || { preset: "off", dim: 0, warmth: 0 });
+  showLight(settings.light || { preset: "off", brightness: null, warmth: 0 });
+  byId("search-clean").checked = settings.search.clean;
+  byId("search-farms").checked = settings.search.farms;
+  byId("search-look").checked = settings.search.look;
+  byId("search-now").textContent = (today.paidResults || 0) + (today.farmResults || 0) ? `${(today.paidResults || 0) + (today.farmResults || 0)} results removed today` : "";
   byId("mode-now").textContent = settings.modes.profile ? settings.modes.profile + (site && settings.modes.siteModes[site.site] ? " · this site: " + settings.modes.siteModes[site.site] : "") : site && settings.modes.siteModes[site.site] ? "this site: " + settings.modes.siteModes[site.site] : "none";
   for (const element of document.querySelectorAll("button[data-profile]")) element.classList.toggle("on", settings.modes.profile === element.dataset.profile);
   byId("guard-screen").checked = settings.capture.guardScreen;
@@ -219,13 +253,16 @@ bindSite("strict", "strictCookies");
 bindSite("capture", "captureAllowed");
 bindSite("shopquiet", "shoppingQuiet");
 
-async function connect(serverId) {
-  if (serverId === "auto") {
+async function connect(choice) {
+  if (choice === "auto") {
     byId("tunnel-status").textContent = "Trying every location once…";
     const result = await Shield.send({ type: "tunnel.speedTest", pickFastest: true });
     if (!result || !result.picked) byId("tunnel-status").textContent = "None of the locations answered. Check them under settings.";
+  } else if (choice.startsWith(Shield.NOAH_TOR_ID + ":")) {
+    byId("tunnel-status").textContent = "Asking noah to start Tor…";
+    await Shield.send({ type: "tunnel.connect", serverId: Shield.NOAH_TOR_ID, country: choice.slice(Shield.NOAH_TOR_ID.length + 1) });
   } else {
-    await Shield.send({ type: "settings.update", change: { tunnel: { enabled: true, serverId } } });
+    await Shield.send({ type: "tunnel.connect", serverId: choice });
   }
   await refresh();
   setTimeout(refresh, 2500);
@@ -233,7 +270,8 @@ async function connect(serverId) {
 byId("tunnel-on").addEventListener("click", async () => {
   if (!current) return;
   if (current.settings.tunnel.enabled) {
-    await Shield.send({ type: "settings.update", change: { tunnel: { enabled: false } } });
+    byId("tunnel-status").textContent = "Disconnecting…";
+    await Shield.send({ type: "tunnel.disconnect" });
     await refresh();
     setTimeout(refresh, 2500);
     return;
@@ -253,27 +291,94 @@ bindSetting("webrtc", ["tunnel", "webRtcGuard"]);
 byId("fastest").addEventListener("click", () => connect("auto"));
 
 // ---- light -----------------------------------------------------------------------------------
-const LIGHT_PRESETS = { sunny: [0, 0], dark: [0.45, 0.35], restaurant: [0.25, 0.5], night: [0.55, 0.7] };
-const LIGHT_NAMES = { off: "off", sunny: "bright and sunny", dark: "in a dark room", restaurant: "restaurant", night: "night", custom: "your own" };
+// Scenes are brightness levels for the screen itself; nothing is laid over pages.
+const LIGHT_PRESETS = { sunny: 100, day: 75, restaurant: 45, dark: 20, night: 8 };
+const LIGHT_NAMES = { off: "", sunny: "bright and sunny", day: "daytime", restaurant: "restaurant", dark: "in a dark room", night: "night", custom: "your own" };
+let lightRead = null;
 function showLight(light) {
-  byId("light-dim").value = Math.round((light.dim || 0) * 100);
+  if (light.brightness !== null && light.brightness !== undefined) byId("light-level").value = light.brightness;
   byId("light-warm").value = Math.round((light.warmth || 0) * 100);
-  byId("light-now").textContent = LIGHT_NAMES[light.preset] || light.preset || "off";
+  const level = light.brightness !== null && light.brightness !== undefined ? light.brightness + "%" : "";
+  byId("light-now").textContent = [LIGHT_NAMES[light.preset] || "", level].filter(Boolean).join(" · ");
   for (const button of document.querySelectorAll("button[data-light]")) button.classList.toggle("on", light.preset === button.dataset.light);
 }
-async function setLight(preset, dim, warmth) {
-  const result = await Shield.send({ type: "light.set", preset, dim, warmth });
+async function readLight() {
+  if (lightRead) return lightRead;
+  lightRead = await Shield.send({ type: "light.read" });
+  const note = byId("light-note");
+  if (!lightRead || lightRead.error && !lightRead.present) {
+    note.textContent = "Turning the screen's own brightness needs noah on this computer (free, noah.asherin.com/download). The warm tint below still works.";
+    note.className = "muted warn";
+    byId("light-level").disabled = true;
+  } else if (!lightRead.supported) {
+    note.textContent = "This screen does not take brightness commands from programs (most external monitors do not). " + (lightRead.error || "");
+    note.className = "muted warn";
+    byId("light-level").disabled = true;
+  } else {
+    byId("light-level").value = lightRead.level;
+    byId("light-level").disabled = false;
+    note.textContent = `The screen is at ${lightRead.level}% now. Scenes and the slider turn the real brightness; the warm tint is the one thing laid over pages, and only if you slide it up.`;
+    note.className = "muted";
+  }
+  return lightRead;
+}
+async function setLight(preset, brightness, warmth) {
+  const result = await Shield.send({ type: "light.set", preset, brightness, warmth });
   if (result && result.light) { showLight(result.light); if (current) current.settings.light = result.light; }
+  if (result && result.error) { const note = byId("light-note"); note.textContent = result.error; note.className = "muted warn"; }
+  else if (result && result.light && result.light.brightness !== null) { const note = byId("light-note"); note.textContent = `Screen brightness set to ${result.light.brightness}%.`; note.className = "muted"; }
 }
 for (const button of document.querySelectorAll("button[data-light]")) {
-  button.addEventListener("click", () => {
-    const [dim, warmth] = LIGHT_PRESETS[button.dataset.light];
-    const same = current && current.settings.light && current.settings.light.preset === button.dataset.light;
-    if (same) setLight("off", 0, 0); else setLight(button.dataset.light, dim, warmth);
-  });
+  button.addEventListener("click", () => setLight(button.dataset.light, LIGHT_PRESETS[button.dataset.light], undefined));
 }
-byId("light-dim").addEventListener("input", () => setLight("custom", Number(byId("light-dim").value) / 100, Number(byId("light-warm").value) / 100));
-byId("light-warm").addEventListener("input", () => setLight("custom", Number(byId("light-dim").value) / 100, Number(byId("light-warm").value) / 100));
+let levelTimer = null;
+byId("light-level").addEventListener("input", () => {
+  clearTimeout(levelTimer);
+  levelTimer = setTimeout(() => setLight("custom", Number(byId("light-level").value), undefined), 250);
+});
+byId("light-warm").addEventListener("input", () => setLight(current && current.settings.light ? current.settings.light.preset : "custom", null, Number(byId("light-warm").value) / 100));
+readLight();
+
+// ---- search --------------------------------------------------------------------------------
+bindSetting("search-clean", ["search", "clean"]);
+bindSetting("search-farms", ["search", "farms"]);
+bindSetting("search-look", ["search", "look"]);
+
+// ---- what happened here ---------------------------------------------------------------------
+byId("here").addEventListener("click", async () => {
+  if (!current || !current.site) return;
+  const list = byId("here-list");
+  if (!list.hidden) { list.hidden = true; return; }
+  list.replaceChildren();
+  list.hidden = false;
+  const [blocked, log] = await Promise.all([
+    Shield.send({ type: "tab.blocked", tabId: current.site.tabId }),
+    Shield.send({ type: "log.list", tabId: current.site.tabId, limit: 40 }),
+  ]);
+  const line = (text, className = "") => { const node = document.createElement("div"); node.textContent = text; if (className) node.className = className; list.append(node); };
+  if (blocked && blocked.groups && blocked.groups.length) {
+    line(`${blocked.total} request${blocked.total === 1 ? "" : "s"} stopped on this page:`);
+    for (const group of blocked.groups.slice(0, 30)) {
+      const who = group.owner ? `${group.owner.owner} (${group.owner.kind}${group.owner.country ? ", " + group.owner.country : ""})` : "";
+      line(`  ${group.site} · ${group.count}× ${group.types.join("/")}${who ? " · " + who : ""}`);
+    }
+  } else {
+    line("Nothing had to be stopped on this page so far.");
+  }
+  const entries = (log && log.entries) || [];
+  if (entries.length) {
+    line("What the shield did here:");
+    for (const entry of entries.slice(0, 25)) {
+      const when = new Date(entry.at);
+      line(`  ${when.getHours().toString().padStart(2, "0")}:${when.getMinutes().toString().padStart(2, "0")} ${entry.text}${entry.detail ? " · " + entry.detail : ""}`);
+    }
+  }
+  const more = document.createElement("a");
+  more.href = "#";
+  more.textContent = "open the whole log";
+  more.addEventListener("click", (event) => { event.preventDefault(); Shield.api.tabs.create({ url: Shield.api.runtime.getURL("log.html") + "?site=" + encodeURIComponent(current.site.site || "") }); });
+  list.append(more);
+});
 
 // ---- frequency -------------------------------------------------------------------------------
 (function tone() {
@@ -438,6 +543,10 @@ byId("panic").addEventListener("click", async () => {
 byId("tools").addEventListener("click", (event) => {
   event.preventDefault();
   Shield.api.tabs.create({ url: Shield.api.runtime.getURL("tools.html") });
+});
+byId("log").addEventListener("click", (event) => {
+  event.preventDefault();
+  Shield.api.tabs.create({ url: Shield.api.runtime.getURL("log.html") });
 });
 byId("leak").addEventListener("click", (event) => {
   event.preventDefault();

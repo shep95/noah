@@ -33,11 +33,13 @@
     </div>
     <div class="row small">
       <button id="burn" class="ghost danger" title="Delete this site's cookies, cache and storage">burn this site</button>
+      <button id="here" class="ghost" title="What the shield stopped and did on this page, in words">what happened here</button>
       <button id="watchers" class="ghost">who's watching</button>
       <button id="alias" class="ghost" title="An email alias for this site">alias</button>
       <button id="decoy" class="ghost" title="Fill the sign-up form with decoy details">decoy form</button>
       <button id="policy" class="ghost" title="Read this page as a policy or terms">read policy</button>
     </div>
+    <div id="here-list" class="watchers" hidden></div>
     <div id="watchers-list" class="watchers" hidden></div>
     <p id="alias-out" class="muted" hidden></p>
     <p id="media-live" class="muted bad" hidden></p>
@@ -85,22 +87,30 @@
       <button id="fastest" class="ghost" title="Try every location once and keep the fastest">fastest</button>
       <button id="route" class="ghost" title="Send only this site through a location, or straight out">this site</button>
     </div>
-    <p id="vpn-empty" class="muted" hidden>No locations yet. Add a server you rent or a friend runs under settings, or start Tor on this computer for an anonymous route.</p>
+    <p id="vpn-noah" class="muted" hidden>One press needs <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">noah on this computer</a> (free): it fetches Tor from the Tor Project, runs it while you are connected and picks the country you choose. Without it, start Tor Browser and pick that route, or add a server under settings.</p>
   </section>
 
   <section id="light-section">
     <div class="row"><h2>light</h2><span id="light-now" class="muted"></span></div>
     <div class="row small">
-      <button class="ghost" data-light="sunny" title="Nothing over the page: full brightness">bright and sunny</button>
-      <button class="ghost" data-light="dark" title="Dimmed and warmed for a dark room">in a dark room</button>
-      <button class="ghost" data-light="restaurant" title="A little dim, a little warm">restaurant</button>
-      <button class="ghost" data-light="night" title="Dim and amber for the last hour of the day">night</button>
+      <button class="ghost" data-light="sunny" title="Full brightness">bright and sunny</button>
+      <button class="ghost" data-light="day" title="Bright, for a lit room">daytime</button>
+      <button class="ghost" data-light="restaurant" title="Half brightness, for a restaurant or a café">restaurant</button>
+      <button class="ghost" data-light="dark" title="Low, for a dark room">in a dark room</button>
+      <button class="ghost" data-light="night" title="As low as it goes, for the last hour of the day">night</button>
     </div>
     <div class="row small">
-      <label class="slider">dim <input type="range" id="light-dim" min="0" max="85" step="5"></label>
-      <label class="slider">warm <input type="range" id="light-warm" min="0" max="100" step="5"></label>
+      <label class="slider">brightness <input type="range" id="light-level" min="5" max="100" step="5"></label>
+      <label class="slider">warm tint <input type="range" id="light-warm" min="0" max="100" step="5"></label>
     </div>
-    <p class="muted">A veil over every page, not the backlight itself: noah's device room turns the real brightness.</p>
+    <p id="light-note" class="muted">The screen's own brightness, turned through noah on this computer. The warm tint is the one thing laid over pages, and only if you slide it up.</p>
+  </section>
+
+  <section id="search-section">
+    <div class="row"><h2>search</h2><span id="search-now" class="muted"></span></div>
+    <label class="switch"><input type="checkbox" id="search-clean"><span>no paid results on Google, Bing, DuckDuckGo, Brave, Yahoo, Startpage and Ecosia</span></label>
+    <label class="switch"><input type="checkbox" id="search-farms"><span>no content farms; pages written for the engine shown faded</span></label>
+    <label class="switch"><input type="checkbox" id="search-look"><span>search pages wear the look</span></label>
   </section>
 
   <section id="tone-section">
@@ -153,6 +163,7 @@
 
   <footer>
     <a href="#" id="options">settings</a>
+    <a href="#" id="log">log</a>
     <a href="#" id="tools">tools</a>
     <a href="#" id="leak">leak test</a>
     <a href="https://noah.asherin.com/shield" target="_blank" rel="noopener">about</a>

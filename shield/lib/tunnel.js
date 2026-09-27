@@ -45,13 +45,119 @@ Shield.validateServer = function validateServer(server) {
   return null;
 };
 
+// The route noah runs for you: Tor started by noah on this computer, on a
+// port of its own, with an exit country when one is chosen.
+function noahTorServer(country) {
+  return {
+    id: Shield.NOAH_TOR_ID,
+    name: "noah's tunnel",
+    kind: "socks5",
+    host: "127.0.0.1",
+    port: Shield.NOAH_TOR_PORT,
+    country: String(country || "").toUpperCase(),
+    city: "",
+    operator: "the Tor network, started for you by noah on this computer",
+    source: "builtin",
+    notes: "One press. noah fetches Tor from the Tor Project the first time and runs it while you are connected.",
+  };
+}
+
 Shield.allServers = async function allServers() {
-  const [stored, feed] = await Promise.all([Shield.api.storage.local.get("myServers"), Shield.feedData("servers.json")]);
+  const [stored, feed, settings, host] = await Promise.all([
+    Shield.api.storage.local.get("myServers"),
+    Shield.feedData("servers.json"),
+    Shield.loadSettings(),
+    Shield.hostInfo ? Shield.hostInfo().catch(() => ({ present: false })) : Promise.resolve({ present: false }),
+  ]);
   const vetted = Array.isArray(feed && feed.servers)
     ? feed.servers.filter((server) => Shield.validateServer(server) === null).map((server) => ({ ...server, source: "vetted" }))
     : [];
   const mine = Array.isArray(stored.myServers) ? stored.myServers : [];
-  return [...Shield.BUILTIN_SERVERS, ...vetted, ...mine];
+  const noah = host && host.present ? [noahTorServer(settings.tunnel.torCountry)] : [];
+  return [...noah, ...Shield.BUILTIN_SERVERS, ...vetted, ...mine];
+};
+
+// Connects through noah's Tor: gets Tor if it is missing, starts it with the
+// country asked for, waits for it to bootstrap while the popup watches the
+// percentage, then puts the browser on it and checks where it comes out.
+Shield.connectNoahTor = async function connectNoahTor(country) {
+  country = String(country || "").toUpperCase().slice(0, 2);
+  // Settings are not touched until Tor is up: a settings change re-applies
+  // the tunnel, and that would cut this connect short. While Tor bootstraps
+  // the popup follows the status alone.
+  const mine = ++generation;
+  const server = noahTorServer(country);
+  const progress = (percent, note) => (mine === generation ? setStatus({ state: "checking", server, progress: percent, note }) : null);
+  await Shield.api.storage.session.set({ noahTorPending: { country, at: Date.now() } });
+  await progress(0, "asking noah");
+  const info = await Shield.hostInfo(true);
+  if (!info.present) {
+    await Shield.log({ kind: "vpn", text: "connect failed: noah is not on this computer", detail: info.error || "" });
+    return setStatus({ state: "error", server, error: "noah is not installed on this computer; get it at noah.asherin.com/download, or start Tor Browser and pick that route" });
+  }
+  let status = await Shield.host({ type: "tor.status" });
+  if (!status.error && !status.installed) {
+    await progress(2, "getting Tor from the Tor Project (about 15 MB, once)");
+    await Shield.log({ kind: "vpn", text: "getting Tor from the Tor Project for the first time" });
+    const installed = await Shield.host({ type: "tor.install" });
+    if (installed.error) {
+      await Shield.log({ kind: "vpn", text: "Tor could not be fetched", detail: installed.error });
+      return setStatus({ state: "error", server, error: "Tor could not be fetched: " + installed.error });
+    }
+    await Shield.log({ kind: "vpn", text: "Tor " + (installed.version || "") + " installed by noah", detail: installed.binary || "" });
+  }
+  if (mine !== generation) return Shield.tunnelStatus();
+  await progress(5, country ? "starting Tor with an exit in " + country : "starting Tor");
+  status = await Shield.host({ type: "tor.start", country: country.toLowerCase() });
+  if (status.error && country && /country tables/.test(status.error)) {
+    // This Tor cannot pick a country; the fastest route is still a route.
+    await Shield.log({ kind: "vpn", text: "this Tor has no country tables; connecting to the fastest exit instead of " + country });
+    country = "";
+    server.country = "";
+    await progress(5, "no country tables in this Tor, so the fastest exit");
+    status = await Shield.host({ type: "tor.start", country: "" });
+  }
+  if (status.error) {
+    await Shield.log({ kind: "vpn", text: "Tor did not start", detail: status.error });
+    return setStatus({ state: "error", server, error: status.error });
+  }
+  const deadline = Date.now() + 150000;
+  let percent = Number(status.bootstrapped) || 0;
+  let problem = status.problem || "";
+  while (Date.now() < deadline && mine === generation) {
+    if (status.ready) break;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    status = await Shield.host({ type: "tor.status" });
+    if (status.error) { problem = status.error; break; }
+    percent = Number(status.bootstrapped) || 0;
+    problem = status.problem || "";
+    if (!status.running) { problem = problem || "Tor stopped on its own"; break; }
+    await progress(5 + Math.round(percent * 0.9), problem ? "Tor says: " + problem : `Tor connecting, ${percent}%`);
+  }
+  if (mine !== generation) return Shield.tunnelStatus();
+  if (!status.ready) {
+    await Shield.log({ kind: "vpn", text: `Tor did not finish connecting (${percent}%)`, detail: problem });
+    return setStatus({ state: "held", server, error: problem || `Tor reached ${percent}% and stopped there; try again or pick another location` });
+  }
+  await Shield.log({ kind: "vpn", text: "Tor is up" + (country ? " with an exit in " + country : ""), detail: `socks5 127.0.0.1:${Shield.NOAH_TOR_PORT}` });
+  // The settings change re-applies the tunnel (see the storage listener), so
+  // the route is put on and checked from there.
+  await Shield.api.storage.session.remove("noahTorPending");
+  await Shield.updateSettings({ tunnel: { enabled: true, serverId: Shield.NOAH_TOR_ID, torCountry: country } });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return Shield.tunnelStatus();
+};
+
+Shield.disconnectTunnel = async function disconnectTunnel() {
+  const settings = await Shield.loadSettings();
+  const wasNoah = settings.tunnel.serverId === Shield.NOAH_TOR_ID;
+  const updated = await Shield.updateSettings({ tunnel: { enabled: false } });
+  const status = await Shield.applyTunnel(updated);
+  if (wasNoah && Shield.host) {
+    const stopped = await Shield.host({ type: "tor.stop" });
+    await Shield.log({ kind: "vpn", text: "Tor stopped", detail: stopped.error || "" });
+  }
+  return status;
 };
 
 Shield.addServer = async function addServer(server) {
@@ -230,7 +336,19 @@ Shield.tunnelStatus = async function tunnelStatus() {
 };
 
 async function setStatus(status) {
+  const previous = await Shield.tunnelStatus();
   await Shield.api.storage.session.set({ tunnelStatus: { ...status, at: new Date().toISOString() } });
+  if (Shield.log && (previous.state !== status.state || (status.state === "error" && previous.error !== status.error))) {
+    const place = status.server ? (status.server.country ? status.server.country + " · " : "") + status.server.name : "";
+    const words = {
+      off: "vpn off",
+      checking: "vpn connecting" + (place ? " to " + place : ""),
+      up: "vpn on" + (status.exit ? `: sites see ${status.exit.ip}${status.exit.country ? " in " + status.exit.country : ""}` : ""),
+      held: "vpn holding: nothing leaves until the route answers",
+      error: "vpn problem",
+    };
+    await Shield.log({ kind: "vpn", text: words[status.state] || status.state, detail: status.error || (status.latencyMs ? status.latencyMs + " ms" : "") });
+  }
   return status;
 }
 

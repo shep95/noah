@@ -139,10 +139,47 @@ where it matters. The shield's pages, the new tab page (picture, clock,
 search, today's numbers, a plain switch) and, on Firefox, the browser's own
 frame and toolbars wear it; Chrome and Edge let no extension recolor theirs.
 
+## Stage 11: the log, noah on this computer, clean search (shipped)
+
+* **The log.** Every block, warning, notice and action is written down in
+  plain words with the site and the moment: `log.html` (filter by kind, site
+  or a word; save as text; clear), a "what happened here" list in the popup
+  (the requests stopped on this page grouped by who was on the other end,
+  and what the shield did on it), and every notification opens the log.
+* **noah as the shield's hands.** A native messaging host in noah's
+  command-line program (`noah --shield-host`, registered by noah on every
+  launch for Chrome, Chromium, Edge, Brave, Vivaldi and Firefox) does what an
+  extension cannot: turns the screen's real brightness (WMI, brightnessctl or
+  sysfs, the `brightness` tool on macOS) and runs Tor for the tunnel: fetches
+  the Tor Project's expert bundle once (checked against its checksum), starts
+  it on port 9350 with the exit country you chose, reports the bootstrap
+  percentage, stops it when you disconnect. The manifest key fixes the
+  extension's id so the host can trust it.
+* **Light.** Scenes are brightness levels for the screen itself; nothing is
+  laid over pages any more. The warm tint stays, opt-in.
+* **VPN.** One press: "fastest location · through noah" or a country, with
+  progress while Tor bootstraps. Without noah, the card says what to install.
+* **Search.** On Google, Bing, DuckDuckGo, Brave, Yahoo, Startpage and Ecosia
+  the paid results go, known content farms and scraper sites go, and pages
+  whose titles read as written for the engine are faded; a count on the page,
+  a line in the log, three switches. Search pages wear the look.
+* **Ads.** EasyList's general and third-party sections now come first (that
+  is where Google's ad domains live; the long tail of ad servers had been
+  using up the cap), a second ruleset of 30,000 more rules turns on when the
+  browser has room, and Google Analytics and DoubleClick are blocked by the
+  shield's own rules.
+* **Screenshots** work on tabs open since before an update: the capture
+  script is put in on demand.
+
 ## Not possible from an extension, and what we do instead
 
 * **A real VPN for the whole computer.** An extension can only proxy the
   browser. The tunnel says so, and noah's device room covers the machine.
+* **The screen's brightness, a Tor of our own.** Not from an extension; noah
+  on the computer does both for it (stage 11).
+* **Chrome's bar under the new tab page** ("noah shield · Customize Chrome")
+  is Chrome's own footer for any extension that provides the new tab page;
+  Customize Chrome → footer turns it off. No extension can remove it.
 * **Free servers we have not checked.** A stranger's free proxy sees every
   site you visit. The vetted list is signed and starts empty; Tor and your
   own servers are there from day one.

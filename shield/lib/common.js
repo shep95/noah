@@ -25,6 +25,7 @@ Shield.DEFAULT_SETTINGS = {
     bypassLocal: true,
     connectAtStartup: false,
     siteRoutes: {},
+    torCountry: "",
   },
   privacy: {
     trackers: true,
@@ -62,8 +63,13 @@ Shield.DEFAULT_SETTINGS = {
   },
   light: {
     preset: "off",
-    dim: 0,
+    brightness: null,
     warmth: 0,
+  },
+  search: {
+    clean: true,
+    farms: true,
+    look: true,
   },
   shopping: {
     compare: true,
@@ -133,6 +139,13 @@ Shield.DEFAULT_SETTINGS = {
   quiet: false,
   localOnly: false,
 };
+
+// The route noah runs for you (Tor started by noah on this computer) and the
+// countries with enough Tor exits that a pick there answers quickly. Shared
+// with the popup, which lists them.
+Shield.NOAH_TOR_ID = "noah-tor";
+Shield.NOAH_TOR_PORT = 9350;
+Shield.TOR_COUNTRIES = ["US", "DE", "NL", "FR", "GB", "CH", "SE", "CA", "FI", "AT", "RO", "PL", "CZ", "ES", "IT", "NO", "DK", "BE", "LU", "JP", "SG", "AU"];
 
 Shield.deepMerge = function deepMerge(base, extra) {
   if (Array.isArray(base) || typeof base !== "object" || base === null) {

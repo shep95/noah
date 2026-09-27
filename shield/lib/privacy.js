@@ -74,9 +74,33 @@ Shield.applyPrivacy = async function applyPrivacy(settings) {
     } catch (error) {
       console.warn("shield: rulesets", error);
     }
+    await enableMoreAdRules(rulesets, privacy.trackers);
   }
   await Shield.applySiteRules(settings);
 };
+
+// The second ad ruleset goes beyond the browser's guaranteed rule count; it is
+// turned on when the shared pool has room and left off, with a line in the
+// log, when it has not.
+async function enableMoreAdRules(rulesets, wanted) {
+  const enabled = await rulesets.getEnabledRulesets();
+  const already = enabled.includes("ads_more");
+  if (!wanted) {
+    if (already) await rulesets.updateEnabledRulesets({ disableRulesetIds: ["ads_more"] }).catch(() => {});
+    return;
+  }
+  if (already) return;
+  const session = await Shield.api.storage.session.get("adsMoreTried");
+  if (session.adsMoreTried) return;
+  await Shield.api.storage.session.set({ adsMoreTried: true });
+  try {
+    await rulesets.updateEnabledRulesets({ enableRulesetIds: ["ads_more"] });
+    const left = rulesets.getAvailableStaticRuleCount ? await rulesets.getAvailableStaticRuleCount() : null;
+    if (Shield.log) await Shield.log({ kind: "rules", text: "the second set of ad rules is on: the browser had room for it", detail: left === null ? "" : `${left} static rules of room left` });
+  } catch (error) {
+    if (Shield.log) await Shield.log({ kind: "rules", text: "the second set of ad rules stays off: the browser has no room for it beyond the first 30,000", detail: String(error && error.message ? error.message : error) });
+  }
+}
 
 // Trusted sites: every request a page of theirs makes is let through, which
 // is how a site that breaks without its analytics gets fixed by you, not us.
@@ -209,6 +233,71 @@ async function countNow(kind, amount, tabId) {
     Shield.showBadge(tabId, tabCounts[tabId]);
   }
 }
+
+// The log: everything the shield did or saw, in plain words, with the site
+// and the moment, so a notice that flashed by can be read again. A ring of
+// the newest entries, on this device only.
+const LOG_LIMIT = 3000;
+let logQueue = Promise.resolve();
+Shield.log = function log(entry) {
+  const record = {
+    at: Date.now(),
+    kind: String(entry.kind || "note").slice(0, 32),
+    site: String(entry.site || "").slice(0, 120),
+    text: String(entry.text || "").slice(0, 400),
+    detail: entry.detail === undefined ? "" : String(entry.detail).slice(0, 1200),
+    tabId: Number.isInteger(entry.tabId) ? entry.tabId : null,
+  };
+  logQueue = logQueue.then(async () => {
+    const stored = await Shield.api.storage.local.get("log");
+    const entries = Array.isArray(stored.log) ? stored.log : [];
+    entries.push(record);
+    if (entries.length > LOG_LIMIT) entries.splice(0, entries.length - LOG_LIMIT);
+    await Shield.api.storage.local.set({ log: entries });
+  }).catch(() => {});
+  return logQueue;
+};
+
+Shield.logEntries = async function logEntries({ kind = "", site = "", tabId = null, limit = 500 } = {}) {
+  const stored = await Shield.api.storage.local.get("log");
+  const entries = Array.isArray(stored.log) ? stored.log : [];
+  const picked = entries.filter((entry) =>
+    (!kind || entry.kind === kind) && (!site || entry.site === site) && (tabId === null || entry.tabId === tabId),
+  );
+  return picked.slice(-limit).reverse();
+};
+
+Shield.clearLog = function clearLog() {
+  return Shield.api.storage.local.set({ log: [] });
+};
+
+// Requests stopped on a tab, kept for the popup's "on this page" list until
+// the tab goes away or loads something else.
+Shield.noteBlocked = function noteBlocked(tabId, url, type, ruleset) {
+  logQueue = logQueue.then(async () => {
+    const session = await Shield.api.storage.session.get("blockedByTab");
+    const blockedByTab = session.blockedByTab || {};
+    const list = blockedByTab[tabId] || [];
+    list.push({ host: Shield.hostOf(url), path: url.replace(/^[a-z]+:\/\/[^/]+/, "").slice(0, 80), type, ruleset: ruleset || "", at: Date.now() });
+    if (list.length > 400) list.splice(0, list.length - 400);
+    blockedByTab[tabId] = list;
+    await Shield.api.storage.session.set({ blockedByTab });
+  }).catch(() => {});
+  return logQueue;
+};
+
+Shield.blockedOnTab = async function blockedOnTab(tabId) {
+  const session = await Shield.api.storage.session.get("blockedByTab");
+  return ((session.blockedByTab || {})[tabId]) || [];
+};
+
+Shield.forgetBlocked = async function forgetBlocked(tabId) {
+  const session = await Shield.api.storage.session.get("blockedByTab");
+  const blockedByTab = session.blockedByTab || {};
+  if (!blockedByTab[tabId]) return;
+  delete blockedByTab[tabId];
+  await Shield.api.storage.session.set({ blockedByTab });
+};
 
 Shield.showBadge = function showBadge(tabId, value) {
   const action = Shield.api.action || Shield.api.browserAction;

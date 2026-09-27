@@ -27,19 +27,20 @@ SECTIONS = [
     "easyprivacy_allowlist.txt",
 ]
 SOURCE = "https://raw.githubusercontent.com/easylist/easylist/master/easyprivacy/"
-# EasyList proper: the ads. Most useful sections first, so the cap keeps the
-# ad servers and the general filters and drops the long tail of site quirks.
+# EasyList proper: the ads. The general and third-party filters first (that is
+# where Google's ad domains and the patterns every site shares live), the
+# exceptions, then the long tail of ad servers fills what room is left.
 AD_SECTIONS = [
-    "easylist_adservers.txt",
+    "easylist_thirdparty.txt",
     "easylist_general_block.txt",
     "easylist_general_block_dimensions.txt",
-    "easylist_thirdparty.txt",
-    "easylist_adservers_popup.txt",
+    "easylist_specific_block.txt",
+    "easylist_allowlist.txt",
     "easylist_general_block_popup.txt",
     "easylist_thirdparty_popup.txt",
-    "easylist_specific_block.txt",
     "easylist_specific_block_popup.txt",
-    "easylist_allowlist.txt",
+    "easylist_adservers_popup.txt",
+    "easylist_adservers.txt",
 ]
 AD_SOURCE = "https://raw.githubusercontent.com/easylist/easylist/master/easylist/"
 # Element hiding: the generic selectors become one stylesheet, the per-site
@@ -51,6 +52,10 @@ HIDE_ALLOW = "easylist_allowlist_general_hide.txt"
 # together stay under that line so every rule is always in force.
 LIMIT = 12000
 AD_LIMIT = 20000
+# Beyond the guaranteed 30,000 static rules the browser may still have room in
+# its shared pool; the rest of EasyList rides in a second ruleset the shield
+# turns on when it fits.
+AD_MORE_LIMIT = 30000
 
 RESOURCE_TYPES = {
     "script": "script",
@@ -234,12 +239,18 @@ def main():
     for reason, count in sorted(dropped.items(), key=lambda item: -item[1]):
         print(f"  dropped {count:5} for {reason}")
 
-    ads, dropped = build_network(from_dir, AD_SOURCE, AD_SECTIONS, AD_LIMIT, 1)
+    all_ads, dropped = build_network(from_dir, AD_SOURCE, AD_SECTIONS, AD_LIMIT + AD_MORE_LIMIT, 1)
+    ads, more = all_ads[:AD_LIMIT], all_ads[AD_LIMIT:]
     output = os.path.join(rules_dir, "ads.json")
     with open(output, "w", encoding="utf-8") as handle:
         json.dump(ads, handle, separators=(",", ":"))
         handle.write("\n")
     print(f"{len(ads)} ad rules written to {output}")
+    output = os.path.join(rules_dir, "ads_more.json")
+    with open(output, "w", encoding="utf-8") as handle:
+        json.dump(more, handle, separators=(",", ":"))
+        handle.write("\n")
+    print(f"{len(more)} more ad rules written to {output}")
     for reason, count in sorted(dropped.items(), key=lambda item: -item[1]):
         print(f"  dropped {count:5} for {reason}")
 

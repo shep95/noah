@@ -6,6 +6,10 @@
 (() => {
   "use strict";
   if (window.top !== window) return;
+  // Injected again into a page that was open before the shield was updated;
+  // one copy is enough.
+  if (window.__noahShieldCapture) return;
+  window.__noahShieldCapture = true;
   const api = globalThis.chrome ?? globalThis.browser;
   const send = (message) => new Promise((resolve) => {
     try { api.runtime.sendMessage(message, (response) => { void api.runtime.lastError; resolve(response || {}); }); } catch { resolve({}); }
@@ -170,10 +174,12 @@
     const scrollingElement = document.scrollingElement || document.documentElement;
     const startX = window.scrollX;
     const startY = window.scrollY;
-    const totalHeight = Math.min(scrollingElement.scrollHeight, 30000);
     const viewHeight = window.innerHeight;
     const viewWidth = window.innerWidth;
     const ratio = dpr();
+    // A canvas taller than about 16k device pixels fails silently in every
+    // browser, so a very long page is cut there rather than lost.
+    const totalHeight = Math.max(viewHeight, Math.min(scrollingElement.scrollHeight, Math.floor(16000 / ratio)));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(viewWidth * ratio);
     canvas.height = Math.round(totalHeight * ratio);
@@ -263,8 +269,12 @@
   }
 
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.type !== "capture.run") return false;
-    if (sender.id !== api.runtime.id) return false;
+    if (!message || sender.id !== api.runtime.id) return false;
+    if (message.type === "capture.ping") {
+      sendResponse({ ready: true });
+      return false;
+    }
+    if (message.type !== "capture.run") return false;
     (async () => {
       let hidden = 0;
       try {

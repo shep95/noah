@@ -128,6 +128,12 @@ struct Args {
     /// Will attempt to give the correct command to run
     #[arg(long)]
     system_specs: bool,
+    /// Serve noah shield as its native messaging host (the browser starts this itself).
+    #[arg(long, hide = true)]
+    shield_host: bool,
+    /// Tell every browser on this computer where noah shield's host is.
+    #[arg(long, hide = true)]
+    register_shield_host: bool,
     /// Open the project in a dev container.
     ///
     /// Automatically triggers "Reopen in Dev Container" if a `.devcontainer/`
@@ -482,6 +488,14 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // The browser starts this program with the extension's origin as the
+    // argument, which clap would take for a path to open. It runs as whoever
+    // runs the browser, so the root check below does not apply to it.
+    let raw_args: Vec<String> = std::env::args().collect();
+    if cli::shield_host::invoked_by_browser(&raw_args) {
+        return cli::shield_host::serve();
+    }
+
     #[cfg(unix)]
     util::prevent_root_execution();
 
@@ -511,6 +525,17 @@ fn run() -> Result<()> {
     }
 
     let args = Args::parse();
+
+    if args.shield_host {
+        return cli::shield_host::serve();
+    }
+    if args.register_shield_host {
+        let host = std::env::current_exe()?;
+        for place in cli::shield_host::register(&host)? {
+            println!("{place}");
+        }
+        return Ok(());
+    }
 
     // `zed --askpass` Makes zed operate in nc/netcat mode for use with askpass
     if let Some(socket) = &args.askpass {

@@ -1,3 +1,5 @@
+pub mod shield_host;
+
 use std::path::PathBuf;
 
 use anyhow::Result;
