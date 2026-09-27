@@ -1243,6 +1243,15 @@ const handlers = {
     const map = stored.inspectTabs || {};
     return { enabled: Boolean(map[String(tabId)]) };
   },
+  async "inspect.arm.self"(message, sender) {
+    const tabId = sender.tab ? sender.tab.id : null;
+    if (tabId == null) return { error: "no tab" };
+    const stored = await api.storage.session.get("inspectTabs");
+    const map = stored.inspectTabs || {};
+    map[String(tabId)] = { at: Date.now() };
+    await api.storage.session.set({ inspectTabs: map });
+    return { enabled: true };
+  },
   async "inspect.arm"(message) {
     const tabId = Number(message && message.tabId);
     if (!Number.isFinite(tabId)) return { error: "no tabId" };
@@ -1536,7 +1545,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "spaces.config"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

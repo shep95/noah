@@ -114,6 +114,22 @@
       { kind: "stripe-secret", re: /\b(sk|rk)_(live|test)_[A-Za-z0-9]{16,}\b/g },
       { kind: "openai-key", re: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
       { kind: "private-key-block", re: /-----BEGIN [A-Z ]+PRIVATE KEY-----/g },
+      // Social platforms carry their own session shapes; a security team
+      // auditing their own site wants these called out just as loudly.
+      { kind: "twitter-bearer", re: /\bAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]{40,}\b/g },
+      { kind: "twitter-guest-token", re: /guest_token["'=:\s]+(\d{15,25})/g },
+      { kind: "twitter-csrf", re: /(?:x-csrf-token|ct0)["'=:\s]+([a-f0-9]{32,})/gi },
+      { kind: "twitter-auth-cookie", re: /(?:auth_token|kdt|twid)["'=:\s]+([A-Za-z0-9%_.-]{20,})/gi },
+      { kind: "facebook-token", re: /\bEAA[A-Za-z0-9]{50,}\b/g },
+      { kind: "facebook-cookie", re: /(?:c_user|xs|fr|datr|sb)=([^;\s"']{10,})/gi },
+      { kind: "session-cookie", re: /(?:sessionid|PHPSESSID|JSESSIONID|connect\.sid|next-auth\.session-token)=([^;\s"']{16,})/gi },
+      { kind: "bearer-header", re: /\bBearer\s+([A-Za-z0-9._~+/=-]{16,})/gi },
+      { kind: "instagram-cookie", re: /(?:sessionid|ds_user_id|csrftoken|ig_did)=([^;\s"']{10,})/gi },
+      { kind: "tiktok-cookie", re: /(?:tt_webid|msToken|ttwid)=([^;\s"']{10,})/gi },
+      { kind: "email", re: /\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Z|a-z]{2,}\b/g },
+      { kind: "credit-card", re: /\b(?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12})\b/g },
+      { kind: "us-ssn", re: /\b(?!000|666|9)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
+      { kind: "phone", re: /\+?\d{1,3}[\s-]?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}\b/g },
     ];
     for (const text of texts) {
       if (!text) continue;
@@ -130,6 +146,30 @@
       }
     }
     return hits;
+  }
+  // GraphQL is how X, Twitter, Instagram and many other platforms carry
+  // their user data. The operation name in the URL or body tells you what
+  // the request actually does, which matters when auditing a page's API.
+  function graphqlOp(url, body) {
+    try {
+      const match = /\/graphql\/[^/]+\/([A-Za-z0-9_-]+)/.exec(url || "");
+      if (match) return match[1];
+    } catch {}
+    if (body && typeof body === "string") {
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed && parsed.operationName) return String(parsed.operationName);
+        if (Array.isArray(parsed) && parsed[0] && parsed[0].operationName) return String(parsed[0].operationName);
+      } catch {}
+      const m = /"operationName"\s*:\s*"([^"]+)"/.exec(body);
+      if (m) return m[1];
+    }
+    return null;
+  }
+  function currentCookies() {
+    try {
+      return document.cookie ? document.cookie : "";
+    } catch { return ""; }
   }
   function decodeJwt(text) {
     if (!text) return null;
@@ -192,7 +232,10 @@
       }
       const jwt = decodeJwt((requestHeaders.authorization || requestHeaders.Authorization || "") + "\n" + (requestBody || ""));
       if (jwt) event.jwt = jwt;
-      event.secrets = findSecrets(requestBody, event.responseBody);
+      const op = graphqlOp(url, requestBody);
+      if (op) event.graphql = op;
+      event.cookies = currentCookies();
+      event.secrets = findSecrets(requestBody, event.responseBody, event.cookies, JSON.stringify(requestHeaders), JSON.stringify(event.responseHeaders));
       push(event);
       if (error) throw error;
       return response;
@@ -251,7 +294,10 @@
           };
           const jwt = decodeJwt((noah.headers.authorization || noah.headers.Authorization || "") + "\n" + (noah.body || ""));
           if (jwt) event.jwt = jwt;
-          event.secrets = findSecrets(noah.body, responseBody);
+          const op = graphqlOp(noah.url, noah.body);
+          if (op) event.graphql = op;
+          event.cookies = currentCookies();
+          event.secrets = findSecrets(noah.body, responseBody, event.cookies, JSON.stringify(noah.headers), JSON.stringify(responseHeaders));
           push(event);
         });
       }
@@ -288,6 +334,30 @@
     Wrapped.CLOSING = RealSocket.CLOSING;
     Wrapped.CLOSED = RealSocket.CLOSED;
     window.WebSocket = Wrapped;
+  }
+
+  // ---- EventSource (Server-Sent Events) ----------------------------
+  // Live feeds on social platforms often come as EventSource streams
+  // (notifications, timelines, chats). The response body isn't reachable
+  // through fetch/XHR hooks, so we wrap the constructor and its onmessage.
+  const RealES = window.EventSource;
+  if (RealES) {
+    function WrappedES(url, config) {
+      const source = config === undefined ? new RealES(url) : new RealES(url, config);
+      const started = performance.now();
+      push({ kind: "sse-open", url: String(url), withCredentials: Boolean(config && config.withCredentials) });
+      const dispatch = source.addEventListener.bind(source);
+      dispatch("message", (event) => {
+        push({ kind: "sse-recv", url: String(url), lastEventId: event.lastEventId || null, body: textOf(event.data), secrets: findSecrets(textOf(event.data)) });
+      });
+      dispatch("error", () => { push({ kind: "sse-error", url: String(url), readyState: source.readyState, elapsedMs: Math.round(performance.now() - started) }); });
+      return source;
+    }
+    WrappedES.prototype = RealES.prototype;
+    WrappedES.CONNECTING = RealES.CONNECTING;
+    WrappedES.OPEN = RealES.OPEN;
+    WrappedES.CLOSED = RealES.CLOSED;
+    window.EventSource = WrappedES;
   }
 
   // ---- sendBeacon --------------------------------------------------
@@ -378,6 +448,7 @@
         #noah-inspect-panel .noah-inspect-row .noah-inspect-status.bad { color: #e69696; }
         #noah-inspect-panel .noah-inspect-row .noah-inspect-url { color: #d8ddd6; word-break: break-all; font-size: 11px; flex: 1; }
         #noah-inspect-panel .noah-inspect-row .noah-inspect-secret { color: #e69696; font-size: 10px; margin-left: 6px; }
+        #noah-inspect-panel .noah-inspect-row .noah-inspect-op { color: #a9cf9f; font-size: 10px; margin-left: 4px; font-family: ui-monospace, SFMono-Regular, monospace; }
         #noah-inspect-panel .noah-inspect-body { display: none; margin-top: 6px; padding: 6px 8px; background: rgba(180, 210, 190, .03); border-radius: 6px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: #b9beb7; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto; }
         #noah-inspect-panel .noah-inspect-row.open .noah-inspect-body { display: block; }
         #noah-inspect-panel footer { padding: 6px 11px; font-size: 10px; color: #6f766e; border-top: 1px solid rgba(180, 210, 190, .08); }
@@ -391,7 +462,7 @@
         <button class="noah-inspect-clear">clear</button>
         <button class="noah-inspect-toggle">hide</button>
       </header>
-      <div class="noah-inspect-warn">recording this page's requests, forms and storage in full, secrets included. only turn this on for a site you own.</div>
+      <div class="noah-inspect-warn">recording this page's requests, forms, storage, WebSocket frames, live streams and postMessage traffic in full, tokens and secrets included. only turn this on for a site you own or a platform you are authorised to audit.</div>
       <div class="noah-inspect-tools">
         <input placeholder="filter (url or body substring)" class="noah-inspect-filter">
       </div>
@@ -456,6 +527,12 @@
     url.className = "noah-inspect-url";
     url.textContent = event.url || event.message || event.from || event.directive || event.kind;
     head.append(kind, url);
+    if (event.graphql) {
+      const op = document.createElement("span");
+      op.className = "noah-inspect-op";
+      op.textContent = "· " + event.graphql;
+      head.append(op);
+    }
     if (event.status != null) {
       const status = document.createElement("span");
       status.className = "noah-inspect-status " + (event.status >= 500 ? "bad" : event.status >= 400 ? "bad" : event.status ? "ok" : "");
@@ -482,6 +559,7 @@
     if (event.kind) lines.push("kind: " + event.kind);
     if (event.url) lines.push("url: " + event.url);
     if (event.method) lines.push("method: " + event.method);
+    if (event.graphql) lines.push("graphql operation: " + event.graphql);
     if (event.status != null) lines.push("status: " + event.status + " " + (event.statusText || ""));
     if (event.elapsedMs != null) lines.push("elapsed: " + event.elapsedMs + "ms");
     if (event.requestHeaders && Object.keys(event.requestHeaders).length) {

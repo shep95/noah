@@ -257,5 +257,32 @@
     const foot = document.createElement("footer");
     foot.textContent = "From data your browser was already going to receive. Nothing leaves this page. Click a name to open its profile.";
     panel.append(foot);
+
+    // Auditors on their own platform (X, Twitter): a one-click into inspect
+    // mode so the AudioSpaceById responses and everything else on the page
+    // are shown in full for the security team.
+    const auditRow = document.createElement("div");
+    auditRow.style.padding = "8px 12px";
+    auditRow.style.borderTop = "1px solid rgba(180, 210, 190, .08)";
+    auditRow.style.display = "flex";
+    auditRow.style.alignItems = "center";
+    auditRow.style.gap = "8px";
+    const auditNote = document.createElement("span");
+    auditNote.style.flex = "1";
+    auditNote.style.color = "#9aa298";
+    auditNote.style.fontSize = "11px";
+    auditNote.textContent = "Auditing your own platform? Turn on inspect mode from the shield popup, then reload.";
+    const auditBtn = document.createElement("a");
+    auditBtn.href = "javascript:void(0)";
+    auditBtn.style.color = "#a9cf9f";
+    auditBtn.style.textDecoration = "underline";
+    auditBtn.style.fontSize = "11px";
+    auditBtn.textContent = "how";
+    auditBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent("noah-space-audit-request"));
+    });
+    auditRow.append(auditNote, auditBtn);
+    panel.append(auditRow);
   }
 })();

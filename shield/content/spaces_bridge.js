@@ -23,4 +23,15 @@
       send(message.spaces || { enabled: true });
     });
   }
+
+  // The "audit this page" link inside the Space panel: arms inspect mode
+  // for this tab, then dispatches the decision so inspect.js opens its
+  // recording panel next to the Space panel. A reload catches everything
+  // from the first request; without one, whatever comes after is captured.
+  window.addEventListener("noah-space-audit-request", () => {
+    api.runtime.sendMessage({ type: "inspect.arm.self" }, (reply) => {
+      if (api.runtime.lastError || !reply || !reply.enabled) return;
+      try { window.dispatchEvent(new CustomEvent("noah-inspect-decision", { detail: { enabled: true } })); } catch {}
+    });
+  });
 })();
