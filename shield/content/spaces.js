@@ -18,6 +18,14 @@
 
   let space = null;
   let panel = null;
+  // The last AudioSpace GraphQL path we saw, used as a template so mutations
+  // fire against the same deployment. Twitter changes these query ids often,
+  // so we sniff instead of hardcoding.
+  let audioSpaceQueryPrefix = null;
+  // Local soundboard clips saved in this browser only. Each is {id, name, url}
+  // where url is a blob: URL for a File the user picked. Nothing uploads.
+  let sounds = [];
+  let playing = null;
   // Start collapsed so it never fights X's own widgets for screen space; the
   // user opens it when they want to look. Setting persists in this tab.
   let collapsed = true;
@@ -62,7 +70,8 @@
     const created = legacy.created_at || null;
     const followers = typeof legacy.followers_count === "number" ? legacy.followers_count : null;
     const avatar = legacy.profile_image_url_https || null;
-    return { screen_name, name, created, followers, avatar };
+    const rest_id = inner && inner.rest_id ? String(inner.rest_id) : (entry.rest_id ? String(entry.rest_id) : null);
+    return { screen_name, name, created, followers, avatar, rest_id };
   }
 
   function extract(json) {
@@ -153,7 +162,124 @@
   }
 
   function isSpaceUrl(url) {
-    return /\/AudioSpaceById|\/AudioSpaceParticipant|\/audio_space|\/api\/graphql\/[^/]+\/AudioSpace/i.test(url);
+    const hit = /\/AudioSpaceById|\/AudioSpaceParticipant|\/audio_space|\/api\/graphql\/[^/]+\/AudioSpace/i.test(url);
+    if (hit) {
+      // Sniff the deployment prefix once so mutations fire against the same
+      // graphql endpoint layout the page uses.
+      const match = /(\/i\/api\/graphql\/[^/]+\/)/.exec(url);
+      if (match) audioSpaceQueryPrefix = match[1];
+    }
+    return hit;
+  }
+
+  // ---- who is this browser signed in as ------------------------------------
+  // Twitter's non-httpOnly cookie carries the numeric user id (twid=u%3D…).
+  // This is what the audio-space response uses as rest_id for the host.
+  function currentUserId() {
+    try {
+      const m = /twid=u%3D(\d+)/.exec(document.cookie);
+      return m ? m[1] : null;
+    } catch { return null; }
+  }
+  function selfIsHost() {
+    const uid = currentUserId();
+    if (!uid || !space || !space.host) return false;
+    const hostId = space.host.rest_id || (space.admins[0] && space.admins[0].rest_id);
+    return hostId && String(hostId) === String(uid);
+  }
+  function csrfToken() {
+    try {
+      const m = /ct0=([a-f0-9]+)/.exec(document.cookie);
+      return m ? m[1] : null;
+    } catch { return null; }
+  }
+
+  // ---- host actions: hit the same graphql the web app hits -----------------
+  // If the plugin-holder isn't the host, the server refuses the call with
+  // 401/403; we surface the reply verbatim rather than pretend it worked.
+  async function callAudioSpaceMutation(operationName, variables) {
+    if (!audioSpaceQueryPrefix) throw new Error("no audio-space endpoint captured yet; reload the Space page first");
+    if (!space || !space.id) throw new Error("no space id known yet");
+    const csrf = csrfToken();
+    if (!csrf) throw new Error("no csrf token on this browser; sign in to X first");
+    const url = audioSpaceQueryPrefix + operationName;
+    const body = JSON.stringify({ queryId: (audioSpaceQueryPrefix.split("/")[4] || ""), variables, features: {} });
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": csrf,
+        "x-twitter-active-user": "yes",
+        "x-twitter-auth-type": "OAuth2Session",
+      },
+      body,
+    });
+    let text = "";
+    try { text = await response.text(); } catch {}
+    return { ok: response.ok, status: response.status, text: text.slice(0, 400) };
+  }
+  const HostActions = {
+    setTitle(title) {
+      return callAudioSpaceMutation("AudioSpaceUpdateMetadata", {
+        broadcast_id: space.id, title: String(title || "").slice(0, 100),
+      });
+    },
+    mute(userId) {
+      return callAudioSpaceMutation("AudioSpaceMuteSpeaker", {
+        broadcast_id: space.id, user_id: String(userId),
+      });
+    },
+    unmute(userId) {
+      return callAudioSpaceMutation("AudioSpaceUnmuteSpeaker", {
+        broadcast_id: space.id, user_id: String(userId),
+      });
+    },
+    remove(userId) {
+      return callAudioSpaceMutation("AudioSpaceRemoveUser", {
+        broadcast_id: space.id, user_id: String(userId),
+      });
+    },
+    promoteToSpeaker(userId) {
+      return callAudioSpaceMutation("AudioSpaceInviteUsersToSpeak", {
+        broadcast_id: space.id, user_ids: [String(userId)],
+      });
+    },
+    demoteFromSpeaker(userId) {
+      return callAudioSpaceMutation("AudioSpaceRemoveSpeaker", {
+        broadcast_id: space.id, user_id: String(userId),
+      });
+    },
+  };
+
+  // ---- local soundboard: audio the user chose, played into their tab ------
+  // Nothing leaves the tab. Other listeners only hear this if the user routes
+  // their tab's audio into their microphone (a VB-Cable style loopback).
+  const audioElement = new Audio();
+  audioElement.preload = "none";
+  audioElement.addEventListener("ended", () => { playing = null; renderControls(); });
+  function playSound(sound) {
+    if (!sound || !sound.url) return;
+    if (playing) { audioElement.pause(); audioElement.currentTime = 0; }
+    audioElement.src = sound.url;
+    audioElement.volume = Math.max(0, Math.min(1, sound.volume ?? 0.8));
+    audioElement.play().then(() => { playing = sound.id; renderControls(); }).catch(() => { playing = null; renderControls(); });
+  }
+  function stopSound() {
+    if (playing) { audioElement.pause(); audioElement.currentTime = 0; playing = null; renderControls(); }
+  }
+  function addSound(file) {
+    const id = "s" + Date.now() + Math.floor(Math.random() * 1e6);
+    const url = URL.createObjectURL(file);
+    sounds.push({ id, name: file.name.replace(/\.[^.]+$/, "").slice(0, 24), url });
+    renderControls();
+  }
+  function removeSound(id) {
+    const found = sounds.find((s) => s.id === id);
+    if (found && found.url && found.url.startsWith("blob:")) URL.revokeObjectURL(found.url);
+    sounds = sounds.filter((s) => s.id !== id);
+    if (playing === id) stopSound();
+    renderControls();
   }
 
   // ---- the panel ----------------------------------------------------------------
@@ -181,6 +307,27 @@
       #noah-space-panel .noah-space-row.noah-space-flag { border-left: 2px solid #dcc896; padding-left: 4px; }
       #noah-space-panel .noah-space-row.noah-space-flag .noah-space-handle::after { content: " · new account"; color: #dcc896; }
       #noah-space-panel .noah-space-hidden { margin-top: 6px; padding: 6px 8px; color: #dcc896; font-size: 11px; border-left: 2px solid #dcc896; }
+      #noah-space-panel .noah-space-actions { display: flex; gap: 4px; margin-left: auto; opacity: 0; transition: opacity .1s; }
+      #noah-space-panel .noah-space-row:hover .noah-space-actions { opacity: 1; }
+      #noah-space-panel .noah-space-act { all: unset; cursor: pointer; padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(180, 210, 190, .18); color: #d8ddd6; font-size: 10px; }
+      #noah-space-panel .noah-space-act[disabled] { cursor: not-allowed; opacity: .3; }
+      #noah-space-panel .noah-space-act:not([disabled]):hover { background: rgba(180, 210, 190, .1); color: #f1f4ef; }
+      #noah-space-panel .noah-space-act.danger:not([disabled]):hover { background: rgba(230, 150, 150, .12); color: #e69696; border-color: rgba(230, 150, 150, .3); }
+      #noah-space-panel .noah-space-controls input[type="text"] { flex: 1; background: rgba(180, 210, 190, .05); border: 1px solid rgba(180, 210, 190, .14); border-radius: 6px; padding: 3px 8px; color: #f1f4ef; font: inherit; }
+      #noah-space-panel .noah-space-controls .noah-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+      #noah-space-panel .noah-space-controls button { all: unset; cursor: pointer; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(180, 210, 190, .2); color: #a9cf9f; font-size: 11px; }
+      #noah-space-panel .noah-space-controls button:not([disabled]):hover { background: rgba(180, 210, 190, .08); }
+      #noah-space-panel .noah-space-controls button[disabled] { cursor: not-allowed; opacity: .35; color: #9aa298; }
+      #noah-space-panel .noah-space-controls .note { color: #9aa298; font-size: 10px; margin-top: 4px; line-height: 1.4; }
+      #noah-space-panel .noah-space-controls .note.warn { color: #dcc896; }
+      #noah-space-panel .noah-space-sounds { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+      #noah-space-panel .noah-sound { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 999px; background: rgba(180, 210, 190, .08); border: 1px solid rgba(180, 210, 190, .16); color: #d8ddd6; font-size: 11px; }
+      #noah-space-panel .noah-sound button { all: unset; cursor: pointer; padding: 0 3px; color: #9aa298; }
+      #noah-space-panel .noah-sound button:hover { color: #f1f4ef; }
+      #noah-space-panel .noah-sound.playing { border-color: #a9cf9f; color: #a9cf9f; }
+      #noah-space-panel .noah-space-op { margin-top: 4px; font-size: 10px; color: #9aa298; }
+      #noah-space-panel .noah-space-op.ok { color: #a9cf9f; }
+      #noah-space-panel .noah-space-op.bad { color: #e69696; }
       #noah-space-panel footer { padding: 8px 12px; font-size: 10px; color: #6f766e; border-top: 1px solid rgba(180, 210, 190, .08); }
       #noah-space-panel[data-collapsed="true"] { max-height: 46px; }
       #noah-space-panel[data-collapsed="true"] section, #noah-space-panel[data-collapsed="true"] footer { display: none; }
@@ -201,7 +348,7 @@
     return typeof user.followers === "number" && user.followers < (Number(config.lowFollowersUnder) || 20);
   }
 
-  function row(user, flag) {
+  function row(user, flag, kind) {
     const anchor = document.createElement("a");
     anchor.className = "noah-space-row" + (flag ? " noah-space-flag" : "");
     anchor.href = "https://x.com/" + encodeURIComponent(user.screen_name);
@@ -219,7 +366,162 @@
     handle.className = "noah-space-handle";
     handle.textContent = "@" + user.screen_name;
     anchor.append(avatar, name, handle);
+
+    // Host actions: appear only when the browser's own user is the host of
+    // this Space. The server will refuse them anyway if the caller is not
+    // authorised, so this is UX, not a security boundary.
+    if (selfIsHost() && user.rest_id) {
+      const actions = document.createElement("span");
+      actions.className = "noah-space-actions";
+      const uid = String(user.rest_id);
+      const isSelf = uid === String(currentUserId());
+      if (kind === "speaker") {
+        actions.append(makeActionButton("mute", () => HostActions.mute(uid)));
+        actions.append(makeActionButton("unmute", () => HostActions.unmute(uid)));
+        actions.append(makeActionButton("demote", () => HostActions.demoteFromSpeaker(uid), { disabled: isSelf }));
+      } else if (kind === "listener") {
+        actions.append(makeActionButton("promote", () => HostActions.promoteToSpeaker(uid)));
+      }
+      if (kind !== "self") {
+        actions.append(makeActionButton("remove", () => HostActions.remove(uid), { danger: true, disabled: isSelf }));
+      }
+      anchor.append(actions);
+    }
     return anchor;
+  }
+  function makeActionButton(label, action, opts) {
+    opts = opts || {};
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "noah-space-act" + (opts.danger ? " danger" : "");
+    button.textContent = label;
+    if (opts.disabled) button.disabled = true;
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.disabled = true;
+      const previous = button.textContent;
+      button.textContent = "…";
+      try {
+        const result = await action();
+        button.textContent = result.ok ? "done" : (result.status + " error");
+      } catch (error) {
+        button.textContent = String(error.message || "error").slice(0, 20);
+      }
+      setTimeout(() => { button.textContent = previous; button.disabled = opts.disabled; }, 2000);
+    });
+    return button;
+  }
+
+  function renderControls() {
+    if (!panel) return;
+    const section = panel.querySelector("[data-role='controls']");
+    if (!section) return;
+    section.replaceChildren();
+
+    // Header
+    const heading = document.createElement("h3");
+    heading.textContent = selfIsHost() ? "controls · you are the host" : "controls";
+    section.append(heading);
+
+    // Host actions: edit title. Buttons on each participant row do the rest.
+    const titleRow = document.createElement("div");
+    titleRow.className = "noah-row";
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.value = space.title || "";
+    titleInput.placeholder = "space title";
+    titleInput.disabled = !selfIsHost();
+    const titleButton = document.createElement("button");
+    titleButton.textContent = "save title";
+    titleButton.disabled = !selfIsHost();
+    const status = document.createElement("div");
+    status.className = "noah-space-op";
+    titleButton.addEventListener("click", async () => {
+      titleButton.disabled = true;
+      status.className = "noah-space-op";
+      status.textContent = "saving…";
+      try {
+        const reply = await HostActions.setTitle(titleInput.value);
+        status.className = "noah-space-op " + (reply.ok ? "ok" : "bad");
+        status.textContent = reply.ok ? "title updated" : "server said " + reply.status + ": " + reply.text.slice(0, 80);
+      } catch (error) {
+        status.className = "noah-space-op bad";
+        status.textContent = String(error.message || error);
+      }
+      titleButton.disabled = !selfIsHost();
+    });
+    titleRow.append(titleInput, titleButton);
+    section.append(titleRow, status);
+
+    if (!selfIsHost()) {
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = "Host-only actions (edit title, mute, remove, promote to speaker, demote from speaker) show up on each row when you are the host of this Space. Otherwise Twitter's server would refuse them.";
+      section.append(note);
+    } else {
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = "Hover a name to mute, unmute, promote, demote or remove. Every action goes through Twitter with your own auth; the server has the final say.";
+      section.append(note);
+    }
+
+    // Soundboard: local audio the user picked. Nothing uploads. If the user
+    // wants other listeners to hear it, they route their tab audio into
+    // their microphone (VB-Cable, BlackHole, Voicemeeter).
+    const soundHeading = document.createElement("h3");
+    soundHeading.textContent = "soundboard · " + sounds.length;
+    soundHeading.style.marginTop = "12px";
+    section.append(soundHeading);
+
+    const soundRow = document.createElement("div");
+    soundRow.className = "noah-space-sounds";
+    for (const sound of sounds) {
+      const chip = document.createElement("span");
+      chip.className = "noah-sound" + (playing === sound.id ? " playing" : "");
+      const playBtn = document.createElement("button");
+      playBtn.type = "button";
+      playBtn.textContent = playing === sound.id ? "◼" : "▶";
+      playBtn.addEventListener("click", () => (playing === sound.id ? stopSound() : playSound(sound)));
+      const label = document.createElement("span");
+      label.textContent = sound.name;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.title = "remove this sound";
+      del.addEventListener("click", () => removeSound(sound.id));
+      chip.append(playBtn, label, del);
+      soundRow.append(chip);
+    }
+    section.append(soundRow);
+
+    const addRow = document.createElement("div");
+    addRow.className = "noah-row";
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "audio/*";
+    fileInput.multiple = true;
+    fileInput.style.flex = "1";
+    fileInput.style.fontSize = "11px";
+    fileInput.style.color = "#9aa298";
+    fileInput.addEventListener("change", (event) => {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) if (file && file.type.startsWith("audio")) addSound(file);
+      event.target.value = "";
+    });
+    addRow.append(fileInput);
+    section.append(addRow);
+
+    const soundNote = document.createElement("div");
+    soundNote.className = "note";
+    soundNote.textContent = "Sounds play from your own speakers. To share them with the room, route your tab audio into your microphone with a virtual audio cable (VB-Cable on Windows, BlackHole on Mac).";
+    section.append(soundNote);
+
+    // Honest note about the anti-kick request: not something a plugin can do.
+    const kickNote = document.createElement("div");
+    kickNote.className = "note warn";
+    kickNote.textContent = "A plugin cannot stop a host from removing you: the disconnect happens on Twitter's side. If you are getting brigaded as a host, lock the room to speakers only from Twitter's own controls.";
+    section.append(kickNote);
   }
 
   function render() {
@@ -294,7 +596,7 @@
       heading.textContent = "host and speakers · " + dedupedSpeakers.length;
       const list = document.createElement("div");
       list.className = "noah-space-list";
-      for (const user of dedupedSpeakers) list.append(row(user, false));
+      for (const user of dedupedSpeakers) list.append(row(user, false, "speaker"));
       section.append(heading, list);
       panel.append(section);
     }
@@ -314,7 +616,7 @@
       note.textContent = "The room has no listeners yet, or has not sent its listener list to the browser.";
       list.append(note);
     } else {
-      for (const user of listeners) list.append(row(user, isNew(user.created) || isFewFollowers(user)));
+      for (const user of listeners) list.append(row(user, isNew(user.created) || isFewFollowers(user), "listener"));
     }
     section.append(heading, list);
     if (hiddenCount > 0) {
@@ -324,6 +626,15 @@
       section.append(hiddenRow);
     }
     panel.append(section);
+
+    // Controls: soundboard for the plugin holder, and host actions when they
+    // are the host of the room. Rendered by renderControls() so it can also
+    // re-render itself as sounds are added or a mutation completes.
+    const controls = document.createElement("section");
+    controls.className = "noah-space-controls";
+    controls.dataset.role = "controls";
+    panel.append(controls);
+    renderControls();
 
     const foot = document.createElement("footer");
     foot.textContent = "From data your browser was already going to receive. Nothing leaves this page. Click a name to open its profile.";
