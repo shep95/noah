@@ -137,6 +137,15 @@ Shield.DEFAULT_SETTINGS = {
     weeklyReport: true,
     containers: false,
   },
+  spaces: {
+    enabled: true,
+    newAccountDays: 30,
+    flagLowFollowers: true,
+    lowFollowersUnder: 20,
+  },
+  inspect: {
+    everSeen: false,
+  },
   quiet: false,
   localOnly: false,
 };

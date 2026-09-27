@@ -19,6 +19,13 @@
   let space = null;
   let panel = null;
   let collapsed = false;
+  let config = { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
+  window.addEventListener("noah-spaces-config", (event) => {
+    const next = event.detail || {};
+    config = { ...config, ...next };
+    if (!config.enabled && panel) { panel.remove(); panel = null; }
+    else if (config.enabled && space) render();
+  });
 
   // ---- pluck data out of the audio-space graphql responses --------------------------
   function walk(node, want) {
@@ -76,7 +83,7 @@
     const found = extract(json);
     if (!found) return;
     space = found;
-    render();
+    if (config.enabled) render();
   }
 
   // ---- hooks: fetch and XHR live in the page's world -------------------------------
@@ -159,7 +166,12 @@
     if (!created) return false;
     const time = Date.parse(created);
     if (Number.isNaN(time)) return false;
-    return (Date.now() - time) < 30 * 24 * 60 * 60 * 1000;
+    const days = Math.max(1, Number(config.newAccountDays) || 30);
+    return (Date.now() - time) < days * 24 * 60 * 60 * 1000;
+  }
+  function isFewFollowers(user) {
+    if (!config.flagLowFollowers) return false;
+    return typeof user.followers === "number" && user.followers < (Number(config.lowFollowersUnder) || 20);
   }
 
   function row(user, flag) {
@@ -237,7 +249,7 @@
       note.textContent = "The room has no listeners yet, or has not sent its listener list to the browser.";
       list.append(note);
     } else {
-      for (const user of listeners) list.append(row(user, isNew(user.created)));
+      for (const user of listeners) list.append(row(user, isNew(user.created) || isFewFollowers(user)));
     }
     section.append(heading, list);
     panel.append(section);

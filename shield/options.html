@@ -256,6 +256,24 @@
       <p class="muted">Programs outside the browser (screen recorders, remote access tools) are what noah's <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">device room</a> looks for.</p>
     </section>
 
+    <section>
+      <h2>twitter / x spaces</h2>
+      <p class="muted">On an X or Twitter Space page the shield adds a small panel listing every listener with their @, name and a link to their profile. Listeners in a Space are not anonymous; their handles ride in the audio-space responses the browser already gets, but the desktop and mobile apps hide them. Data stays in this browser.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="spaces.enabled"><span>Show the listener panel on X and Twitter Spaces</span></label>
+        <label class="switch"><input type="checkbox" data-path="spaces.flagLowFollowers"><span>Flag accounts with almost no followers as well as brand-new ones</span></label>
+      </div>
+      <div class="grid two">
+        <label>New-account cutoff (days): accounts younger than this get a "new account" mark<input type="number" data-number="spaces.newAccountDays" min="1" max="365" step="1"></label>
+        <label>Low-follower cutoff: fewer followers than this counts as low<input type="number" data-number="spaces.lowFollowersUnder" min="0" max="100000" step="1"></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>inspect mode (for stress-testing your own site)</h2>
+      <p class="muted">A tab you arm from the popup records every fetch, XHR, WebSocket frame, form submit, storage read, CSP violation, and cross-origin postMessage the page sees, in plain text, with JWTs decoded and known secret shapes flagged. A snapshot button also pulls cookies, localStorage and sessionStorage. Copy-out puts the transcript on the clipboard for your security team. Off by default, per tab. Never turn it on for a site you do not own.</p>
+    </section>
+
     <section id="look">
       <h2>the look</h2>
       <p class="muted">

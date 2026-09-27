@@ -216,6 +216,14 @@ function render(state) {
   byId("watch-count").textContent = (month.captures || 0) + " stopped";
   byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings.";
   Shield.send({ type: "report.weekly" }).then((report) => { if (report && report.text) byId("week").textContent = "This week: " + report.text; });
+
+  const spaces = settings.spaces || { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
+  byId("spaces-enabled").checked = Boolean(spaces.enabled);
+  byId("spaces-lowfollow").checked = Boolean(spaces.flagLowFollowers);
+  byId("spaces-days").value = String(spaces.newAccountDays);
+  byId("spaces-underfollow").value = String(spaces.lowFollowersUnder);
+  const isXTab = Boolean(site && /(^|\.)(twitter\.com|x\.com)$/.test(site.host || ""));
+  byId("spaces-status").textContent = spaces.enabled ? (isXTab ? "on · watching this tab" : "on") : "off";
 }
 
 async function refresh() {
@@ -562,6 +570,15 @@ byId("options").addEventListener("click", (event) => {
   event.preventDefault();
   Shield.api.runtime.openOptionsPage();
 });
+
+async function pushSpaces(change) {
+  await Shield.send({ type: "spaces.set", change });
+  await refresh();
+}
+byId("spaces-enabled").addEventListener("change", (event) => pushSpaces({ enabled: event.target.checked }));
+byId("spaces-lowfollow").addEventListener("change", (event) => pushSpaces({ flagLowFollowers: event.target.checked }));
+byId("spaces-days").addEventListener("change", (event) => pushSpaces({ newAccountDays: Math.max(1, Math.min(365, Number(event.target.value) || 30)) }));
+byId("spaces-underfollow").addEventListener("change", (event) => pushSpaces({ lowFollowersUnder: Math.max(0, Math.min(100000, Number(event.target.value) || 20)) }));
 
 async function refreshInspect() {
   const tab = await activeTab();

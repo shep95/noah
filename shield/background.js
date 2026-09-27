@@ -1220,6 +1220,22 @@ const handlers = {
     await Shield.updateSettings({ shopping: { quietSites: toggleInList(settings.shopping.quietSites, site, true) } });
     return { ok: true };
   },
+  async "spaces.config"() {
+    const settings = await Shield.loadSettings();
+    return { spaces: settings.spaces };
+  },
+  async "spaces.set"(message) {
+    const change = { spaces: message.change || {} };
+    const settings = await Shield.updateSettings(change);
+    // Broadcast to every Twitter/X tab so panels appear or vanish without a reload.
+    try {
+      const tabs = await api.tabs.query({ url: ["https://twitter.com/*", "https://*.twitter.com/*", "https://x.com/*", "https://*.x.com/*"] });
+      for (const tab of tabs) {
+        try { await api.tabs.sendMessage(tab.id, { type: "spaces.set", spaces: settings.spaces }); } catch {}
+      }
+    } catch {}
+    return { spaces: settings.spaces };
+  },
   async "inspect.enabled"(message, sender) {
     const tabId = sender.tab ? sender.tab.id : (message && message.tabId);
     if (tabId == null) return { enabled: false };
@@ -1520,7 +1536,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "spaces.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

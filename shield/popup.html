@@ -58,6 +58,19 @@
     <p id="week" class="muted"></p>
   </section>
 
+  <section id="spaces-section">
+    <div class="row"><h2>twitter / x spaces</h2><span id="spaces-status" class="muted"></span></div>
+    <p class="muted small">On an X or Twitter Space page the shield shows every listener with their @, name and a link to their profile. Listeners under a month old are marked; you can flag low-follower accounts too. Data comes from what the browser was already going to receive. Nothing leaves this tab.</p>
+    <label class="switch"><input type="checkbox" id="spaces-enabled"><span>show the listener panel on X and Twitter Spaces</span></label>
+    <label class="switch"><input type="checkbox" id="spaces-lowfollow"><span>flag accounts with almost no followers</span></label>
+    <div class="row small">
+      <label>new-account cutoff (days)</label>
+      <input type="number" id="spaces-days" min="1" max="365" step="1" class="grow small">
+      <label>low followers under</label>
+      <input type="number" id="spaces-underfollow" min="0" max="10000" step="1" class="grow small">
+    </div>
+  </section>
+
   <section id="inspect-section">
     <div class="row"><h2>inspect (for your own site)</h2><span id="inspect-count" class="muted"></span></div>
     <p class="muted small">Records every request, form, WebSocket, storage read and secret this page sees in plain text. Only turn this on for a site you own or are testing.</p>
