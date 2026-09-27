@@ -595,19 +595,3 @@ pub fn prompt_head(brain: &str) -> String {
     head.push_str(". this is the real date and time; trust it over any date you remember. when an answer depends on today (versions, prices, news, what is \"latest\"), check the web instead of guessing.");
     head
 }
-
-/// The brain: the person's own file at [`paths::shepherd_brain_file`] when
-/// they made one, otherwise the one built into noah's assets.
-pub fn brain_text() -> String {
-    if let Ok(text) = std::fs::read_to_string(paths::shepherd_brain_file())
-        && !text.trim().is_empty()
-    {
-        return text;
-    }
-    Assets
-        .load("shepherd/shepherd_brain.txt")
-        .ok()
-        .flatten()
-        .map(|bytes| String::from_utf8_lossy(bytes.as_ref()).into_owned())
-        .unwrap_or_default()
-}
