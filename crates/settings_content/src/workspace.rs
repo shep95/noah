@@ -187,6 +187,41 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: true
     pub wallpaper_adapts_theme: Option<bool>,
+    /// How much noah is allowed to interrupt. `focus` hides the status line
+    /// and the rail's extras and holds notices until you leave the mode;
+    /// `silent` also hides the attention count and shows no popups at all,
+    /// so anything needing an answer waits in mission control.
+    ///
+    /// Default: off
+    pub quiet: Option<QuietMode>,
+}
+
+/// How much noah is allowed to interrupt the person.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    MergeFrom,
+    strum::VariantArray,
+    strum::VariantNames,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum QuietMode {
+    /// Notices, badges and the status line show as they happen.
+    #[default]
+    Off,
+    /// Only the work: the status line and the rail's extras go away and
+    /// notices wait until the mode is left.
+    Focus,
+    /// Nothing interrupts: no popups, badges or sounds; what needs an
+    /// answer waits in mission control.
+    Silent,
 }
 
 #[with_fallible_options]

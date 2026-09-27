@@ -2721,7 +2721,7 @@ impl AgentPanel {
         if self.terminal_status_visible(terminal_id, window, cx) {
             return;
         }
-        if workspace::QuietMode::hold(cx) {
+        if workspace::Quiet::hold(cx) {
             return;
         }
         let settings = AgentSettings::get_global(cx);
@@ -2973,7 +2973,7 @@ impl AgentPanel {
 
     #[cfg(feature = "audio")]
     fn play_terminal_notification_sound(&self, visible: bool, cx: &mut App) {
-        if workspace::QuietMode::is_on(cx) {
+        if workspace::Quiet::is_on(cx) {
             return;
         }
         let settings = AgentSettings::get_global(cx);

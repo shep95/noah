@@ -201,7 +201,7 @@ impl StatusBar {
                 |this| this.child(self.render_sidebar_toggle(sidebar, cx)),
             )
             // The one thing quiet mode shows: that it is on, and how to end it.
-            .when(crate::QuietMode::is_on(cx), |this| {
+            .when(crate::Quiet::is_on(cx), |this| {
                 this.child(
                     div()
                         .id("quiet-mode")
@@ -251,7 +251,7 @@ impl StatusBar {
     ) -> impl IntoElement {
         let on_right = sidebar.side == SidebarSide::Right;
         let has_notifications = sidebar.has_notifications;
-        let quiet = crate::QuietMode::is_on(cx);
+        let quiet = crate::Quiet::is_on(cx);
         let indicator_border = cx.theme().colors().status_bar_background;
 
         let toggle = sidebar_side_context_menu("sidebar-status-toggle-menu", cx)

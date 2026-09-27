@@ -801,6 +801,10 @@ impl TitleBar {
     /// Only a decision waiting earns the accent; failed runs and flagged
     /// claims stay in the mist. Nothing is shown when nothing waits.
     fn render_attention(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        // Silent mode means no counts either; mission control still lists them.
+        if workspace::WorkspaceSettings::get_global(cx).quiet == workspace::QuietMode::Silent {
+            return None;
+        }
         let attention = workspace::Attention::global(cx);
         let attention = attention.read(cx);
         let count = attention.count();

@@ -167,7 +167,7 @@ use uuid::Uuid;
 pub use workspace_settings::{
     AccessibleMode, AutosaveSetting, BottomDockLayout, EncodingDisplayOptions, FocusFollowsMouse,
     RestoreOnStartupBehavior, StatusBarSettings, TabBarSettings, WorkspaceSettings,
-    closing_last_window_quits_app, observe_accessible_mode,
+    closing_last_window_quits_app, observe_accessible_mode, QuietMode,
 };
 use zed_actions::{Spawn, feedback::FileBugReport, theme::ToggleMode};
 
@@ -1706,20 +1706,20 @@ impl Attention {
     }
 }
 
-/// Quiet mode, across every window: panels closed, no sounds, no pop-ups.
-/// shepherd keeps working; what it would have said is counted and told once
-/// when quiet mode ends.
+/// The count of what shepherd would have said out loud during focus or silent
+/// mode (the `workspace.quiet` setting). shepherd keeps working; the person is
+/// told once, when the mode ends, how many things waited.
 #[derive(Default)]
-pub struct QuietMode {
-    on: bool,
+pub struct Quiet {
     held: usize,
 }
 
-impl gpui::Global for QuietMode {}
+impl gpui::Global for Quiet {}
 
-impl QuietMode {
+impl Quiet {
+    /// Whether focus mode or silent mode is on.
     pub fn is_on(cx: &App) -> bool {
-        cx.try_global::<Self>().is_some_and(|quiet| quiet.on)
+        WorkspaceSettings::get_global(cx).quiet != QuietMode::Off
     }
 
     /// Whether a notice must be held back. When it must, it is counted, so
@@ -1728,8 +1728,13 @@ impl QuietMode {
         if !Self::is_on(cx) {
             return false;
         }
-        cx.global_mut::<Self>().held += 1;
+        cx.default_global::<Self>().held += 1;
         true
+    }
+
+    /// The number of notices held so far, which starts the count again.
+    pub fn take_held(cx: &mut App) -> usize {
+        std::mem::take(&mut cx.default_global::<Self>().held)
     }
 }
 
@@ -1760,6 +1765,8 @@ pub struct Workspace {
     titlebar_focus_handle: FocusHandle,
     region_focus_handles: RegionFocusHandles,
     notifications: Notifications,
+    /// Notices that arrived during focus or silent mode, shown when it ends.
+    held_notifications: Vec<(NotificationId, AnyView)>,
     suppressed_notifications: HashSet<NotificationId>,
     project: Entity<Project>,
     follower_states: HashMap<CollaboratorId, FollowerState>,
@@ -2174,6 +2181,7 @@ impl Workspace {
                 // Settings can only affect the title through these two values,
                 // so skip the recomputation when they are unchanged.
                 let settings = WorkspaceSettings::get_global(cx);
+                let quiet = settings.quiet;
                 let title_settings = (
                     settings.window_title_format.as_str(),
                     settings.window_title_separator.as_str(),
@@ -2184,6 +2192,10 @@ impl Workspace {
                     .map(|(format, separator)| (format.as_str(), separator.as_str()));
                 if last_title_settings != Some(title_settings) {
                     this.update_window_title(window, cx);
+                }
+                if quiet == QuietMode::Off {
+                    this.release_held_notifications(cx);
+                    this.report_held_while_quiet(cx);
                 }
             }),
             cx.subscribe_in(
@@ -2269,6 +2281,7 @@ impl Workspace {
             titlebar_focus_handle: cx.focus_handle(),
             region_focus_handles: RegionFocusHandles::new(cx),
             notifications: Notifications::default(),
+            held_notifications: Vec::new(),
             suppressed_notifications: HashSet::default(),
             left_dock,
             bottom_dock,
@@ -3047,6 +3060,7 @@ impl Workspace {
 
     pub fn status_bar_visible(&self, cx: &App) -> bool {
         StatusBarSettings::get_global(cx).show
+            && WorkspaceSettings::get_global(cx).quiet != QuietMode::Focus
     }
 
     pub fn multi_workspace(&self) -> Option<&WeakEntity<MultiWorkspace>> {
@@ -4800,41 +4814,36 @@ impl Workspace {
         }
     }
 
-    /// Toggles all docks between open and closed states.
-    ///
-    /// If any docks are open, closes all and remembers their positions. If all
-    /// docks are closed, restores the last remembered dock configuration.
-    fn toggle_quiet_mode(
+    /// The keyboard's way into silent mode, and out of whichever quiet mode is on.
+    fn toggle_quiet_mode_action(
         &mut self,
         _: &ToggleQuietMode,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let quiet = cx.default_global::<QuietMode>();
-        if quiet.on {
-            quiet.on = false;
-            let held = std::mem::take(&mut quiet.held);
-            self.restore_last_open_docks(window, cx);
-            if held > 0 {
-                struct QuietModeToast;
-                let message = if held == 1 {
-                    "shepherd held one thing for you while it was quiet".to_string()
-                } else {
-                    format!("shepherd held {held} things for you while it was quiet")
-                };
-                self.show_toast(
-                    Toast::new(NotificationId::unique::<QuietModeToast>(), message).autohide(),
-                    cx,
-                );
-            }
-        } else {
-            quiet.on = true;
-            quiet.held = 0;
-            if !self.get_open_dock_positions(cx).is_empty() {
-                self.close_all_docks(window, cx);
-            }
+        let mode = match WorkspaceSettings::get_global(cx).quiet {
+            QuietMode::Off => QuietMode::Silent,
+            current => current,
+        };
+        self.toggle_quiet_mode(mode, cx);
+    }
+
+    /// Tells the person what shepherd held back while a quiet mode was on.
+    fn report_held_while_quiet(&mut self, cx: &mut Context<Self>) {
+        let held = Quiet::take_held(cx);
+        if held == 0 {
+            return;
         }
-        cx.notify();
+        struct QuietModeToast;
+        let message = if held == 1 {
+            "shepherd held one thing for you while it was quiet".to_string()
+        } else {
+            format!("shepherd held {held} things for you while it was quiet")
+        };
+        self.show_toast(
+            Toast::new(NotificationId::unique::<QuietModeToast>(), message).autohide(),
+            cx,
+        );
     }
 
     /// Pins the open project's app to the rail as a tab kept on this device:
@@ -8461,7 +8470,7 @@ impl Workspace {
                 }),
             )
             .on_action(cx.listener(Self::toggle_all_docks))
-            .on_action(cx.listener(Self::toggle_quiet_mode))
+            .on_action(cx.listener(Self::toggle_quiet_mode_action))
             .on_action(cx.listener(Self::pin_project_as_tab))
             .on_action(cx.listener(
                 |workspace: &mut Workspace, _: &ClearAllNotifications, _, cx| {
@@ -8806,6 +8815,9 @@ impl Workspace {
     }
 
     pub fn toggle_status_toast<V: ToastView>(&mut self, entity: Entity<V>, cx: &mut App) {
+        if WorkspaceSettings::get_global(cx).quiet == QuietMode::Silent {
+            return;
+        }
         self.toast_layer
             .update(cx, |toast_layer, cx| toast_layer.toggle_toast(cx, entity))
     }

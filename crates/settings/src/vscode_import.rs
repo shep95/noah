@@ -1113,6 +1113,7 @@ impl VsCodeSettings {
             wallpaper: None,
             wallpaper_opacity: None,
             wallpaper_adapts_theme: None,
+            quiet: None,
         }
     }
 

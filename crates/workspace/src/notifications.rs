@@ -169,8 +169,34 @@ impl Workspace {
             return;
         }
         self.dismiss_notification(id, cx);
-        self.notifications
-            .push((id.clone(), build_notification(cx)));
+        let notification = build_notification(cx);
+        // In focus or silent mode nothing pops up; the notice waits, and is
+        // shown when the mode is left.
+        if crate::WorkspaceSettings::get_global(cx).quiet != crate::QuietMode::Off {
+            self.held_notifications.retain(|(held, _)| held != id);
+            self.held_notifications.push((id.clone(), notification));
+            cx.notify();
+            return;
+        }
+        self.notifications.push((id.clone(), notification));
+        cx.notify();
+    }
+
+    /// How many notices are waiting for a quiet mode to be left.
+    pub fn held_notification_count(&self) -> usize {
+        self.held_notifications.len()
+    }
+
+    /// Shows the notices that were held while a quiet mode was on.
+    pub fn release_held_notifications(&mut self, cx: &mut Context<Self>) {
+        if self.held_notifications.is_empty() {
+            return;
+        }
+        let held = std::mem::take(&mut self.held_notifications);
+        for (id, notification) in held {
+            self.dismiss_notification(&id, cx);
+            self.notifications.push((id, notification));
+        }
         cx.notify();
     }
 

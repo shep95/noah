@@ -3053,7 +3053,7 @@ impl ConversationView {
         // In quiet mode nothing sounds or pops up; the thread still waits for
         // its answer, and the person hears how many things waited when quiet
         // mode ends.
-        if workspace::QuietMode::hold(cx) {
+        if workspace::Quiet::hold(cx) {
             return;
         }
         #[cfg(feature = "audio")]

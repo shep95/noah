@@ -8,7 +8,7 @@ use ui::{
     ContextMenu, IconButton, IconName, IconPosition, IconSize, PopoverMenu, Tooltip, prelude::*,
 };
 
-use crate::Workspace;
+use crate::{QuietMode, Workspace};
 
 actions!(
     workspace,
@@ -151,6 +151,12 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
             });
         }),
     )
+    .on_action(cx.listener(|workspace, _: &zed_actions::ToggleFocusMode, _window, cx| {
+        workspace.toggle_quiet_mode(QuietMode::Focus, cx)
+    }))
+    .on_action(cx.listener(|workspace, _: &zed_actions::ToggleSilentMode, _window, cx| {
+        workspace.toggle_quiet_mode(QuietMode::Silent, cx)
+    }))
     .on_action(cx.listener(|workspace, _: &noah_capture::TakeScreenshot, window, cx| {
         workspace.take_screenshot(window, cx)
     }))
@@ -439,11 +445,27 @@ impl Workspace {
         })
     }
 
+    /// Switches `mode` on, or off again when it is already the one in force.
+    pub fn toggle_quiet_mode(&mut self, mode: QuietMode, cx: &mut Context<Self>) {
+        let current = crate::WorkspaceSettings::get_global(cx).quiet;
+        let next = if current == mode { QuietMode::Off } else { mode };
+        let fs = self.app_state().fs.clone();
+        settings::update_settings_file(fs, cx, move |settings, _| {
+            settings.workspace.quiet = Some(next);
+        });
+    }
+
     pub(crate) fn render_room_rail(
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let quiet = crate::WorkspaceSettings::get_global(cx).quiet;
+        // Focus mode keeps the rooms and the notepad and nothing else on the
+        // rail; silent mode keeps the rail but takes the dots off it.
+        let focus = quiet == QuietMode::Focus;
+        let silent = quiet == QuietMode::Silent;
+        let held = self.held_notification_count();
         let active_room = self.active_room(cx);
         let room_folder = self.noah_room_folder(cx);
         let in_noah_room = room_folder.is_some();
@@ -498,7 +520,7 @@ impl Workspace {
                                 .bg(colors.text),
                         )
                     })
-                    .when_some(badge, |this, _| {
+                    .when_some(badge.filter(|_| !silent), |this, _| {
                         this.child(
                             div()
                                 .absolute()
@@ -526,7 +548,7 @@ impl Workspace {
                             })),
                     )
             }))
-            .children(crate::rail_apps::apps(cx).into_iter().enumerate().map(|(index, app)| {
+            .children(crate::rail_apps::apps(cx).into_iter().filter(|_| !focus).enumerate().map(|(index, app)| {
                 let initial: SharedString = app
                     .name
                     .chars()
@@ -567,7 +589,7 @@ impl Workspace {
                         }),
                 )
             }))
-            .child(
+            .when(!focus, |this| this.child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-chat", IconName::Chat)
                         .icon_size(IconSize::Small)
@@ -580,8 +602,8 @@ impl Workspace {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinChat), cx)
                         }),
                 ),
-            )
-            .child(
+            ))
+            .when(!focus, |this| this.child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-pages", IconName::FileDoc)
                         .icon_size(IconSize::Small)
@@ -594,8 +616,8 @@ impl Workspace {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinPages), cx)
                         }),
                 ),
-            )
-            .child(
+            ))
+            .when(!focus, |this| this.child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-search", IconName::MagnifyingGlass)
                         .icon_size(IconSize::Small)
@@ -608,7 +630,7 @@ impl Workspace {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinSearch), cx)
                         }),
                 ),
-            )
+            ))
             .child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("notes", IconName::Notepad)
@@ -626,7 +648,7 @@ impl Workspace {
                         }),
                 ),
             )
-            .child(
+            .when(!focus, |this| this.child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-board", IconName::Blocks)
                         .icon_size(IconSize::Small)
@@ -639,8 +661,8 @@ impl Workspace {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinBoard), cx)
                         }),
                 ),
-            )
-            .child(
+            ))
+            .when(!focus, |this| this.child(
                 h_flex().w_full().justify_center().child(
                     IconButton::new("asherin-eye", IconName::Eye)
                         .icon_size(IconSize::Small)
@@ -653,9 +675,92 @@ impl Workspace {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinEye), cx)
                         }),
                 ),
-            )
+            ))
             .child(div().flex_1())
-            .child({
+            .child(
+                v_flex()
+                    .w_full()
+                    .items_center()
+                    .gap_2()
+                    .pb_2()
+                    .child(
+                        h_flex()
+                            .relative()
+                            .w_full()
+                            .justify_center()
+                            .when(held > 0 && focus, |this| {
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(4.))
+                                        .right(px(9.))
+                                        .size(px(6.))
+                                        .rounded_full()
+                                        .bg(colors.text_muted),
+                                )
+                            })
+                            .child(
+                                IconButton::new("focus-mode", IconName::Eye)
+                                    .icon_size(IconSize::Small)
+                                    .icon_color(if focus { Color::Default } else { Color::Muted })
+                                    .toggle_state(focus)
+                                    .tooltip(move |_window, cx| {
+                                        let label: SharedString = match (focus, held) {
+                                            (true, 0) => "focus mode is on: only the work. Click to leave it".into(),
+                                            (true, held) => format!(
+                                                "focus mode is on. {held} notice{} waiting; click to leave and read them",
+                                                if held == 1 { " is" } else { "s are" }
+                                            )
+                                            .into(),
+                                            (false, _) => "focus mode: hides the status line and the rail's extras and holds notices".into(),
+                                        };
+                                        Tooltip::for_action(label, &zed_actions::ToggleFocusMode, cx)
+                                    })
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(zed_actions::ToggleFocusMode), cx)
+                                    }),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .relative()
+                            .w_full()
+                            .justify_center()
+                            .when(held > 0 && silent, |this| {
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(4.))
+                                        .right(px(9.))
+                                        .size(px(6.))
+                                        .rounded_full()
+                                        .bg(colors.text_muted),
+                                )
+                            })
+                            .child(
+                                IconButton::new("silent-mode", IconName::BellOff)
+                                    .icon_size(IconSize::Small)
+                                    .icon_color(if silent { Color::Default } else { Color::Muted })
+                                    .toggle_state(silent)
+                                    .tooltip(move |_window, cx| {
+                                        let label: SharedString = match (silent, held) {
+                                            (true, 0) => "silent mode is on: nothing interrupts. Click to leave it".into(),
+                                            (true, held) => format!(
+                                                "silent mode is on. {held} notice{} waiting; click to leave and read them",
+                                                if held == 1 { " is" } else { "s are" }
+                                            )
+                                            .into(),
+                                            (false, _) => "silent mode: no popups, badges or sounds; what needs an answer waits in mission control".into(),
+                                        };
+                                        Tooltip::for_action(label, &zed_actions::ToggleSilentMode, cx)
+                                    })
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(zed_actions::ToggleSilentMode), cx)
+                                    }),
+                            ),
+                    ),
+            )
+            .when(!focus, |this| this.child({
                 let recording = noah_capture::recording_elapsed(cx);
                 v_flex()
                     .w_full()
@@ -730,7 +835,7 @@ impl Workspace {
                                 workspace.toggle_camera_in_recordings(cx)
                             }))
                     })
-            })
+            }))
             .child(
                 div().pb_3().child(
                     PopoverMenu::new("settings-menu")

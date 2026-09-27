@@ -330,6 +330,12 @@
   "wallpaper_opacity": 0.5,
   // Whether the noah theme takes its colors from the wallpaper.
   "wallpaper_adapts_theme": true,
+  // How much noah may interrupt you. "off" shows notices as they happen;
+  // "focus" hides the status line and the rail's extras and holds notices
+  // until you leave the mode; "silent" also hides the attention count and
+  // shows no popups at all, so anything needing an answer waits in mission
+  // control. The rail has a button for each.
+  "quiet": "off",
   // Determines whether the focused panel follows the mouse location.
   "focus_follows_mouse": {
     "enabled": false,

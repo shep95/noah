@@ -6,7 +6,7 @@ use gpui::{App, Subscription};
 use serde::Deserialize;
 pub use settings::{
     AutosaveSetting, BottomDockLayout, EncodingDisplayOptions, InactiveOpacity,
-    PaneSplitDirectionHorizontal, PaneSplitDirectionVertical, RegisterSetting,
+    PaneSplitDirectionHorizontal, PaneSplitDirectionVertical, QuietMode, RegisterSetting,
     RestoreOnStartupBehavior, Settings,
 };
 use settings::{CommandAliasTarget, SettingsStore};
@@ -52,6 +52,8 @@ pub struct WorkspaceSettings {
     pub wallpaper_opacity: f32,
     /// Whether the noah theme takes its colors from the wallpaper.
     pub wallpaper_adapts_theme: bool,
+    /// How much noah may interrupt: off, focus or silent.
+    pub quiet: QuietMode,
 }
 
 #[cfg(target_os = "macos")]
@@ -173,6 +175,7 @@ impl Settings for WorkspaceSettings {
             wallpaper: workspace.wallpaper.clone(),
             wallpaper_opacity: workspace.wallpaper_opacity.unwrap_or(0.5),
             wallpaper_adapts_theme: workspace.wallpaper_adapts_theme.unwrap_or(true),
+            quiet: workspace.quiet.unwrap_or_default(),
         }
     }
 }

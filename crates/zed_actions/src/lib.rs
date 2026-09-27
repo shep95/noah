@@ -77,6 +77,12 @@ actions!(
         PinProjectAsTab,
         /// Turns on or off whether noah's colors follow the background image.
         ToggleBackgroundColors,
+        /// Focus mode: only the work. The status line and the rail's extras
+        /// go away and notices wait until you leave the mode.
+        ToggleFocusMode,
+        /// Silent mode: nothing interrupts. No popups, badges or sounds;
+        /// what needs an answer waits in mission control.
+        ToggleSilentMode,
         /// Shows the open file (HTML, SVG, PDF or an image) in the browser
         /// room and reloads it each time the file is saved.
         PreviewFileInBrowser,
