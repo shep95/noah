@@ -80,6 +80,20 @@ containers per site.
 popup and options in the noah landing look; dashboard; the harness covers
 every stage; the site's /shield page; zips and signed feeds; both repos pushed.
 
+## Stage 7: hardening and quiet motion (shipped)
+
+Reviewed the way an attacker reads an extension: a page's content script is
+bound to its own tab and site in the worker; lookups a page can trigger are
+rate-limited per tab; settings blobs cannot touch prototypes; older signed
+feeds are refused; store lookups, watched pages and the unshortener never
+reach local addresses, even through a redirect; the lookalike page only
+names brands from its own table; beacons by other names (image and script
+sources, sockets, event streams, cross-site forms, Request bodies) are held
+by the form-leak guard; hooks read as native and the shield's elements can
+carry a per-session name; the parental pin is PBKDF2; web-accessible
+resources are the warning page alone. The pages got pill switches, staged
+arrival, focus rings and one easing, all off under reduced motion.
+
 ## Not possible from an extension, and what we do instead
 
 * **A real VPN for the whole computer.** An extension can only proxy the
