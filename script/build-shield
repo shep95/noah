@@ -29,7 +29,7 @@ trap 'rm -rf "$stage"' EXIT
 copy_sources() {
     mkdir -p "$1"
     cp -r shield/background.js shield/popup.html shield/popup.css shield/popup.js \
-        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js \
+        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js \
         shield/lib shield/content shield/rules shield/icons "$1/"
 }
 
@@ -45,10 +45,10 @@ python3 - shield/manifest.json "$stage/firefox/manifest.json" <<'PY'
 import json, sys
 manifest = json.load(open(sys.argv[1]))
 manifest["background"] = {"scripts": [
-    "lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "background.js",
+    "lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js", "background.js",
 ]}
 unknown = {"contentSettings", "webRequestAuthProvider", "declarativeNetRequestFeedback"}
-manifest["permissions"] = [p for p in manifest["permissions"] if p not in unknown] + ["webRequestBlocking"]
+manifest["permissions"] = [p for p in manifest["permissions"] if p not in unknown] + ["webRequestBlocking", "contextualIdentities"]
 manifest.pop("minimum_chrome_version", None)
 manifest["browser_specific_settings"] = {
     "gecko": {

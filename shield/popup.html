@@ -7,7 +7,7 @@
 </head>
 <body>
   <header>
-    <img src="icons/32.png" alt="" width="20" height="20">
+    <img src="icons/32.png" alt="" width="22" height="22">
     <h1>noah shield</h1>
     <span id="version" class="muted"></span>
     <button id="quiet" class="ghost" title="Quiet: the shield shows no notifications">quiet</button>
@@ -15,24 +15,44 @@
 
   <p id="update" class="notice" hidden></p>
 
-  <section id="site-section">
+  <section id="site-section" class="hero">
     <div class="row">
-      <h2 id="site">this page</h2>
-      <span id="blocked" class="pill" title="requests to trackers stopped on this tab">0 stopped</span>
+      <div id="grade" class="grade">·</div>
+      <div class="grow">
+        <h2 id="site" class="site-name">this page</h2>
+        <p id="score" class="muted">reading the page…</p>
+      </div>
+      <span id="blocked" class="pill" title="requests to trackers stopped on this tab">0</span>
     </div>
-    <label class="switch"><input type="checkbox" id="trusted"><span>Trust this site: let everything through here</span></label>
-    <label class="switch"><input type="checkbox" id="strict"><span>No cookies at all on this site</span></label>
-    <label class="switch"><input type="checkbox" id="capture"><span>May record screen and camera without asking</span></label>
-    <label class="switch"><input type="checkbox" id="shopquiet"><span>No shopping help on this site</span></label>
-    <p id="score" class="muted"></p>
     <div class="row small">
-      <button id="burn" class="ghost" title="Delete this site's cookies, cache and storage">burn this site</button>
+      <label class="switch"><input type="checkbox" id="trusted"><span>trust this site</span></label>
+      <label class="switch"><input type="checkbox" id="strict"><span>no cookies here</span></label>
+      <label class="switch"><input type="checkbox" id="capture"><span>may record</span></label>
+      <label class="switch"><input type="checkbox" id="shopquiet"><span>no shopping help</span></label>
+    </div>
+    <div class="row small">
+      <button id="burn" class="ghost danger" title="Delete this site's cookies, cache and storage">burn this site</button>
       <button id="watchers" class="ghost">who's watching</button>
       <button id="alias" class="ghost" title="An email alias for this site">alias</button>
       <button id="decoy" class="ghost" title="Fill the sign-up form with decoy details">decoy form</button>
+      <button id="policy" class="ghost" title="Read this page as a policy or terms">read policy</button>
     </div>
     <div id="watchers-list" class="watchers" hidden></div>
     <p id="alias-out" class="muted" hidden></p>
+    <p id="media-live" class="muted bad" hidden></p>
+  </section>
+
+  <section>
+    <div class="row"><h2>today</h2><span id="today" class="muted"></span></div>
+    <div class="dash">
+      <div><b id="d-trackers">0</b><span>trackers stopped</span></div>
+      <div><b id="d-cookies">0</b><span>cookies burned</span></div>
+      <div><b id="d-scams">0</b><span>scams caught</span></div>
+      <div><b id="d-coupons">0</b><span>codes that worked</span></div>
+      <div><b id="d-saved">0</b><span>saved on orders</span></div>
+      <div><b id="d-annoy">0</b><span>banners and walls</span></div>
+    </div>
+    <p id="week" class="muted"></p>
   </section>
 
   <section>
@@ -46,35 +66,50 @@
       <label class="switch"><input type="checkbox" id="kill"><span>fail closed</span></label>
       <label class="switch"><input type="checkbox" id="webrtc"><span>guard WebRTC</span></label>
       <button id="recheck" class="ghost">check exit</button>
+      <button id="fastest" class="ghost" title="Try every server once and keep the fastest">fastest</button>
+      <button id="route" class="ghost" title="Send this site through the chosen server, or straight out">route this site</button>
     </div>
   </section>
 
   <section>
-    <div class="row"><h2>data protection</h2><span id="today" class="muted"></span></div>
-    <label class="switch"><input type="checkbox" id="trackers"><span>Stop trackers (EasyPrivacy, 9,500 rules)</span></label>
-    <label class="switch"><input type="checkbox" id="cookies"><span>Block third-party cookies</span></label>
-    <label class="switch"><input type="checkbox" id="geo"><span>Deny location to every site</span></label>
-    <label class="switch"><input type="checkbox" id="fingerprint"><span>Blur fingerprints (canvas, hardware, battery)</span></label>
-    <label class="switch"><input type="checkbox" id="params"><span>Strip tracking parameters from links</span></label>
-    <label class="switch"><input type="checkbox" id="gpc"><span>Send Global Privacy Control and Do Not Track</span></label>
+    <div class="row"><h2>mode</h2><span id="mode-now" class="muted"></span></div>
+    <div class="row small">
+      <button class="ghost" data-profile="browsing">browsing</button>
+      <button class="ghost" data-profile="shopping">shopping</button>
+      <button class="ghost" data-profile="banking">banking</button>
+      <button id="panic" class="ghost danger" title="Close every tab, clear history, drop the tunnel">panic</button>
+    </div>
   </section>
 
-  <section>
-    <h2>shopping</h2>
-    <label class="switch"><input type="checkbox" id="compare"><span>Show the same product cheaper elsewhere</span></label>
-    <label class="switch"><input type="checkbox" id="coupons"><span>Try working codes at checkout, never place the order</span></label>
-    <p id="shop-stats" class="muted"></p>
-  </section>
-
-  <section>
-    <div class="row"><h2>recording watch</h2><span id="watch-count" class="pill"></span></div>
-    <label class="switch"><input type="checkbox" id="guard-screen"><span>Pages must ask before recording the screen</span></label>
-    <label class="switch"><input type="checkbox" id="guard-camera"><span>Pages must ask before using camera or microphone</span></label>
-    <p id="watch-note" class="muted"></p>
-  </section>
+  <details>
+    <summary class="switches-summary">switches</summary>
+    <section>
+      <h2>data protection</h2>
+      <label class="switch"><input type="checkbox" id="trackers"><span>stop trackers (EasyPrivacy)</span></label>
+      <label class="switch"><input type="checkbox" id="cookies"><span>block third-party cookies</span></label>
+      <label class="switch"><input type="checkbox" id="geo"><span>deny location to every site</span></label>
+      <label class="switch"><input type="checkbox" id="fingerprint"><span>blur fingerprints</span></label>
+      <label class="switch"><input type="checkbox" id="params"><span>strip tracking parameters</span></label>
+      <label class="switch"><input type="checkbox" id="gpc"><span>send Global Privacy Control</span></label>
+    </section>
+    <section>
+      <h2>shopping</h2>
+      <label class="switch"><input type="checkbox" id="compare"><span>cheaper elsewhere, on product pages</span></label>
+      <label class="switch"><input type="checkbox" id="coupons"><span>try codes at checkout, never order</span></label>
+      <p id="shop-stats" class="muted"></p>
+    </section>
+    <section>
+      <div class="row"><h2>recording watch</h2><span id="watch-count" class="pill"></span></div>
+      <label class="switch"><input type="checkbox" id="guard-screen"><span>pages ask before recording the screen</span></label>
+      <label class="switch"><input type="checkbox" id="guard-camera"><span>pages ask before camera or microphone</span></label>
+      <p id="watch-note" class="muted"></p>
+    </section>
+  </details>
 
   <footer>
-    <a href="#" id="options">settings and servers</a>
+    <a href="#" id="options">settings</a>
+    <a href="#" id="tools">tools</a>
+    <a href="#" id="leak">leak test</a>
     <a href="https://noah.asherin.com/shield" target="_blank" rel="noopener">about</a>
     <a href="https://noah.asherin.com/download" target="_blank" rel="noopener" title="Programs outside the browser recording your screen show up in noah's device room">noah's device room</a>
   </footer>

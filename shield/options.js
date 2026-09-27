@@ -97,7 +97,53 @@ function renderSwitches() {
     area.value = (pathGet(state.settings, area.dataset.list) || []).join("\n");
   }
   byId("codes").value = state.settings.shopping.codes.map((entry) => [entry.site || "*", entry.code, entry.note || ""].join(" ").trim()).join("\n");
-  for (const select of document.querySelectorAll("select[data-select]")) {
+  for (const input of document.querySelectorAll("input[data-number]")) {
+  input.addEventListener("change", async () => {
+    await Shield.send({ type: "settings.update", change: changeFor(input.dataset.number, Number(input.value) || 1) });
+    await load();
+  });
+}
+for (const area of document.querySelectorAll("textarea[data-mode-list]")) {
+  area.addEventListener("change", async () => {
+    const mode = area.dataset.modeList;
+    const siteModes = { ...state.settings.modes.siteModes };
+    for (const [site, existing] of Object.entries(siteModes)) if (existing === mode) delete siteModes[site];
+    for (const line of area.value.split(/\n+/)) {
+      const site = Shield.siteOf(Shield.hostOf("https://" + line.trim().replace(/^https?:\/\//, "")));
+      if (site) siteModes[site] = mode;
+    }
+    await Shield.send({ type: "settings.update", change: { modes: { siteModes } } });
+    await load();
+  });
+}
+for (const element of document.querySelectorAll("button[data-profile]")) {
+  element.addEventListener("click", async () => {
+    await Shield.send({ type: "profile.apply", name: element.dataset.profile });
+    await load();
+  });
+}
+byId("lock-pin-set").addEventListener("click", async () => {
+  const result = await Shield.send({ type: "pin.set", target: "lock", pin: byId("lock-pin").value });
+  byId("lock-pin-status").textContent = result.error || "PIN set";
+  byId("lock-pin").value = "";
+});
+byId("parental-setpin").addEventListener("click", async () => {
+  const current = state.settings.modes.parental.pinHash ? prompt("Current parental PIN") : "";
+  const result = await Shield.send({ type: "pin.set", target: "parental", pin: byId("parental-pin").value, current });
+  byId("parental-status").textContent = result.error || "PIN set";
+});
+byId("parental-on").addEventListener("click", async () => {
+  if (!state.settings.modes.parental.pinHash) { byId("parental-status").textContent = "set a PIN first"; return; }
+  const result = await Shield.send({ type: "parental.set", enabled: true, pin: byId("parental-pin").value });
+  byId("parental-status").textContent = result.error || "on";
+  await load();
+});
+byId("parental-off").addEventListener("click", async () => {
+  const result = await Shield.send({ type: "parental.set", enabled: false, pin: byId("parental-pin").value });
+  byId("parental-status").textContent = result.error || "off";
+  await load();
+});
+for (const select of document.querySelectorAll("select[data-select]")) {
   select.addEventListener("change", async () => {
     await Shield.send({ type: "settings.update", change: changeFor(select.dataset.select, select.value) });
     await load();
@@ -147,6 +193,35 @@ for (const input of document.querySelectorAll("input[data-text]")) {
   for (const area of document.querySelectorAll("textarea[data-list-raw]")) {
     area.value = (pathGet(state.settings, area.dataset.listRaw) || []).join("\n");
   }
+  for (const input of document.querySelectorAll("input[data-number]")) {
+    input.value = pathGet(state.settings, input.dataset.number) ?? "";
+  }
+  for (const area of document.querySelectorAll("textarea[data-mode-list]")) {
+    area.value = Object.entries(state.settings.modes.siteModes).filter(([, mode]) => mode === area.dataset.modeList).map(([site]) => site).join("\n");
+  }
+  const profileNow = byId("profile-now");
+  if (profileNow) profileNow.textContent = state.settings.modes.profile ? "profile: " + state.settings.modes.profile : "no profile applied";
+  const days = byId("focus-days");
+  if (days && !days.children.length) {
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach((name, index) => {
+      const label = document.createElement("label");
+      label.className = "switch";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.dataset.day = String(index);
+      box.addEventListener("change", async () => {
+        const chosen = Array.from(days.querySelectorAll("input:checked")).map((element) => Number(element.dataset.day));
+        await Shield.send({ type: "settings.update", change: { modes: { focus: { days: chosen } } } });
+      });
+      label.append(box, document.createTextNode(name));
+      days.append(label);
+    });
+  }
+  if (days) for (const box of days.querySelectorAll("input")) box.checked = state.settings.modes.focus.days.includes(Number(box.dataset.day));
+  const parentalStatus = byId("parental-status");
+  if (parentalStatus) parentalStatus.textContent = state.settings.modes.parental.enabled ? "on" : "off";
+  const lockStatus = byId("lock-pin-status");
+  if (lockStatus) lockStatus.textContent = state.settings.modes.lock.pinHash ? "PIN set" : "no PIN yet";
 }
 
 async function renderPermissions() {

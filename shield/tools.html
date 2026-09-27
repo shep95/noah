@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · tools</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="options">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>noah shield · tools</h1>
+    <span class="muted"><a href="options.html">settings</a></span>
+  </header>
+  <main>
+    <section id="report">
+      <h2>this week</h2>
+      <p id="week" class="muted">…</p>
+    </section>
+
+    <section>
+      <h2>where does this link go</h2>
+      <p class="muted">Short links and email wrappers hide their destination. One request follows the redirects (the shortener counts a click), then the final address is checked against the lookalike list.</p>
+      <p><input id="unshorten-input" type="url" placeholder="https://bit.ly/…" class="mostly"> <button id="unshorten-go" class="ghost">Follow it</button></p>
+      <div id="unshorten-out" class="muted"></div>
+      <h3>Redirect chain of the current tab</h3>
+      <p class="muted">Every hop the browser took to reach the page you came from.</p>
+      <p><button id="hops-go" class="ghost">Show the chain</button></p>
+      <ol id="hops-out" class="muted"></ol>
+    </section>
+
+    <section>
+      <h2>QR code check</h2>
+      <p class="muted">Decode a QR code from a picture or a screenshot before you open it. The link is checked like any other; nothing is uploaded.</p>
+      <p><input id="qr-file" type="file" accept="image/*"> <button id="qr-shot" class="ghost">Scan the current tab</button></p>
+      <div id="qr-out" class="muted"></div>
+      <canvas id="qr-canvas" hidden></canvas>
+    </section>
+
+    <section>
+      <h2>read this policy</h2>
+      <p class="muted">Open a privacy policy or terms page in a tab, then press the button: the shield reads the page and says in a few lines what it actually commits you to.</p>
+      <p><button id="policy-go" class="ghost">Read the active tab</button> <span id="policy-meta" class="muted"></span></p>
+      <div id="policy-out"></div>
+    </section>
+
+    <section>
+      <h2>forget me</h2>
+      <p class="muted">A deletion request under GDPR or CCPA, ready to send. Fill it in, copy it, and mail it to the company's privacy address (usually privacy@ or dpo@ their domain).</p>
+      <div class="grid two">
+        <label>Your name<input id="letter-name" type="text"></label>
+        <label>Your email<input id="letter-email" type="email"></label>
+        <label>Company<input id="letter-company" type="text"></label>
+        <label>Law<select id="letter-law"><option value="gdpr">GDPR (EU/UK)</option><option value="ccpa">CCPA (California)</option><option value="plain">plain request</option></select></label>
+      </div>
+      <p><button id="letter-go" class="ghost">Write it</button> <button id="letter-copy" class="ghost">Copy</button></p>
+      <textarea id="letter-out" rows="12" class="wide"></textarea>
+      <h3>People-search and data-broker opt-outs</h3>
+      <p class="muted">Each of these publishes or sells profiles. Their own removal pages, in one list. Work through them; most take a few minutes each.</p>
+      <ul id="brokers"></ul>
+    </section>
+
+    <section>
+      <h2>purchases</h2>
+      <h3>Watching for price drops</h3>
+      <table id="watchlist"></table>
+      <h3>Receipts and warranties</h3>
+      <p class="muted">Order confirmations the shield saw, with what you spent per store per month. Add a warranty length and it reminds you two weeks before it ends.</p>
+      <table id="receipts"></table>
+      <table id="spending"></table>
+      <h3>Reminders</h3>
+      <table id="reminders"></table>
+    </section>
+
+    <section>
+      <h2>notes vault</h2>
+      <p class="muted">Encrypted notes that never leave this browser. AES-GCM under a key derived from your passphrase; lose the passphrase and the notes are gone.</p>
+      <p><input id="vault-pass" type="password" placeholder="passphrase" autocomplete="off"> <button id="vault-open" class="ghost">Open</button> <button id="vault-save" class="ghost">Save</button> <span id="vault-status" class="muted"></span></p>
+      <textarea id="vault-text" rows="10" class="wide" placeholder="one note per line"></textarea>
+    </section>
+  </main>
+  <script src="lib/common.js"></script>
+  <script src="lib/vendor/jsQR.js"></script>
+  <script src="tools.js"></script>
+</body>
+</html>

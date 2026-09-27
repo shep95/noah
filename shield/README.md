@@ -28,13 +28,25 @@ converter). Four things, each described by what it can honestly do:
     lib/privacy.js       browser privacy switches, per-site rules, cookie purge
     lib/watch.js         extension audit
     lib/shopping.js      store finders, code sources
-    content/guard.js     MAIN-world hooks (geolocation, capture, fingerprints)
-    content/bridge.js    isolated-world half: settings in, capture bars out
-    content/shop.js      product detection, price card, checkout codes
-    rules/trackers.json  EasyPrivacy, built by script/build-shield-rules
-    rules/headers.json   Sec-GPC and DNT
-    rules/parameters.json tracking parameters stripped from navigations
-    popup.*, options.*   the shield's own pages
+    lib/brands.js        brands phishing pages imitate, with their real domains
+    lib/safety.js        lookalike check, password hashes, breach checks, downloads
+    lib/owners.js        who is behind a third-party host
+    lib/cities.js        cities a fake location can stand in
+    lib/tracking.js      per-tab watchers, privacy score, burning, sync, seeds, generators
+    lib/tools.js         profiles, focus hours, low data, search switch, parental, vault, letters, policy reader
+    content/guard.js     MAIN-world hooks: geolocation, capture, clipboard, wallet, form leaks, scam alerts, fingerprints, fake location
+    content/bridge.js    isolated-world half: settings in, bars and reports out
+    content/safety.js    lookalike notice, password guards, hidden fields and frames, scam pages
+    content/hash.js      SHA-256/SHA-1 for pages without crypto.subtle
+    content/links.js     link cleaner, redirect unwrapper, anti-dox blur
+    content/shop.js      product detection, price card and extras, checkout codes
+    content/checkout.js  fees, pre-ticked add-ons, subscription traps, receipts
+    content/annoyances.js cookie banners, overlays, autoplay, countdowns, copy unblock, dark mode
+    content/paste.js     sensitive paste guard, upload metadata stripper
+    content/lock.js      tab lock curtain
+    rules/*.json         EasyPrivacy (built by script/build-shield-rules), headers, parameters, security, mail, referrer, social login
+    popup.*, options.*, tools.*, warn.*, leak.*  the shield's own pages
+    STAGES.md            what shipped in which stage, and what an extension cannot do
 
 ## Building
 
@@ -56,4 +68,4 @@ the Firefox zip from `dist/` (Firefox needs the derived manifest).
 
 The extension is GPL-3.0-or-later, like the rest of noah's GPL parts.
 `rules/trackers.json` is derived from EasyPrivacy (https://easylist.to),
-GPLv3 / CC BY-SA 3.0.
+GPLv3 / CC BY-SA 3.0. `lib/vendor/jsQR.js` is jsQR (Apache-2.0).

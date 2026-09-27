@@ -59,12 +59,23 @@ function render(state) {
     siteSection.hidden = false;
     byId("site").textContent = site.site || site.host;
     byId("blocked").textContent = site.blocked + " stopped";
+    byId("route").classList.toggle("on", Boolean(settings.tunnel.siteRoutes[site.site]));
     byId("trusted").checked = site.trusted;
     byId("strict").checked = site.strictCookies;
     byId("capture").checked = site.captureAllowed;
     byId("shopquiet").checked = site.shoppingQuiet;
     Shield.send({ type: "site.score", tabId: site.tabId, url: site.url }).then((score) => {
-      if (score && score.grade) byId("score").textContent = `privacy ${score.grade} (${score.score}/100): ${score.blocked} trackers stopped, ${score.thirdParties} third parties, ${score.cookies} cookies${score.https ? "" : ", no https"}`;
+      if (!score || !score.grade) return;
+      const grade = byId("grade");
+      grade.textContent = score.grade;
+      grade.className = "grade " + score.grade.toLowerCase();
+      byId("score").textContent = `${score.score}/100 · ${score.thirdParties} third parties, ${score.advertising} of them advertising, ${score.cookies} cookies${score.https ? "" : ", no https"}`;
+    });
+    Shield.send({ type: "media.list" }).then((media) => {
+      const live = (media && media.tabs || []).filter((entry) => entry.camera || entry.microphone);
+      const node = byId("media-live");
+      node.hidden = !live.length;
+      node.textContent = live.map((entry) => `${entry.site} is using ${[entry.camera && "the camera", entry.microphone && "the microphone"].filter(Boolean).join(" and ")} (${entry.title.slice(0, 30)})`).join("; ");
     });
   } else {
     siteSection.hidden = true;
@@ -93,7 +104,13 @@ function render(state) {
 
   const today = stats.today || {};
   const month = stats.month || {};
-  byId("today").textContent = `${today.trackers || 0} today · ${month.trackers || 0} this month`;
+  byId("today").textContent = `${month.trackers || 0} trackers this month`;
+  byId("d-trackers").textContent = today.trackers || 0;
+  byId("d-cookies").textContent = (today.cookies || 0) + (today.burned || 0);
+  byId("d-scams").textContent = (today.phishing || 0) + (today.popups || 0) + (today.leaks || 0) + (today.wallets || 0) + (today.downloads || 0);
+  byId("d-coupons").textContent = today.coupons || 0;
+  byId("d-saved").textContent = today.saved || 0;
+  byId("d-annoy").textContent = (today.banners || 0) + (today.overlays || 0);
   byId("trackers").checked = settings.privacy.trackers;
   byId("cookies").checked = !settings.privacy.thirdPartyCookies;
   byId("geo").checked = settings.privacy.geolocation === "block";
@@ -105,10 +122,13 @@ function render(state) {
   byId("coupons").checked = settings.shopping.coupons && settings.shopping.autoApply;
   byId("shop-stats").textContent = `${month.compared || 0} products compared and ${month.coupons || 0} codes that worked this month.`;
 
+  byId("mode-now").textContent = settings.modes.profile ? settings.modes.profile + (site && settings.modes.siteModes[site.site] ? " · this site: " + settings.modes.siteModes[site.site] : "") : site && settings.modes.siteModes[site.site] ? "this site: " + settings.modes.siteModes[site.site] : "none";
+  for (const element of document.querySelectorAll("button[data-profile]")) element.classList.toggle("on", settings.modes.profile === element.dataset.profile);
   byId("guard-screen").checked = settings.capture.guardScreen;
   byId("guard-camera").checked = settings.capture.guardCamera;
   byId("watch-count").textContent = (month.captures || 0) + " stopped";
-  byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings. Programs outside the browser are noah's device room's job.";
+  byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings.";
+  Shield.send({ type: "report.weekly" }).then((report) => { if (report && report.text) byId("week").textContent = "This week: " + report.text; });
 }
 
 async function refresh() {
@@ -165,6 +185,35 @@ byId("server").addEventListener("change", async (event) => {
 });
 bindSetting("kill", ["tunnel", "killSwitch"]);
 bindSetting("webrtc", ["tunnel", "webRtcGuard"]);
+byId("fastest").addEventListener("click", async () => {
+  byId("tunnel-status").textContent = "Trying every server once…";
+  const result = await Shield.send({ type: "tunnel.speedTest", pickFastest: true });
+  const best = result && result.results && result.results.find((entry) => entry.state === "up");
+  byId("tunnel-status").textContent = best ? `Fastest: ${best.name} at ${best.latencyMs} ms; the tunnel now uses it.` : "None of the servers answered the exit check.";
+  await refresh();
+});
+byId("route").addEventListener("click", async () => {
+  if (!current || !current.site) return;
+  const site = current.site.site;
+  const existing = current.settings.tunnel.siteRoutes[site];
+  if (existing) {
+    await Shield.send({ type: "tunnel.route", site, serverId: null });
+  } else {
+    const choice = prompt(`Route ${site} through which server? Type a server name from the list, or "direct" to skip the tunnel for it.`, "direct");
+    if (choice === null) return;
+    const server = current.servers.find((entry) => entry.name.toLowerCase() === choice.trim().toLowerCase() || entry.id === choice.trim());
+    await Shield.send({ type: "tunnel.route", site, serverId: choice.trim().toLowerCase() === "direct" ? "direct" : server ? server.id : null });
+  }
+  await refresh();
+});
+byId("policy").addEventListener("click", async () => {
+  if (!current || !current.site) return;
+  const result = await Shield.send({ type: "tools.policy", tabId: current.site.tabId });
+  const out = byId("alias-out");
+  out.hidden = false;
+  if (result.error) { out.textContent = result.error; return; }
+  out.textContent = `Policy grade ${result.grade} (${result.minutes} min of reading). ${result.lines.map((line) => line.line).join(" ")}`;
+});
 byId("recheck").addEventListener("click", async () => {
   byId("tunnel-status").textContent = "Checking…";
   await Shield.send({ type: "tunnel.check" });
@@ -221,6 +270,25 @@ byId("decoy").addEventListener("click", async () => {
   const out = byId("alias-out");
   out.hidden = false;
   out.textContent = result.error ? result.error : `filled with ${result.identity.fullName}, ${result.identity.email}`;
+});
+for (const element of document.querySelectorAll("button[data-profile]")) {
+  element.addEventListener("click", async () => {
+    await Shield.send({ type: "profile.apply", name: element.dataset.profile });
+    await refresh();
+  });
+}
+byId("panic").addEventListener("click", async () => {
+  if (!confirm("Close every tab, clear history and drop the tunnel?")) return;
+  await Shield.send({ type: "panic" });
+  window.close();
+});
+byId("tools").addEventListener("click", (event) => {
+  event.preventDefault();
+  Shield.api.tabs.create({ url: Shield.api.runtime.getURL("tools.html") });
+});
+byId("leak").addEventListener("click", (event) => {
+  event.preventDefault();
+  Shield.api.tabs.create({ url: Shield.api.runtime.getURL("leak.html") });
 });
 byId("quiet").addEventListener("click", async () => {
   await Shield.send({ type: "settings.update", change: { quiet: !(current && current.settings.quiet) } });

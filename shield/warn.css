@@ -29,3 +29,4 @@ button:hover { filter: brightness(1.15); }
 .muted { font: 13px -apple-system, "Segoe UI", system-ui, sans-serif; color: #8f958d; margin-top: 14px; }
 small { display: block; margin-top: 18px; font: 12px -apple-system, "Segoe UI", system-ui, sans-serif; color: #6f766e; }
 ul { margin: 6px 0 10px 18px; padding: 0; color: #b9beb7; }
+.verdict { font-size: 24px; margin-top: 20px; }

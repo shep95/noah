@@ -18,7 +18,7 @@ auto-apply that never orders, Amazon coupon clipping) · capture guard (screen
 and camera behind a bar the page cannot press) · extension audit · signed
 feeds, update notice, Firefox update manifest.
 
-## Stage 2: security and account safety
+## Stage 2: security and account safety (shipped)
 
 https upgrade with local-network exceptions · lookalike and phishing domain
 interstitial (brand table, homoglyphs, edit distance, brand-in-subdomain) ·
@@ -35,7 +35,7 @@ swaps on copy) · fake support popup breaker (alert loops, fullscreen,
 crypto mining, malvertising network and social pixel rules · social login
 (Google One Tap, Facebook) blocker (off by default).
 
-## Stage 3: privacy, fingerprint and anti-tracking
+## Stage 3: privacy, fingerprint and anti-tracking (shipped)
 
 burn this site · cookies burned when a site's last tab closes, with a keep
 list · privacy score per site and a toolbar meter · who's watching (owners,
@@ -50,7 +50,7 @@ anti-dox blur of your own name · permission history · auto-logout after idle �
 auto-clear history per site · settings sync, end-to-end encrypted through the
 browser's own sync · local-only mode · stealth element names.
 
-## Stage 4: tunnel extras and shopping extras
+## Stage 4: tunnel extras and shopping extras (shipped)
 
 a server per site (country per site) · speed test and fastest pick · connect
 at startup · IP and WebRTC leak test · camera and microphone indicator per
@@ -62,7 +62,7 @@ hidden fees revealed · subscription traps and pre-ticked add-ons · wait 24 h �
 receipts, spending per store, warranty reminders · price-match proof card ·
 gift card discount links · return policy finder.
 
-## Stage 5: annoyance killers, smart modes, tools
+## Stage 5: annoyance killers, smart modes, tools (shipped)
 
 cookie banner auto-reject · overlay, paywall and newsletter remover ·
 autoplay stop · fake countdown flag · copy and right-click unblocker · auto
@@ -75,7 +75,7 @@ data broker opt-out and forget-me request generator · policy and terms red
 flags · encrypted notes vault · parental mode · throwaway window · Firefox
 containers per site.
 
-## Stage 6: look, tests, publish
+## Stage 6: look, tests, publish (shipped)
 
 popup and options in the noah landing look; dashboard; the harness covers
 every stage; the site's /shield page; zips and signed feeds; both repos pushed.

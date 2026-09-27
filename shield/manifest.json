@@ -125,6 +125,37 @@
         "content/checkout.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/annoyances.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/paste.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/lock.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "declarative_net_request": {
@@ -180,5 +211,20 @@
     "rotate-fingerprint": {
       "description": "Give every site a new fingerprint"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "warn.html",
+        "warn.css",
+        "warn.js",
+        "lib/common.js",
+        "icons/128.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "use_dynamic_url": true
+    }
+  ]
 }

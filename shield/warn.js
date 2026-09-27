@@ -89,8 +89,24 @@ async function download() {
   });
 }
 
+function focus() {
+  const site = params.get("site") || "this site";
+  title.textContent = "Focus hours.";
+  paragraph(`${site} is on your focus list, and it is inside the hours you set. It will open again when they end.`);
+  button("Back", true, () => history.length > 1 ? history.back() : closeThisTab());
+  button("Change focus hours", false, () => Shield.api.runtime.openOptionsPage());
+}
+
+function parental() {
+  title.textContent = "Not on this browser.";
+  paragraph("Parental mode is on, and this address is on the blocked list or matched an adult keyword. A parent can turn the mode off in the shield's settings with the PIN.");
+  button("Back", true, () => history.length > 1 ? history.back() : closeThisTab());
+}
+
 if (kind === "lookalike") lookalike();
 else if (kind === "download") download();
+else if (kind === "focus") focus();
+else if (kind === "parental") parental();
 else {
   title.textContent = "Nothing to show.";
   button("Close", true, () => closeThisTab());

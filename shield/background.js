@@ -4,7 +4,7 @@
 "use strict";
 
 if (typeof importScripts === "function") {
-  importScripts("lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js");
+  importScripts("lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "lib/tools.js");
 }
 
 const api = Shield.api;
@@ -15,6 +15,7 @@ async function applyAll(reason) {
   await Shield.applyPrivacy(settings);
   await Shield.applyTunnel(settings);
   await Shield.applyHeaderRules(settings);
+  await applyModes(settings);
   if (reason === "install" || reason === "startup") {
     await Shield.refreshFeeds();
     const status = await Shield.updateStatus();
@@ -59,6 +60,9 @@ api.alarms.create("feeds", { periodInMinutes: ALARMS.feeds });
 api.alarms.create("cookies", { delayInMinutes: 2, periodInMinutes: ALARMS.cookies });
 api.alarms.create("tunnel", { periodInMinutes: ALARMS.tunnel });
 api.alarms.create("watchlist", { delayInMinutes: 30, periodInMinutes: 6 * 60 });
+api.alarms.create("battery", { periodInMinutes: 5 });
+api.alarms.create("focus", { periodInMinutes: 1 });
+api.alarms.create("weekly", { delayInMinutes: 24 * 60, periodInMinutes: 7 * 24 * 60 });
 
 async function announceDrop(entry, from, to) {
   await notify("shield-drop-" + entry.key, "Price drop: " + entry.title.slice(0, 60), `${from} → ${to}. Open the shield's purchases page for the link.`);
@@ -73,6 +77,18 @@ api.alarms.onAlarm.addListener((alarm) => {
       if (settings.tunnel.enabled) await Shield.applyTunnel(settings);
     } else if (alarm.name === "cookies") {
       await Shield.purgeTrackerCookies(settings);
+    } else if (alarm.name === "battery") {
+      await Shield.discardIdleTabs(settings);
+    } else if (alarm.name === "focus") {
+      if (settings.modes.focus.enabled) await Shield.applyFocusHours(settings);
+    } else if (alarm.name === "weekly") {
+      if (settings.modes.weeklyReport) {
+        const report = await Shield.weeklyReport();
+        await notify("shield-weekly", "Your week with noah shield", report.text);
+      }
+    } else if (alarm.name.startsWith("expire-")) {
+      const entry = await Shield.expireDownload(alarm.name.slice("expire-".length));
+      if (entry) await notify(alarm.name, "A download expired", entry.name + " from " + entry.source + " was deleted as you asked.");
     } else if (alarm.name === "watchlist") {
       if (!settings.localOnly) await Shield.checkWatchlist(announceDrop);
     } else if (alarm.name.startsWith("reminder-")) {
@@ -101,6 +117,7 @@ api.storage.onChanged.addListener((changes, area) => {
     if (JSON.stringify(before.privacy) !== JSON.stringify(after.privacy) || JSON.stringify(before.security) !== JSON.stringify(after.security)) await Shield.applyPrivacy(settings);
     if (JSON.stringify(before.tunnel) !== JSON.stringify(after.tunnel)) await Shield.applyTunnel(settings);
     await Shield.applyHeaderRules(settings);
+    if (JSON.stringify(before.modes) !== JSON.stringify(after.modes)) await applyModes(settings);
     await Shield.pushSync(settings).catch((error) => console.warn("shield: sync", error));
   })().catch((error) => console.error("shield: settings", error));
 });
@@ -319,7 +336,117 @@ const handlers = {
       hideNames: settings.privacy.hideNames,
       linkCleaner: settings.privacy.linkCleaner,
       tag: await elementTag(settings),
+      annoyances: {
+        banners: settings.annoyances.banners,
+        overlays: settings.annoyances.overlays,
+        autoplay: settings.annoyances.autoplay,
+        timers: settings.annoyances.timers,
+        copy: settings.annoyances.copySites.includes(site),
+        dark: settings.annoyances.darkEverywhere || settings.annoyances.darkSites.includes(site),
+      },
+      pasteGuard: settings.annoyances.pasteGuard,
+      uploadStrip: settings.annoyances.uploadStrip,
+      lockMinutes: settings.modes.lock.sites.includes(site) && settings.modes.lock.pinHash ? settings.modes.lock.minutes : 0,
+      mode: settings.modes.siteModes[site] || settings.modes.profile || "",
     };
+  },
+  async "lock.check"(message) {
+    const settings = await Shield.loadSettings();
+    const hash = await Shield.hashPin(String(message.pin || ""));
+    return { ok: Boolean(settings.modes.lock.pinHash) && hash === settings.modes.lock.pinHash };
+  },
+  async "pin.set"(message) {
+    const pin = String(message.pin || "");
+    if (pin && !/^\d{4,12}$/.test(pin)) return { error: "a PIN is 4 to 12 digits" };
+    const hash = pin ? await Shield.hashPin(pin) : "";
+    if (message.target === "parental") {
+      const settings = await Shield.loadSettings();
+      if (settings.modes.parental.pinHash && (await Shield.hashPin(String(message.current || ""))) !== settings.modes.parental.pinHash) return { error: "the current PIN is needed to change it" };
+      await Shield.updateSettings({ modes: { parental: { pinHash: hash } } });
+    } else {
+      await Shield.updateSettings({ modes: { lock: { pinHash: hash } } });
+    }
+    return { ok: true };
+  },
+  async "parental.set"(message) {
+    const settings = await Shield.loadSettings();
+    if (settings.modes.parental.pinHash && (await Shield.hashPin(String(message.pin || ""))) !== settings.modes.parental.pinHash) return { error: "the parental PIN is needed" };
+    await Shield.updateSettings({ modes: { parental: { enabled: Boolean(message.enabled) } } });
+    return { ok: true };
+  },
+  async "profile.apply"(message) {
+    try {
+      const settings = await Shield.applyProfile(String(message.name || ""));
+      return { settings };
+    } catch (error) {
+      return { error: String(error.message || error) };
+    }
+  },
+  async "report.weekly"() {
+    return Shield.weeklyReport();
+  },
+  async "tools.unshorten"(message) {
+    const settings = await Shield.loadSettings();
+    if (settings.localOnly) return { error: "local-only mode: no lookups leave the browser" };
+    const url = String(message.url || "");
+    if (!/^https?:\/\//i.test(url)) return { error: "not a web address" };
+    const result = await Shield.unshorten(url);
+    result.lookalike = Shield.lookalike(Shield.hostOf(result.final));
+    result.shortener = Shield.SHORTENERS.test(Shield.hostOf(url));
+    return result;
+  },
+  async "tools.hops"(message) {
+    return { hops: await Shield.hopsFor(Number(message.tabId)) };
+  },
+  async "vault.save"(message) {
+    if (String(message.passphrase || "").length < 6) return { error: "use at least six characters" };
+    await Shield.vaultSave(String(message.passphrase), Array.isArray(message.notes) ? message.notes.slice(0, 500) : []);
+    return { ok: true };
+  },
+  async "vault.open"(message) {
+    try {
+      return { notes: await Shield.vaultOpen(String(message.passphrase || "")) };
+    } catch {
+      return { error: "wrong passphrase, or no vault yet" };
+    }
+  },
+  async "tools.letter"(message) {
+    return { text: Shield.deletionLetter({ name: String(message.name || ""), email: String(message.email || ""), company: String(message.company || ""), law: String(message.law || "") }), brokers: Shield.BROKERS };
+  },
+  async "tools.policy"(message) {
+    const tabId = Number(message.tabId);
+    let text = String(message.text || "");
+    if (!text && tabId) {
+      try {
+        const [result] = await api.scripting.executeScript({ target: { tabId }, func: () => document.body ? document.body.innerText.slice(0, 400000) : "" });
+        text = result && result.result ? result.result : "";
+      } catch (error) {
+        return { error: String(error.message || error) };
+      }
+    }
+    return Shield.readPolicy(text);
+  },
+  async "tools.throwaway"(message) {
+    const url = String(message.url || "");
+    if (!/^https?:\/\//i.test(url)) return { error: "not a web address" };
+    let allowed = false;
+    try { allowed = await api.extension.isAllowedIncognitoAccess(); } catch { allowed = false; }
+    if (allowed) {
+      await api.windows.create({ url, incognito: true });
+      return { ok: true, incognito: true };
+    }
+    const window = await api.windows.create({ url });
+    return { ok: true, incognito: false, windowId: window.id, note: "Allow the shield in incognito (browser's extension page) for a truly throwaway window; this one is a normal window whose site cookies burn when it closes." };
+  },
+  async "container.open"(message) {
+    const identities = api.contextualIdentities;
+    if (!identities) return { error: "only Firefox has containers" };
+    const url = String(message.url || "");
+    const site = Shield.siteOf(Shield.hostOf(url));
+    const existing = (await identities.query({ name: "shield: " + site }))[0];
+    const identity = existing || (await identities.create({ name: "shield: " + site, color: "green", icon: "fence" }));
+    await api.tabs.create({ url, cookieStoreId: identity.cookieStoreId });
+    return { ok: true };
   },
   async "site.burn"(message) {
     return Shield.burnSite(String(message.site || ""), Array.isArray(message.origins) ? message.origins.map(String) : []);
@@ -594,6 +721,51 @@ const handlers = {
   },
 };
 
+async function applyModes(settings) {
+  await Shield.applyFocusHours(settings).catch((error) => console.warn("shield: focus hours", error));
+  await Shield.applyLowData(settings).catch((error) => console.warn("shield: low data", error));
+  await Shield.applySearchSwitch(settings).catch((error) => console.warn("shield: search", error));
+  await Shield.applyParental(settings).catch((error) => console.warn("shield: parental", error));
+}
+
+// Banking mode pauses the other extensions while a banking site is in front.
+api.tabs.onActivated.addListener((info) => {
+  (async () => {
+    const settings = await Shield.loadSettings();
+    if (!settings.modes.pauseExtensionsForBanking) return;
+    const tab = await api.tabs.get(info.tabId).catch(() => null);
+    const site = tab ? Shield.siteOf(Shield.hostOf(tab.url || "")) : "";
+    const banking = site && settings.modes.siteModes[site] === "banking";
+    await Shield.pauseOtherExtensions(Boolean(banking));
+  })().catch((error) => console.warn("shield: banking pause", error));
+});
+
+// Redirect hops of each tab's last navigation, for the chain viewer.
+if (api.webRequest && api.webRequest.onBeforeRedirect) {
+  api.webRequest.onBeforeRedirect.addListener((details) => {
+    if (details.type !== "main_frame" || details.tabId < 0) return;
+    Shield.recordHop(details.tabId, details.url, details.redirectUrl).catch(() => {});
+  }, { urls: ["<all_urls>"] });
+}
+if (api.webNavigation) {
+  api.webNavigation.onBeforeNavigate.addListener((details) => {
+    if (details.frameId === 0 && details.parentFrameId === -1) Shield.resetHops(details.tabId, details.url).catch(() => {});
+  });
+}
+
+// Downloads that expire, and the alarm that removes them.
+if (api.downloads && api.downloads.onChanged) {
+  api.downloads.onChanged.addListener((delta) => {
+    if (!delta.state || delta.state.current !== "complete") return;
+    (async () => {
+      const [item] = await api.downloads.search({ id: delta.id });
+      if (!item) return;
+      const settings = await Shield.loadSettings();
+      await Shield.scheduleDownloadExpiry(item, settings);
+    })().catch(() => {});
+  });
+}
+
 async function locationFor(settings, trusted) {
   const city = trusted ? null : await Shield.effectiveLocation(settings);
   if (!city) return null;
@@ -699,6 +871,9 @@ if (api.contextMenus) {
   api.runtime.onInstalled.addListener(() => {
     api.contextMenus.create({ id: "copy-clean-link", title: "Copy clean link (noah shield)", contexts: ["link"] });
     api.contextMenus.create({ id: "fill-decoy", title: "Fill this form with decoy details (noah shield)", contexts: ["editable"] });
+    api.contextMenus.create({ id: "throwaway", title: "Open in a throwaway window (noah shield)", contexts: ["link"] });
+    api.contextMenus.create({ id: "unshorten", title: "Where does this link go? (noah shield)", contexts: ["link"] });
+    if (api.contextualIdentities) api.contextMenus.create({ id: "container", title: "Open in this site's own container (noah shield)", contexts: ["link", "page"] });
   });
   api.contextMenus.onClicked.addListener((info, tab) => {
     (async () => {
@@ -710,6 +885,9 @@ if (api.contextMenus) {
       if (info.menuItemId === "fill-decoy" && tab) {
         await handlers["decoy.fill"]({ tabId: tab.id, site: Shield.siteOf(Shield.hostOf(tab.url || "")) });
       }
+      if (info.menuItemId === "throwaway") await handlers["tools.throwaway"]({ url: info.linkUrl });
+      if (info.menuItemId === "unshorten") await api.tabs.create({ url: api.runtime.getURL("tools.html") + "?unshorten=" + encodeURIComponent(info.linkUrl) });
+      if (info.menuItemId === "container") await handlers["container.open"]({ url: info.linkUrl || info.pageUrl });
     })().catch((error) => console.warn("shield: menu", error));
   });
 }
@@ -774,6 +952,9 @@ if (api.downloads && api.downloads.onCreated) {
   });
 }
 
+// The handlers by name, for the shield's own pages and tests running inside the worker.
+globalThis.handlersProxy = (type, message = {}) => handlers[type]({ ...message, type }, { url: api.runtime.getURL("background.js") });
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = message && handlers[message.type];
   if (!handler) {
@@ -783,7 +964,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

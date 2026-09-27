@@ -114,6 +114,73 @@
     </section>
 
     <section>
+      <h2>modes</h2>
+      <p class="muted">A profile sets many switches at once. Per site, a mode overrides it: put your bank on banking, your shops on shopping.</p>
+      <div class="row small">
+        <button class="ghost" data-profile="browsing">browsing: most private</button>
+        <button class="ghost" data-profile="shopping">shopping: prices and codes on</button>
+        <button class="ghost" data-profile="banking">banking: strict and plain</button>
+        <span id="profile-now" class="muted"></span>
+      </div>
+      <div class="grid two">
+        <label>Sites in banking mode<textarea data-mode-list="banking" rows="3" placeholder="bank.example"></textarea></label>
+        <label>Sites in shopping mode<textarea data-mode-list="shopping" rows="3"></textarea></label>
+        <label class="switch"><input type="checkbox" data-path="modes.pauseExtensionsForBanking"><span>Banking: pause every other extension while a banking site is in front (restored when you leave)</span></label>
+        <label class="switch"><input type="checkbox" data-path="modes.weeklyReport"><span>Weekly report: a notification with the week's numbers</span></label>
+        <label class="switch"><input type="checkbox" data-path="modes.lowData"><span>Low data: no media or fonts, no third-party images</span></label>
+        <label class="switch"><input type="checkbox" data-path="modes.batterySaver"><span>Battery saver: discard tabs left in the background for a while</span></label>
+        <label>Private search instead of Google, Bing and Yahoo results
+          <select data-select="modes.searchEngine"><option value="">leave searches alone</option><option value="duckduckgo">DuckDuckGo</option><option value="brave">Brave Search</option><option value="startpage">Startpage</option><option value="qwant">Qwant</option><option value="ecosia">Ecosia</option></select>
+        </label>
+        <label>Local-only mode<label class="switch"><input type="checkbox" data-path="localOnly"><span>The shield sends nothing anywhere: no feeds, no exit check, no price or breach lookups</span></label></label>
+      </div>
+      <h3>Focus hours</h3>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="modes.focus.enabled"><span>Block the distracting sites during the hours below</span></label>
+        <label>Sites<textarea data-list="modes.focus.sites" rows="3" placeholder="twitter.com&#10;youtube.com"></textarea></label>
+        <label>From<input type="time" data-text="modes.focus.start"></label>
+        <label>Until<input type="time" data-text="modes.focus.end"></label>
+        <label>Days<span class="row small" id="focus-days"></span></label>
+      </div>
+      <h3>Annoyances</h3>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="annoyances.banners"><span>Answer cookie banners with “reject all” for me</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.overlays"><span>Remove newsletter, paywall and app-nag overlays</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.autoplay"><span>Stop videos that start by themselves</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.timers"><span>Dim urgency claims; strike out countdowns that restart</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.pasteGuard"><span>Warn before pasting card numbers, ids, keys or seed phrases into the wrong place</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.uploadStrip"><span>Strip location and camera metadata from photos before they upload</span></label>
+        <label class="switch"><input type="checkbox" data-path="annoyances.darkEverywhere"><span>Dark mode on every light site</span></label>
+        <label>Dark mode on these sites<textarea data-list="annoyances.darkSites" rows="2"></textarea></label>
+        <label>Unblock copying and right-click on these sites<textarea data-list="annoyances.copySites" rows="2"></textarea></label>
+      </div>
+      <h3>Tab lock</h3>
+      <div class="grid two">
+        <label>Sites that lock after idle<textarea data-list="modes.lock.sites" rows="2"></textarea></label>
+        <label>Minutes idle<input type="number" min="1" max="120" data-number="modes.lock.minutes"></label>
+        <label>PIN (4 to 12 digits)<input type="password" id="lock-pin" inputmode="numeric" autocomplete="off"><button id="lock-pin-set" class="ghost">Set</button><span id="lock-pin-status" class="muted"></span></label>
+      </div>
+      <p class="muted">The lock is a curtain over a page left alone, not a vault: the page is still loaded underneath.</p>
+      <h3>Downloads that expire</h3>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="modes.expireDownloads.enabled"><span>Delete downloads from these sites after a while</span></label>
+        <label>Days<input type="number" min="1" max="365" data-number="modes.expireDownloads.days"></label>
+        <label>Sites<textarea data-list="modes.expireDownloads.sites" rows="2" placeholder="bank.example"></textarea></label>
+        <label class="switch"><input type="checkbox" data-path="modes.expireDownloads.allSensitive"><span>Also statements and spreadsheets (pdf, csv, xlsx, docx, ofx) from any site</span></label>
+      </div>
+      <h3>Parental mode</h3>
+      <p class="muted">Adult sites and keywords blocked, safe search forced on Google, Bing, DuckDuckGo and YouTube. Changing it needs the PIN. It is a browser-level filter, not a substitute for the operating system's family controls.</p>
+      <p class="muted">
+        <input type="password" id="parental-pin" placeholder="PIN" inputmode="numeric" autocomplete="off">
+        <button id="parental-on" class="ghost">Turn on</button>
+        <button id="parental-off" class="ghost">Turn off</button>
+        <button id="parental-setpin" class="ghost">Set or change PIN</button>
+        <span id="parental-status"></span>
+      </p>
+      <label>Extra sites to block<textarea data-list="modes.parental.extraSites" rows="2"></textarea></label>
+    </section>
+
+    <section>
       <h2>shopping</h2>
       <div class="grid two">
         <label class="switch"><input type="checkbox" data-path="shopping.compare"><span>Compare prices at other stores</span></label>
