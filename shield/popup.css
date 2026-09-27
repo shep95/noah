@@ -1,0 +1,91 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e0e0e;
+  --panel: #141414;
+  --line: #242424;
+  --text: #e4e4e4;
+  --muted: #8d8d8d;
+  --accent: #d8d8d8;
+  --good: #8fd18f;
+  --bad: #e08a8a;
+  --warn: #e0c48a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+header h1 { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
+h2 { font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: lowercase; color: #bdbdbd; margin: 0; }
+section {
+  margin: 8px 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+}
+.row { display: flex; align-items: center; gap: 10px; }
+.row h2 { flex: 1; }
+.row.small { flex-wrap: wrap; gap: 6px 12px; }
+.row.small .switch { font-size: 12px; }
+.muted { color: var(--muted); font-size: 12px; margin: 0; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #1e1e1e; color: #cfcfcf; }
+.pill.warn { background: #3a2f16; color: var(--warn); }
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.switch input { accent-color: var(--accent); margin: 0; }
+.switch.inline { font-size: 12px; }
+select {
+  width: 100%;
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #101010;
+  color: var(--text);
+}
+button.ghost {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: #cfcfcf;
+  cursor: pointer;
+}
+button.ghost:hover { background: #1c1c1c; }
+button.ghost.on { background: #262626; color: #fff; }
+.notice {
+  margin: 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #1a1a10;
+  border: 1px solid #3a3a1c;
+  color: var(--warn);
+  font-size: 12px;
+}
+.notice a { color: #fff; }
+#tunnel-status.up { color: var(--good); }
+#tunnel-status.held, #tunnel-status.error { color: var(--bad); }
+#tunnel-status.checking { color: var(--warn); }
+footer {
+  display: flex;
+  gap: 14px;
+  padding: 6px 14px 12px;
+  font-size: 12px;
+}
+footer a { color: var(--muted); text-decoration: none; }
+footer a:hover { color: #fff; }
+.watchers { display: grid; gap: 4px; font-size: 11px; color: #bdbdbd; max-height: 180px; overflow: auto; }
+.watcher { padding: 3px 6px; background: #101010; border-radius: 6px; }

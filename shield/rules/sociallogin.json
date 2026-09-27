@@ -1,0 +1,7 @@
+[
+  { "id": 1, "priority": 1, "action": { "type": "block" }, "condition": { "urlFilter": "||accounts.google.com/gsi/", "domainType": "thirdParty", "resourceTypes": ["script", "sub_frame", "xmlhttprequest", "image", "other"] } },
+  { "id": 2, "priority": 1, "action": { "type": "block" }, "condition": { "urlFilter": "||apis.google.com/js/platform.js", "domainType": "thirdParty", "resourceTypes": ["script"] } },
+  { "id": 3, "priority": 1, "action": { "type": "block" }, "condition": { "urlFilter": "||connect.facebook.net^*/sdk.js", "domainType": "thirdParty", "resourceTypes": ["script"] } },
+  { "id": 4, "priority": 1, "action": { "type": "block" }, "condition": { "urlFilter": "||facebook.com/plugins/login_button", "domainType": "thirdParty", "resourceTypes": ["sub_frame"] } },
+  { "id": 5, "priority": 1, "action": { "type": "block" }, "condition": { "urlFilter": "||appleid.cdn-apple.com/appleauth/static/jsapi/appleid/", "domainType": "thirdParty", "resourceTypes": ["script"] } }
+]

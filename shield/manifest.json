@@ -1,0 +1,184 @@
+{
+  "manifest_version": 3,
+  "name": "noah shield",
+  "version": "2026.9.27",
+  "description": "A tunnel that fails closed instead of leaking, trackers and data grabs stopped on every page, cheaper prices and working coupons while you shop, and a watch on anything that could record your screen.",
+  "author": "House of Asher",
+  "homepage_url": "https://noah.asherin.com/shield",
+  "minimum_chrome_version": "121",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_title": "noah shield",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "proxy",
+    "privacy",
+    "contentSettings",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "webRequest",
+    "webRequestAuthProvider",
+    "webNavigation",
+    "cookies",
+    "management",
+    "notifications",
+    "scripting",
+    "downloads",
+    "clipboardWrite",
+    "browsingData",
+    "idle",
+    "history",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/guard.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/hash.js",
+        "content/safety.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/shop.js"
+      ],
+      "css": [
+        "content/shop.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/links.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/checkout.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "trackers",
+        "enabled": true,
+        "path": "rules/trackers.json"
+      },
+      {
+        "id": "headers",
+        "enabled": true,
+        "path": "rules/headers.json"
+      },
+      {
+        "id": "parameters",
+        "enabled": true,
+        "path": "rules/parameters.json"
+      },
+      {
+        "id": "security",
+        "enabled": true,
+        "path": "rules/security.json"
+      },
+      {
+        "id": "mail",
+        "enabled": true,
+        "path": "rules/mail.json"
+      },
+      {
+        "id": "referrer",
+        "enabled": true,
+        "path": "rules/referrer.json"
+      },
+      {
+        "id": "sociallogin",
+        "enabled": false,
+        "path": "rules/sociallogin.json"
+      }
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://noah.asherin.com https: http:; base-uri 'none'; form-action 'none'"
+  },
+  "commands": {
+    "panic": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Period",
+        "mac": "Command+Shift+Period"
+      },
+      "description": "Panic: close every tab, clear history, drop the tunnel"
+    },
+    "rotate-fingerprint": {
+      "description": "Give every site a new fingerprint"
+    }
+  }
+}

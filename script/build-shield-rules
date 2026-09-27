@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Turn EasyPrivacy into the declarativeNetRequest ruleset noah shield ships.
+
+EasyPrivacy (https://easylist.to, GPLv3 / CC BY-SA 3.0) is written in the
+Adblock Plus filter syntax. declarativeNetRequest's `urlFilter` understands the
+same anchors (`||`, `|`, `^`, `*`), so most network filters translate one to
+one; element hiding, regular expressions and the options the browser cannot
+express (`$csp`, `$rewrite`, `$removeparam`, ...) are left out and counted.
+
+Usage: script/build-shield-rules [--from-dir <dir with the .txt files>]
+Writes shield/rules/trackers.json and prints what was kept and dropped.
+"""
+import json
+import os
+import re
+import sys
+import urllib.request
+
+SECTIONS = [
+    "easyprivacy_general.txt",
+    "easyprivacy_trackingservers.txt",
+    "easyprivacy_thirdparty.txt",
+    "easyprivacy_specific.txt",
+    "easyprivacy_allowlist.txt",
+]
+SOURCE = "https://raw.githubusercontent.com/easylist/easylist/master/easyprivacy/"
+# Chrome guarantees 30,000 static rules per extension; stay well under it.
+LIMIT = 28000
+
+RESOURCE_TYPES = {
+    "script": "script",
+    "image": "image",
+    "stylesheet": "stylesheet",
+    "object": "object",
+    "xmlhttprequest": "xmlhttprequest",
+    "subdocument": "sub_frame",
+    "document": "main_frame",
+    "ping": "ping",
+    "websocket": "websocket",
+    "media": "media",
+    "font": "font",
+    "other": "other",
+}
+ALL_TYPES = [
+    "script", "image", "stylesheet", "object", "xmlhttprequest", "sub_frame",
+    "ping", "websocket", "media", "font", "other",
+]
+
+# `$domain=` names may carry a wildcard TLD (`wayfair.*`); DNR wants plain names.
+DOMAIN_OK = re.compile(r"^[a-z0-9.-]+$")
+FILTER_OK = re.compile(r"^[a-zA-Z0-9.\-_/?=&%|^*:~+,;@!\[\]()]+$")
+
+
+def convert(line, next_id):
+    allow = line.startswith("@@")
+    if allow:
+        line = line[2:]
+    options = []
+    if "$" in line:
+        line, option_text = line.rsplit("$", 1)
+        options = option_text.split(",")
+    if not line or line.startswith("/") and line.endswith("/"):
+        return None, "regex"
+    if not FILTER_OK.match(line):
+        return None, "characters"
+    condition = {"urlFilter": line}
+    include_types = []
+    exclude_types = []
+    initiator = []
+    excluded_initiator = []
+    for option in options:
+        negated = option.startswith("~")
+        name = option[1:] if negated else option
+        if name == "third-party":
+            condition["domainType"] = "firstParty" if negated else "thirdParty"
+        elif name.startswith("domain="):
+            for domain in name[len("domain="):].split("|"):
+                target = excluded_initiator if domain.startswith("~") else initiator
+                domain = domain.lstrip("~")
+                if not DOMAIN_OK.match(domain):
+                    return None, "domain wildcard"
+                target.append(domain)
+        elif name in RESOURCE_TYPES:
+            (exclude_types if negated else include_types).append(RESOURCE_TYPES[name])
+        elif name in ("match-case",):
+            condition["isUrlFilterCaseSensitive"] = True
+        else:
+            return None, name
+    if include_types:
+        condition["resourceTypes"] = include_types
+    elif exclude_types:
+        condition["resourceTypes"] = [kind for kind in ALL_TYPES if kind not in exclude_types]
+    else:
+        condition["resourceTypes"] = ALL_TYPES
+    if initiator:
+        condition["initiatorDomains"] = initiator
+    if excluded_initiator:
+        condition["excludedInitiatorDomains"] = excluded_initiator
+    rule = {
+        "id": next_id,
+        "priority": 2 if allow else 1,
+        "action": {"type": "allow" if allow else "block"},
+        "condition": condition,
+    }
+    return rule, None
+
+
+def main():
+    from_dir = None
+    if len(sys.argv) == 3 and sys.argv[1] == "--from-dir":
+        from_dir = sys.argv[2]
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    rules = []
+    dropped = {}
+    seen = set()
+    for section in SECTIONS:
+        if from_dir:
+            with open(os.path.join(from_dir, section), encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        else:
+            with urllib.request.urlopen(SOURCE + section, timeout=60) as response:
+                text = response.read().decode("utf-8", "replace")
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line[0] in "![" or "##" in line or "#@#" in line or "#?#" in line:
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            rule, reason = convert(line, len(rules) + 1)
+            if rule is None:
+                dropped[reason] = dropped.get(reason, 0) + 1
+                continue
+            rules.append(rule)
+            if len(rules) >= LIMIT:
+                break
+    output = os.path.join(root, "shield", "rules", "trackers.json")
+    with open(output, "w", encoding="utf-8") as handle:
+        json.dump(rules, handle, separators=(",", ":"))
+        handle.write("\n")
+    print(f"{len(rules)} rules written to {output}")
+    for reason, count in sorted(dropped.items(), key=lambda item: -item[1]):
+        print(f"  dropped {count:5} for {reason}")
+
+
+if __name__ == "__main__":
+    main()

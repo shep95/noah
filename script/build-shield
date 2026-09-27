@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# Packages noah shield for every browser and signs its feeds.
+#
+#   dist/noah-shield-chromium.zip   Chrome, Edge, Brave, Opera, Vivaldi, Arc and
+#                                   every other Chromium browser (also what the
+#                                   Chrome Web Store and Edge Add-ons take)
+#   dist/noah-shield-firefox.zip    Firefox and Firefox-based browsers (what
+#                                   addons.mozilla.org signs)
+#   dist/noah-shield-safari.zip     the same code for Xcode's
+#                                   safari-web-extension-converter
+#
+# With a website checkout it also writes the signed feeds the shield reads
+# (public/shield/{servers,coupons,latest}.json and their .sig files):
+#
+#   NOAH_RELEASE_SIGNING_KEY_FILE=<key.pem> script/build-shield [<website-checkout>]
+#
+# The signature is ed25519 over "noah-shield\n<file name>\n" followed by the
+# file's bytes, checked in shield/lib/feeds.js against the same public key
+# noah's updater trusts. Needs OpenSSL 3, python3 and zip.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+site="${1:-}"
+version="$(python3 -c 'import json; print(json.load(open("shield/manifest.json"))["version"])')"
+mkdir -p dist
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+
+copy_sources() {
+    mkdir -p "$1"
+    cp -r shield/background.js shield/popup.html shield/popup.css shield/popup.js \
+        shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js \
+        shield/lib shield/content shield/rules shield/icons "$1/"
+}
+
+# Chromium: the manifest as written.
+copy_sources "$stage/chromium"
+cp shield/manifest.json "$stage/chromium/manifest.json"
+(cd "$stage/chromium" && rm -f "$OLDPWD/dist/noah-shield-chromium.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-chromium.zip" .)
+
+# Firefox: an event page instead of a service worker, its own add-on id and
+# update address, and no permissions it does not know.
+copy_sources "$stage/firefox"
+python3 - shield/manifest.json "$stage/firefox/manifest.json" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+manifest["background"] = {"scripts": [
+    "lib/common.js", "lib/feeds.js", "lib/tunnel.js", "lib/privacy.js", "lib/watch.js", "lib/shopping.js", "lib/brands.js", "lib/safety.js", "lib/owners.js", "lib/cities.js", "lib/tracking.js", "background.js",
+]}
+unknown = {"contentSettings", "webRequestAuthProvider", "declarativeNetRequestFeedback"}
+manifest["permissions"] = [p for p in manifest["permissions"] if p not in unknown] + ["webRequestBlocking"]
+manifest.pop("minimum_chrome_version", None)
+manifest["browser_specific_settings"] = {
+    "gecko": {
+        "id": "shield@noah.asherin.com",
+        "strict_min_version": "128.0",
+        "update_url": "https://noah.asherin.com/shield/updates.json",
+        "data_collection_permissions": {"required": ["none"]},
+    }
+}
+json.dump(manifest, open(sys.argv[2], "w"), indent=2)
+PY
+(cd "$stage/firefox" && rm -f "$OLDPWD/dist/noah-shield-firefox.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-firefox.zip" .)
+
+# Safari: Xcode converts the Chromium layout; the converter dislikes only the
+# minimum Chrome version.
+copy_sources "$stage/safari"
+python3 - shield/manifest.json "$stage/safari/manifest.json" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+manifest.pop("minimum_chrome_version", None)
+json.dump(manifest, open(sys.argv[2], "w"), indent=2)
+PY
+(cd "$stage/safari" && rm -f "$OLDPWD/dist/noah-shield-safari.zip" && zip -qr -X "$OLDPWD/dist/noah-shield-safari.zip" .)
+
+for file in dist/noah-shield-chromium.zip dist/noah-shield-firefox.zip dist/noah-shield-safari.zip; do
+    (cd dist && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
+    echo "$file $(du -h "$file" | cut -f1)"
+done
+
+[[ -n "$site" ]] || exit 0
+
+signing_key="${NOAH_RELEASE_SIGNING_KEY_FILE:?set NOAH_RELEASE_SIGNING_KEY_FILE to the release signing key}"
+expected_public_key="$(tr -d ' \n' < crates/auto_update/release_public_key.txt)"
+actual_public_key="$(openssl pkey -in "$signing_key" -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')"
+if [[ "$actual_public_key" != "$expected_public_key" ]]; then
+    echo "$signing_key isn't the key in crates/auto_update/release_public_key.txt" >&2
+    exit 1
+fi
+if ! grep -q "$expected_public_key" shield/lib/common.js; then
+    echo "shield/lib/common.js does not carry the release public key" >&2
+    exit 1
+fi
+
+feeds="$site/public/shield"
+mkdir -p "$feeds"
+cp dist/noah-shield-chromium.zip dist/noah-shield-firefox.zip dist/noah-shield-safari.zip "$feeds/"
+(cd "$feeds" && for file in noah-shield-chromium.zip noah-shield-firefox.zip noah-shield-safari.zip; do sha256sum "$file" > "$file.sha256"; done)
+
+generated="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+expires="$(date -u -d '+40 days' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+40d +%Y-%m-%dT%H:%M:%SZ)"
+sha_chromium="$(sha256sum dist/noah-shield-chromium.zip | cut -d' ' -f1)"
+sha_firefox="$(sha256sum dist/noah-shield-firefox.zip | cut -d' ' -f1)"
+
+# The curated lists live beside the feeds so the site's history keeps them;
+# the build only stamps the dates and signs.
+python3 - "$feeds" "$version" "$generated" "$expires" "$sha_chromium" "$sha_firefox" <<'PY'
+import json, os, sys
+feeds, version, generated, expires, sha_chromium, sha_firefox = sys.argv[1:]
+
+def load(name, default):
+    path = os.path.join(feeds, name)
+    if os.path.exists(path):
+        with open(path) as handle:
+            return json.load(handle)
+    return default
+
+servers = load("servers.json", {"servers": []})
+servers.update({"generated": generated, "expires": expires})
+coupons = load("coupons.json", {"coupons": []})
+coupons.update({"generated": generated, "expires": expires})
+latest = {
+    "generated": generated,
+    "expires": expires,
+    "version": version,
+    "page": "https://noah.asherin.com/shield",
+    "notes": load("latest.json", {}).get("notes", ""),
+    "chromium": {"url": "https://noah.asherin.com/shield/noah-shield-chromium.zip", "sha256": sha_chromium},
+    "firefox": {"url": "https://noah.asherin.com/shield/noah-shield-firefox.zip", "sha256": sha_firefox},
+}
+for name, data in (("servers.json", servers), ("coupons.json", coupons), ("latest.json", latest)):
+    with open(os.path.join(feeds, name), "w") as handle:
+        json.dump(data, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+# Firefox's own update manifest, for copies installed from this site.
+updates = {
+    "addons": {
+        "shield@noah.asherin.com": {
+            "updates": [
+                {
+                    "version": version,
+                    "update_link": "https://noah.asherin.com/shield/noah-shield-firefox.xpi",
+                    "update_hash": "sha256:" + sha_firefox,
+                    "applications": {"gecko": {"strict_min_version": "128.0"}},
+                }
+            ]
+        }
+    }
+}
+with open(os.path.join(feeds, "updates.json"), "w") as handle:
+    json.dump(updates, handle, indent=2)
+    handle.write("\n")
+PY
+
+for name in servers.json coupons.json latest.json; do
+    message="$(mktemp)"
+    { printf 'noah-shield\n%s\n' "$name"; cat "$feeds/$name"; } > "$message"
+    openssl pkeyutl -sign -rawin -inkey "$signing_key" -in "$message" | openssl base64 -A > "$feeds/$name.sig"
+    rm -f "$message"
+    echo "signed $feeds/$name"
+done
+echo "noah shield $version: feeds written to $feeds"

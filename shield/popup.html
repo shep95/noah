@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>noah shield</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/32.png" alt="" width="20" height="20">
+    <h1>noah shield</h1>
+    <span id="version" class="muted"></span>
+    <button id="quiet" class="ghost" title="Quiet: the shield shows no notifications">quiet</button>
+  </header>
+
+  <p id="update" class="notice" hidden></p>
+
+  <section id="site-section">
+    <div class="row">
+      <h2 id="site">this page</h2>
+      <span id="blocked" class="pill" title="requests to trackers stopped on this tab">0 stopped</span>
+    </div>
+    <label class="switch"><input type="checkbox" id="trusted"><span>Trust this site: let everything through here</span></label>
+    <label class="switch"><input type="checkbox" id="strict"><span>No cookies at all on this site</span></label>
+    <label class="switch"><input type="checkbox" id="capture"><span>May record screen and camera without asking</span></label>
+    <label class="switch"><input type="checkbox" id="shopquiet"><span>No shopping help on this site</span></label>
+    <p id="score" class="muted"></p>
+    <div class="row small">
+      <button id="burn" class="ghost" title="Delete this site's cookies, cache and storage">burn this site</button>
+      <button id="watchers" class="ghost">who's watching</button>
+      <button id="alias" class="ghost" title="An email alias for this site">alias</button>
+      <button id="decoy" class="ghost" title="Fill the sign-up form with decoy details">decoy form</button>
+    </div>
+    <div id="watchers-list" class="watchers" hidden></div>
+    <p id="alias-out" class="muted" hidden></p>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2>tunnel</h2>
+      <label class="switch inline"><input type="checkbox" id="tunnel-on"><span>on</span></label>
+    </div>
+    <select id="server"></select>
+    <p id="tunnel-status" class="muted"></p>
+    <div class="row small">
+      <label class="switch"><input type="checkbox" id="kill"><span>fail closed</span></label>
+      <label class="switch"><input type="checkbox" id="webrtc"><span>guard WebRTC</span></label>
+      <button id="recheck" class="ghost">check exit</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row"><h2>data protection</h2><span id="today" class="muted"></span></div>
+    <label class="switch"><input type="checkbox" id="trackers"><span>Stop trackers (EasyPrivacy, 9,500 rules)</span></label>
+    <label class="switch"><input type="checkbox" id="cookies"><span>Block third-party cookies</span></label>
+    <label class="switch"><input type="checkbox" id="geo"><span>Deny location to every site</span></label>
+    <label class="switch"><input type="checkbox" id="fingerprint"><span>Blur fingerprints (canvas, hardware, battery)</span></label>
+    <label class="switch"><input type="checkbox" id="params"><span>Strip tracking parameters from links</span></label>
+    <label class="switch"><input type="checkbox" id="gpc"><span>Send Global Privacy Control and Do Not Track</span></label>
+  </section>
+
+  <section>
+    <h2>shopping</h2>
+    <label class="switch"><input type="checkbox" id="compare"><span>Show the same product cheaper elsewhere</span></label>
+    <label class="switch"><input type="checkbox" id="coupons"><span>Try working codes at checkout, never place the order</span></label>
+    <p id="shop-stats" class="muted"></p>
+  </section>
+
+  <section>
+    <div class="row"><h2>recording watch</h2><span id="watch-count" class="pill"></span></div>
+    <label class="switch"><input type="checkbox" id="guard-screen"><span>Pages must ask before recording the screen</span></label>
+    <label class="switch"><input type="checkbox" id="guard-camera"><span>Pages must ask before using camera or microphone</span></label>
+    <p id="watch-note" class="muted"></p>
+  </section>
+
+  <footer>
+    <a href="#" id="options">settings and servers</a>
+    <a href="https://noah.asherin.com/shield" target="_blank" rel="noopener">about</a>
+    <a href="https://noah.asherin.com/download" target="_blank" rel="noopener" title="Programs outside the browser recording your screen show up in noah's device room">noah's device room</a>
+  </footer>
+
+  <script src="lib/common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

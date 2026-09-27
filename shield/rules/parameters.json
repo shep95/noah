@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+              "utm_name", "utm_cid", "utm_reader", "utm_referrer", "utm_social", "utm_social-type",
+              "fbclid", "gclid", "gclsrc", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid",
+              "ttclid", "igshid", "igsh", "mc_cid", "mc_eid", "mkt_tok", "_hsenc", "_hsmi", "hsCtaTracking",
+              "vero_id", "vero_conv", "oly_anon_id", "oly_enc_id", "wickedid", "ef_id", "s_kwcid",
+              "_openstat", "ref_src", "ref_url", "rb_clickid", "srsltid", "_ga", "_gl", "_kx",
+              "ncid", "cmpid", "spm", "scm", "trk", "trkCampaign", "sc_campaign", "sc_channel",
+              "sc_content", "sc_medium", "sc_outcome", "sc_geo", "sc_country", "pk_campaign",
+              "pk_kwd", "pk_source", "pk_medium", "pk_content", "piwik_campaign", "piwik_kwd",
+              "matomo_campaign", "matomo_kwd", "at_medium", "at_campaign", "at_custom1",
+              "at_custom2", "at_custom3", "at_custom4", "soc_src", "soc_trk"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "urlFilter": "*",
+      "resourceTypes": ["main_frame", "sub_frame"]
+    }
+  }
+]

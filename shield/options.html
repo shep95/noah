@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · settings</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="options">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>noah shield</h1>
+    <span id="version" class="muted"></span>
+  </header>
+
+  <main>
+    <section>
+      <h2>tunnel servers</h2>
+      <p class="muted">
+        The tunnel is an encrypted proxy the browser sends everything through. It fails closed: when the server does not
+        answer, requests stop instead of slipping out on the normal connection. DNS is resolved by the server and WebRTC
+        is held to proxied routes. It protects this browser, not the rest of the computer.
+      </p>
+      <table id="servers"></table>
+      <details>
+        <summary>Add a server of your own</summary>
+        <p class="muted">Any HTTPS proxy or SOCKS5 server works: one you rent, one a friend runs, or Tor on this computer. A plain <code>http</code> proxy across the internet is refused because everyone on the path could read it.</p>
+        <form id="add-server" class="grid">
+          <label>Name <input name="name" maxlength="80" placeholder="my server in Amsterdam"></label>
+          <label>Kind
+            <select name="kind"><option value="https">https</option><option value="socks5">socks5</option><option value="http">http (local only)</option></select>
+          </label>
+          <label>Host <input name="host" required maxlength="253" placeholder="proxy.example.net"></label>
+          <label>Port <input name="port" required type="number" min="1" max="65535" value="443"></label>
+          <label>User name <input name="username" maxlength="200" autocomplete="off"></label>
+          <label>Password <input name="password" type="password" maxlength="200" autocomplete="off"></label>
+          <label>Country (two letters) <input name="country" maxlength="2" placeholder="NL"></label>
+          <label>City <input name="city" maxlength="60"></label>
+          <button type="submit" class="ghost">Add server</button>
+          <span id="add-server-error" class="bad"></span>
+        </form>
+      </details>
+      <p class="muted">Vetted servers come from noah's signed feed (<span id="feed-servers">not fetched yet</span>). <button id="refresh-feeds" class="ghost">refresh feeds</button></p>
+    </section>
+
+    <section>
+      <h2>data protection</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="privacy.trackers"><span>Stop trackers (EasyPrivacy rules)</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.thirdPartyCookies" data-invert><span>Block third-party cookies</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.purgeTrackerCookies"><span>Delete cookies trackers already left, twice a day</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.geolocation" data-block><span>Deny location to every site</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.notifications" data-block><span>Deny notification prompts</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.camera" data-block><span>Deny camera outright (instead of asking)</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.microphone" data-block><span>Deny microphone outright (instead of asking)</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.fingerprint"><span>Blur fingerprints</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.stripParameters"><span>Strip tracking parameters from links</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.gpc"><span>Send Global Privacy Control and Do Not Track</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.adTopics"><span>Allow the browser's ad topics and ad measurement</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.prefetch"><span>Allow link prefetching (loads pages you did not open)</span></label>
+      </div>
+      <p class="muted"><button id="purge" class="ghost">Delete tracker cookies now</button> <span id="purge-result"></span></p>
+      <div class="grid two">
+        <label>Trusted sites (everything through)<textarea data-list="privacy.trustedSites" rows="4" placeholder="one site per line, like bank.example"></textarea></label>
+        <label>No-cookie sites<textarea data-list="privacy.strictCookieSites" rows="4" placeholder="one site per line"></textarea></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>fingerprint and location</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="privacy.fingerprint"><span>Blur fingerprints (canvas, hardware, battery)</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.webglNoise"><span>WebGL noise</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.audioNoise"><span>Audio noise</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.perSite"><span>A different fingerprint for every site</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.blendIn"><span>Blend in: look like Windows, Chrome, 1920×1080, common fonts</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.stealth"><span>Stealth: the shield's own elements get unguessable names</span></label>
+        <label class="switch"><input type="checkbox" data-path="privacy.linkCleaner"><span>Clean links before you follow or copy them (redirect wrappers, tracking parameters)</span></label>
+      </div>
+      <div class="grid two">
+        <label>Rotate the fingerprint
+          <select data-select="privacy.rotate"><option value="session">every browser session</option><option value="daily">every day</option><option value="hourly">every hour</option></select>
+        </label>
+        <label>Location every site sees
+          <select data-select="privacy.location.mode"><option value="deny">deny (sites get nothing)</option><option value="real">real, on the browser's prompt</option><option value="tunnel">the tunnel's country</option><option value="fake">a city I choose</option></select>
+        </label>
+        <label>City for the fake location
+          <select data-select="privacy.location.city" id="city-select"></select>
+        </label>
+        <label>Toolbar meter
+          <select data-select="privacy.meter"><option value="count">trackers stopped on this tab</option><option value="grade">privacy grade of this site</option></select>
+        </label>
+      </div>
+      <p class="muted"><button id="rotate-now" class="ghost">New fingerprint now</button> Timezone, language and coordinates follow the chosen location, so they agree with the tunnel's exit. A page reload picks changes up.</p>
+    </section>
+
+    <section>
+      <h2>cookies, history and identity</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="privacy.burnOnClose"><span>Burn a site's cookies when its last tab closes</span></label>
+        <label>Sites to keep signed in<textarea data-list="privacy.keepSites" rows="3" placeholder="mail.example"></textarea></label>
+        <label>Sign out of these sites after idle<textarea data-list="privacy.logoutSites" rows="3"></textarea></label>
+        <label>Sites that leave no history<textarea data-list="privacy.forgetHistorySites" rows="3"></textarea></label>
+        <label>Your email address, for plus-address aliases and decoy forms<input type="email" data-text="privacy.aliasBase" placeholder="you@example.com"></label>
+        <label>SimpleLogin API key (optional, real aliases instead of plus-addresses)<input type="password" data-text="privacy.simpleLoginKey" autocomplete="off"></label>
+        <label>Your name(s) to blur on pages (anti-dox)<textarea data-list-raw="privacy.hideNames" rows="2" placeholder="one per line"></textarea></label>
+      </div>
+      <h3>Settings sync, end to end encrypted</h3>
+      <p class="muted">Your settings travel through the browser's own sync as a blob only your passphrase opens. Set the same passphrase on each browser.</p>
+      <p class="muted"><input type="password" id="sync-passphrase" placeholder="passphrase (8+ characters)" autocomplete="off"> <button id="sync-set" class="ghost">Turn sync on</button> <button id="sync-pull" class="ghost">Pull from sync now</button> <button id="sync-off" class="ghost">Turn off</button> <span id="sync-result"></span></p>
+      <h3>Permission history</h3>
+      <table id="permissions"></table>
+    </section>
+
+    <section>
+      <h2>shopping</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="shopping.compare"><span>Compare prices at other stores</span></label>
+        <label class="switch"><input type="checkbox" data-path="shopping.coupons"><span>Collect codes the stores show</span></label>
+        <label class="switch"><input type="checkbox" data-path="shopping.autoApply"><span>Try codes at checkout by itself</span></label>
+        <label class="switch"><input type="checkbox" data-path="shopping.clipCoupons"><span>Clip the coupon Amazon shows on a product</span></label>
+      </div>
+      <p class="muted">Price lookups fetch the other stores' public search pages with no cookies and only the product's name. The shield never places an order; it fills the code box and presses apply.</p>
+      <label>Your own codes, one per line as <code>store.example CODE optional note</code> (no store means try it everywhere)
+        <textarea id="codes" rows="4"></textarea></label>
+      <label>Sites where shopping help stays quiet<textarea data-list="shopping.quietSites" rows="3"></textarea></label>
+      <p class="muted">noah's coupon feed: <span id="feed-coupons">not fetched yet</span>.</p>
+    </section>
+
+    <section>
+      <h2>security and account safety</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="security.httpsUpgrade"><span>Upgrade every site to https (local networks excepted)</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.lookalike"><span>Stop lookalike domains before they load (paypa1.com, amazon-verify.net)</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.passwordReuse"><span>Warn when a password you used elsewhere is typed into a new site</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.passwordHttp"><span>Warn when a password would travel over plain http</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.breachCheck"><span>Check passwords against known leaks (Have I Been Pwned range API; five hex characters leave the browser)</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.downloadWarn"><span>Hold risky downloads (programs, scripts, archives) until you have read why</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.clipboardGuard"><span>Pages must ask before reading the clipboard</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.clipboardWipe"><span>Wipe the clipboard 30 seconds after copying from a password field</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.hiddenFields"><span>Disarm hidden form fields that harvest autofill</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.formLeak"><span>Stop what you type from leaving for third parties before you submit</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.walletGuard"><span>Crypto wallet guard: approvals, signatures and address swaps wait for you</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.scamPopups"><span>Break fake support pages (alert loops, "call this number")</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.hiddenFrames"><span>Remove hidden third-party frames</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.referrer"><span>Hide the page you came from (Referer) from other sites</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.mailPixels"><span>Block tracking pixels in webmail</span></label>
+        <label class="switch"><input type="checkbox" data-path="security.socialLogin"><span>Block "sign in with Google / Facebook / Apple" widgets on other sites</span></label>
+      </div>
+      <div class="grid two">
+        <label>VirusTotal API key (optional; risky download addresses are checked against its engines)<input type="password" data-text="security.virusTotalKey" autocomplete="off"></label>
+        <label>Have I Been Pwned API key (optional; needed only for email checks)<input type="password" data-text="security.hibpKey" autocomplete="off"></label>
+      </div>
+      <p class="muted">
+        <button id="check-email" class="ghost">Check an email address against known breaches</button>
+        <input id="email-to-check" type="email" placeholder="you@example.com">
+        <span id="email-result"></span>
+      </p>
+      <p class="muted"><button id="forget-passwords" class="ghost">Forget which sites saw which passwords</button> (only per-install hashes are kept, never the passwords)</p>
+      <label>Lookalike domains you have accepted<textarea data-list="security.allowedLookalikes" rows="2"></textarea></label>
+    </section>
+
+    <section>
+      <h2>recording watch</h2>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="capture.guardScreen"><span>Pages must ask before recording the screen</span></label>
+        <label class="switch"><input type="checkbox" data-path="capture.guardCamera"><span>Pages must ask before using camera or microphone</span></label>
+      </div>
+      <label>Sites allowed without asking<textarea data-list="capture.allowedSites" rows="3" placeholder="meet.example"></textarea></label>
+      <h3>Other extensions in this browser</h3>
+      <p class="muted">An extension with capture permissions and reach into every site can take a screenshot of every frame you see. Ones that were not installed from a store weigh more. Disabling is reversible here or in the browser's own extension page.</p>
+      <table id="extensions"></table>
+      <p class="muted">Programs outside the browser (screen recorders, remote access tools) are what noah's <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">device room</a> looks for.</p>
+    </section>
+
+    <section>
+      <h2>about</h2>
+      <p class="muted" id="about"></p>
+      <p class="muted">Feeds are signed with noah's ed25519 release key and refused when the signature does not match, so the website alone cannot change what the shield does. The shield sends nothing about you anywhere: no accounts, no telemetry. Tracker rules are EasyPrivacy (GPLv3 / CC BY-SA 3.0). Source: <a href="https://github.com/shep95/noah/tree/main/shield" target="_blank" rel="noopener">github.com/shep95/noah</a>.</p>
+    </section>
+  </main>
+
+  <script src="lib/common.js"></script>
+  <script src="lib/cities.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
