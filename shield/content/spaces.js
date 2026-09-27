@@ -271,13 +271,17 @@
     auditNote.style.flex = "1";
     auditNote.style.color = "#9aa298";
     auditNote.style.fontSize = "11px";
-    auditNote.textContent = "Auditing your own platform? Turn on inspect mode from the shield popup, then reload.";
-    const auditBtn = document.createElement("a");
-    auditBtn.href = "javascript:void(0)";
+    auditNote.textContent = "Auditing your own platform?";
+    const auditBtn = document.createElement("button");
+    auditBtn.type = "button";
+    auditBtn.style.all = "unset";
+    auditBtn.style.cursor = "pointer";
+    auditBtn.style.padding = "3px 10px";
+    auditBtn.style.borderRadius = "6px";
+    auditBtn.style.border = "1px solid rgba(180, 210, 190, .25)";
     auditBtn.style.color = "#a9cf9f";
-    auditBtn.style.textDecoration = "underline";
     auditBtn.style.fontSize = "11px";
-    auditBtn.textContent = "how";
+    auditBtn.textContent = "arm inspect + reload";
     auditBtn.addEventListener("click", (event) => {
       event.preventDefault();
       window.dispatchEvent(new CustomEvent("noah-space-audit-request"));

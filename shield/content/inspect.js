@@ -221,10 +221,22 @@
         try {
           const clone = response.clone();
           const type = (response.headers.get("content-type") || "").toLowerCase();
-          if (/^(text\/|application\/(json|xml|xhtml|javascript|x-www-form-urlencoded|graphql)|application\/[^;]*\+json)/.test(type) || type === "") {
-            const body = await clone.text();
-            event.responseBody = body.slice(0, MAX_BODY);
-            if (body.length > MAX_BODY) event.responseTruncated = body.length;
+          // Streaming responses (SSE, chunked JSON) never finish — race the
+          // read against a five-second timer so a live feed never stalls
+          // this event, and put a note on the row instead.
+          if (/^text\/event-stream/.test(type)) {
+            event.responseBody = "<streaming response (server-sent events); frames captured separately>";
+          } else if (/^(text\/|application\/(json|xml|xhtml|javascript|x-www-form-urlencoded|graphql)|application\/[^;]*\+json)/.test(type) || type === "") {
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("read-timeout")), 5000));
+            try {
+              const body = await Promise.race([clone.text(), timeout]);
+              event.responseBody = body.slice(0, MAX_BODY);
+              if (body.length > MAX_BODY) event.responseTruncated = body.length;
+            } catch (readError) {
+              event.responseBody = String(readError && readError.message === "read-timeout"
+                ? "<response body still streaming after 5s>"
+                : "<could not read response body>");
+            }
           } else {
             event.responseBody = `<binary ${type || "unknown"}>`;
           }
@@ -402,9 +414,13 @@
 
   // ---- postMessage ------------------------------------------------
   const realPost = window.postMessage.bind(window);
-  window.postMessage = function (message, targetOrigin, transfer) {
-    push({ kind: "postMessage.send", to: String(targetOrigin || "*"), body: textOf(message) });
-    return transfer === undefined ? realPost(message, targetOrigin) : realPost(message, targetOrigin, transfer);
+  window.postMessage = function (...args) {
+    const [message, targetOrArgs] = args;
+    const to = targetOrArgs && typeof targetOrArgs === "object" && !Array.isArray(targetOrArgs) && "targetOrigin" in targetOrArgs
+      ? targetOrArgs.targetOrigin
+      : (typeof targetOrArgs === "string" ? targetOrArgs : "*");
+    push({ kind: "postMessage.send", to: String(to || "*"), body: textOf(message) });
+    return realPost(...args);
   };
   window.addEventListener("message", (event) => {
     push({ kind: "postMessage.recv", from: event.origin || "?", body: textOf(event.data) });
@@ -431,7 +447,7 @@
     panel.id = "noah-inspect-panel";
     panel.innerHTML = `
       <style>
-        #noah-inspect-panel { position: fixed; right: 12px; bottom: 12px; z-index: 2147483000; width: 460px; max-height: 78vh; display: flex; flex-direction: column; background: rgba(8, 12, 10, .96); color: #d8ddd6; border: 1px solid rgba(180, 210, 190, .16); border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.5); font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+        #noah-inspect-panel { position: fixed; right: 12px; bottom: 12px; z-index: 2147483647; width: 460px; max-height: 78vh; display: flex; flex-direction: column; background: rgba(8, 12, 10, .96); color: #d8ddd6; border: 1px solid rgba(180, 210, 190, .16); border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.5); font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
         #noah-inspect-panel header { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-bottom: 1px solid rgba(180, 210, 190, .1); }
         #noah-inspect-panel header b { font-family: Georgia, serif; font-weight: 400; font-size: 14px; color: #f1f4ef; flex: 1; }
         #noah-inspect-panel .noah-inspect-warn { padding: 8px 11px; background: rgba(220, 200, 150, .08); color: #dcc896; font-size: 11px; border-bottom: 1px solid rgba(220, 200, 150, .18); }
@@ -451,6 +467,9 @@
         #noah-inspect-panel .noah-inspect-row .noah-inspect-op { color: #a9cf9f; font-size: 10px; margin-left: 4px; font-family: ui-monospace, SFMono-Regular, monospace; }
         #noah-inspect-panel .noah-inspect-body { display: none; margin-top: 6px; padding: 6px 8px; background: rgba(180, 210, 190, .03); border-radius: 6px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: #b9beb7; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto; }
         #noah-inspect-panel .noah-inspect-row.open .noah-inspect-body { display: block; }
+        #noah-inspect-panel .noah-inspect-empty { padding: 12px 11px; color: #9aa298; font-size: 12px; border-bottom: 1px solid rgba(180, 210, 190, .04); }
+        #noah-inspect-panel .noah-inspect-empty a { color: #a9cf9f; text-decoration: underline; }
+        #noah-inspect-panel[data-has-events="true"] .noah-inspect-empty { display: none; }
         #noah-inspect-panel footer { padding: 6px 11px; font-size: 10px; color: #6f766e; border-top: 1px solid rgba(180, 210, 190, .08); }
         #noah-inspect-panel[data-collapsed="true"] .noah-inspect-list, #noah-inspect-panel[data-collapsed="true"] .noah-inspect-tools, #noah-inspect-panel[data-collapsed="true"] .noah-inspect-warn, #noah-inspect-panel[data-collapsed="true"] footer { display: none; }
       </style>
@@ -465,8 +484,10 @@
       <div class="noah-inspect-warn">recording this page's requests, forms, storage, WebSocket frames, live streams and postMessage traffic in full, tokens and secrets included. only turn this on for a site you own or a platform you are authorised to audit.</div>
       <div class="noah-inspect-tools">
         <input placeholder="filter (url or body substring)" class="noah-inspect-filter">
+        <button class="noah-inspect-reload" title="Reload so the panel catches the requests the page already made">reload</button>
       </div>
       <div class="noah-inspect-list"></div>
+      <div class="noah-inspect-empty">Nothing recorded yet on this page. Anything the page fetches, posts, streams or reads next lands here in full. If the page has already finished loading, <a href="javascript:void(0)" class="noah-inspect-reload-link">reload</a> to catch what it already sent.</div>
       <footer>Nothing leaves the browser. Copy the transcript into your bug tracker.</footer>
     `;
     document.documentElement.append(panel);
@@ -483,6 +504,9 @@
       event.target.textContent = collapsed ? "show" : "hide";
     });
     panel.querySelector(".noah-inspect-filter").addEventListener("input", renderList);
+    const reloadNow = () => { try { location.reload(); } catch {} };
+    panel.querySelector(".noah-inspect-reload").addEventListener("click", reloadNow);
+    panel.querySelector(".noah-inspect-reload-link").addEventListener("click", reloadNow);
   }
 
   function renderPanel() {
@@ -502,6 +526,7 @@
       list.append(rowFor(event));
     }
     panel.querySelector(".noah-inspect-count").textContent = String(events.length);
+    panel.dataset.hasEvents = events.length ? "true" : "false";
   }
   function renderRow(event) {
     if (!panel) return;
@@ -514,6 +539,7 @@
     list.append(rowFor(event));
     list.scrollTop = list.scrollHeight;
     panel.querySelector(".noah-inspect-count").textContent = String(events.length);
+    panel.dataset.hasEvents = "true";
   }
   function rowFor(event) {
     const row = document.createElement("div");

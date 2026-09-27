@@ -31,7 +31,12 @@
   window.addEventListener("noah-space-audit-request", () => {
     api.runtime.sendMessage({ type: "inspect.arm.self" }, (reply) => {
       if (api.runtime.lastError || !reply || !reply.enabled) return;
-      try { window.dispatchEvent(new CustomEvent("noah-inspect-decision", { detail: { enabled: true } })); } catch {}
+      // Reload so the panel catches the requests the page has already made.
+      // The arm state is stored per-tab-id in the background's session, so
+      // the fresh page load will see enabled=true on its first bridge call.
+      try { location.reload(); } catch {
+        try { window.dispatchEvent(new CustomEvent("noah-inspect-decision", { detail: { enabled: true } })); } catch {}
+      }
     });
   });
 })();

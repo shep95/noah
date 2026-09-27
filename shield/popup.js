@@ -585,26 +585,38 @@ async function refreshInspect() {
   if (!tab) return;
   const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
   const on = Boolean(status && status.enabled);
-  byId("inspect-toggle").textContent = on ? "stop inspecting" : "arm this tab";
-  byId("inspect-count").textContent = on ? "recording" : "off";
+  byId("inspect-toggle").textContent = on ? "stop inspecting" : "arm this tab and reload";
+  byId("inspect-quiet").textContent = on ? "clear" : "arm without reload";
+  byId("inspect-count").textContent = on ? "recording · click the shield icon on the tab to see live" : "off";
 }
 byId("inspect-toggle").addEventListener("click", async () => {
   const tab = await activeTab();
   if (!tab) return;
   const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
-  const on = !(status && status.enabled);
-  await Shield.send({ type: "inspect.arm", tabId: tab.id, on });
-  await refreshInspect();
+  const wasOn = Boolean(status && status.enabled);
+  if (wasOn) {
+    // Turn it off; no reload.
+    await Shield.send({ type: "inspect.arm", tabId: tab.id, on: false });
+    await refreshInspect();
+    return;
+  }
+  // Arm and reload so the panel picks up everything from the first request.
+  await Shield.send({ type: "inspect.arm", tabId: tab.id, on: true });
+  await Shield.api.tabs.reload(tab.id);
+  window.close();
 });
-byId("inspect-reload").addEventListener("click", async () => {
+byId("inspect-quiet").addEventListener("click", async () => {
   const tab = await activeTab();
   if (!tab) return;
   const status = await Shield.send({ type: "inspect.status", tabId: tab.id });
-  if (!status || !status.enabled) {
-    await Shield.send({ type: "inspect.arm", tabId: tab.id, on: true });
+  const wasOn = Boolean(status && status.enabled);
+  if (wasOn) {
+    // Clear the recorded events without touching the arm state.
+    try { await Shield.api.tabs.sendMessage(tab.id, { type: "inspect.control", action: "clear" }); } catch {}
+    return;
   }
-  await Shield.api.tabs.reload(tab.id);
-  window.close();
+  await Shield.send({ type: "inspect.arm", tabId: tab.id, on: true });
+  await refreshInspect();
 });
 refreshInspect();
 

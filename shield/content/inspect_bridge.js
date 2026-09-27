@@ -24,10 +24,14 @@
 
   if (api.runtime.onMessage && api.runtime.onMessage.addListener) {
     api.runtime.onMessage.addListener((message) => {
-      if (!message || message.type !== "inspect.set") return;
-      if (message.enabled) tell(true);
-      else {
-        try { window.dispatchEvent(new CustomEvent("noah-inspect-control", { detail: { action: "off" } })); } catch {}
+      if (!message) return;
+      if (message.type === "inspect.set") {
+        if (message.enabled) tell(true);
+        else {
+          try { window.dispatchEvent(new CustomEvent("noah-inspect-control", { detail: { action: "off" } })); } catch {}
+        }
+      } else if (message.type === "inspect.control") {
+        try { window.dispatchEvent(new CustomEvent("noah-inspect-control", { detail: { action: message.action } })); } catch {}
       }
     });
   }
