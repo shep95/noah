@@ -18,7 +18,13 @@
 
   let space = null;
   let panel = null;
-  let collapsed = false;
+  // Start collapsed so it never fights X's own widgets for screen space; the
+  // user opens it when they want to look. Setting persists in this tab.
+  let collapsed = true;
+  try {
+    const stored = sessionStorage.getItem("noah-space-collapsed");
+    if (stored !== null) collapsed = stored === "true";
+  } catch {}
   let config = { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
   window.addEventListener("noah-spaces-config", (event) => {
     const next = event.detail || {};
@@ -66,7 +72,26 @@
     const participants = audioSpace.participants || {};
     const admins = Array.isArray(participants.admins) ? participants.admins.map(userOf).filter(Boolean) : [];
     const speakers = Array.isArray(participants.speakers) ? participants.speakers.map(userOf).filter(Boolean) : [];
-    const listeners = Array.isArray(participants.listeners) ? participants.listeners.map(userOf).filter(Boolean) : [];
+    // Anonymous listeners come back as entries with no screen_name. userOf
+    // returns null for them, and we used to drop them silently. Count them
+    // so the panel can name them "hidden listeners" — this is the point of
+    // the feature for a parent looking at who is in the room.
+    const rawListeners = Array.isArray(participants.listeners) ? participants.listeners : [];
+    const listenerResults = rawListeners.map(userOf);
+    const listeners = listenerResults.filter(Boolean);
+    let hiddenListeners = listenerResults.length - listeners.length;
+    // Some API shapes also carry a total count separately; if the total is
+    // larger than the entries we received, the extras are also hidden.
+    const declaredTotal = Number(
+      participants.total || participants.total_participants ||
+      metadata.total_live_listeners || metadata.total_participated ||
+      audioSpace.total_live_listeners || 0
+    );
+    const nameableTotal = listeners.length + admins.length + speakers.length;
+    if (Number.isFinite(declaredTotal) && declaredTotal > 0) {
+      const extra = declaredTotal - nameableTotal - hiddenListeners;
+      if (extra > 0) hiddenListeners += extra;
+    }
     const host = userOf(metadata.creator_results && metadata.creator_results.result) || admins[0] || null;
     return {
       id: metadata.rest_id || audioSpace.rest_id || null,
@@ -76,6 +101,7 @@
       admins,
       speakers,
       listeners,
+      hiddenListeners,
     };
   }
 
@@ -137,8 +163,8 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      #noah-space-panel { position: fixed; right: 14px; bottom: 14px; z-index: 2147483000; width: 340px; max-height: 70vh; display: flex; flex-direction: column; background: rgba(10, 16, 12, .95); color: #d8ddd6; border: 1px solid rgba(180, 210, 190, .16); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45); font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-      #noah-space-panel header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(180, 210, 190, .1); cursor: default; }
+      #noah-space-panel { position: fixed; left: 14px; bottom: 14px; z-index: 2147483000; width: 320px; max-height: 70vh; display: flex; flex-direction: column; background: rgba(10, 16, 12, .95); color: #d8ddd6; border: 1px solid rgba(180, 210, 190, .16); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45); font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+      #noah-space-panel header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(180, 210, 190, .1); cursor: move; user-select: none; }
       #noah-space-panel header b { font-family: Georgia, serif; font-weight: 400; font-size: 14px; color: #f1f4ef; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #noah-space-panel .noah-space-pill { font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(180, 210, 190, .2); color: #a9cf9f; letter-spacing: .05em; text-transform: uppercase; }
       #noah-space-panel button.noah-space-toggle { all: unset; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: #9aa298; font-size: 12px; }
@@ -154,6 +180,7 @@
       #noah-space-panel .noah-space-row .noah-space-handle { color: #9aa298; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #noah-space-panel .noah-space-row.noah-space-flag { border-left: 2px solid #dcc896; padding-left: 4px; }
       #noah-space-panel .noah-space-row.noah-space-flag .noah-space-handle::after { content: " · new account"; color: #dcc896; }
+      #noah-space-panel .noah-space-hidden { margin-top: 6px; padding: 6px 8px; color: #dcc896; font-size: 11px; border-left: 2px solid #dcc896; }
       #noah-space-panel footer { padding: 8px 12px; font-size: 10px; color: #6f766e; border-top: 1px solid rgba(180, 210, 190, .08); }
       #noah-space-panel[data-collapsed="true"] { max-height: 46px; }
       #noah-space-panel[data-collapsed="true"] section, #noah-space-panel[data-collapsed="true"] footer { display: none; }
@@ -203,6 +230,7 @@
       document.documentElement.append(panel);
     }
     panel.replaceChildren();
+    panel.dataset.collapsed = collapsed ? "true" : "false";
     const head = document.createElement("header");
     const title = document.createElement("b");
     title.textContent = space.title || "space";
@@ -213,11 +241,46 @@
     toggle.type = "button";
     toggle.className = "noah-space-toggle";
     toggle.textContent = collapsed ? "show" : "hide";
-    toggle.addEventListener("click", () => {
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
       collapsed = !collapsed;
       panel.dataset.collapsed = collapsed ? "true" : "false";
       toggle.textContent = collapsed ? "show" : "hide";
+      try { sessionStorage.setItem("noah-space-collapsed", collapsed ? "true" : "false"); } catch {}
+      render();
     });
+    // Drag the panel by its header so users can move it out of the way of X's
+    // own widgets. The position sticks in this tab's sessionStorage.
+    let dragStart = null;
+    head.addEventListener("mousedown", (event) => {
+      if (event.target === toggle) return;
+      const rect = panel.getBoundingClientRect();
+      dragStart = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+      event.preventDefault();
+    });
+    document.addEventListener("mousemove", (event) => {
+      if (!dragStart) return;
+      const left = Math.max(0, Math.min(window.innerWidth - 80, dragStart.left + (event.clientX - dragStart.x)));
+      const top = Math.max(0, Math.min(window.innerHeight - 40, dragStart.top + (event.clientY - dragStart.y)));
+      panel.style.left = left + "px";
+      panel.style.top = top + "px";
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", () => {
+      if (!dragStart) return;
+      dragStart = null;
+      try { sessionStorage.setItem("noah-space-pos", JSON.stringify({ left: panel.style.left, top: panel.style.top })); } catch {}
+    });
+    try {
+      const pos = JSON.parse(sessionStorage.getItem("noah-space-pos") || "null");
+      if (pos && pos.left && pos.top) {
+        panel.style.left = pos.left;
+        panel.style.top = pos.top;
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+      }
+    } catch {}
     head.append(title, pill, toggle);
     panel.append(head);
     if (collapsed) return;
@@ -237,12 +300,14 @@
     }
 
     const listeners = (space.listeners || []).filter((u) => !seen.has(u.screen_name));
+    const hiddenCount = Math.max(0, Number(space.hiddenListeners) || 0);
     const section = document.createElement("section");
     const heading = document.createElement("h3");
-    heading.textContent = listeners.length ? "listeners · " + listeners.length : "listeners";
+    const totalListeners = listeners.length + hiddenCount;
+    heading.textContent = totalListeners ? "listeners · " + totalListeners : "listeners";
     const list = document.createElement("div");
     list.className = "noah-space-list";
-    if (listeners.length === 0) {
+    if (listeners.length === 0 && hiddenCount === 0) {
       const note = document.createElement("div");
       note.style.color = "#9aa298";
       note.style.fontSize = "12px";
@@ -252,6 +317,12 @@
       for (const user of listeners) list.append(row(user, isNew(user.created) || isFewFollowers(user)));
     }
     section.append(heading, list);
+    if (hiddenCount > 0) {
+      const hiddenRow = document.createElement("div");
+      hiddenRow.className = "noah-space-hidden";
+      hiddenRow.textContent = "hidden listeners · " + hiddenCount + " (their handles are not in what the server sent this tab)";
+      section.append(hiddenRow);
+    }
     panel.append(section);
 
     const foot = document.createElement("footer");
