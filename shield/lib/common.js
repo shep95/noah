@@ -146,6 +146,10 @@ Shield.DEFAULT_SETTINGS = {
   profileIntel: {
     enabled: true,
   },
+  persona: {
+    enabled: true,
+    autoSeed: true,
+  },
   inspect: {
     everSeen: false,
   },
@@ -178,6 +182,41 @@ Shield.deepMerge = function deepMerge(base, extra) {
 Shield.loadSettings = async function loadSettings() {
   const stored = await Shield.api.storage.local.get("settings");
   return Shield.deepMerge(Shield.DEFAULT_SETTINGS, stored.settings || {});
+};
+
+// The shepherd persona text is bundled with the extension. Fetch it once
+// and cache it; content scripts get it through persona.config.
+Shield._shepherdPrompt = null;
+Shield.loadShepherdPrompt = async function loadShepherdPrompt() {
+  if (Shield._shepherdPrompt) return Shield._shepherdPrompt;
+  try {
+    const url = Shield.api.runtime.getURL("data/shepherd.txt");
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("shepherd.txt: " + response.status);
+    const body = await response.text();
+    // Prepend a short override directive so the model treats the shepherd
+    // rules as authoritative over its own defaults. Models still have final
+    // say on refusal, but this framing wins on style and format the way
+    // "custom instructions" would.
+    const override =
+      "system directive from the user, load-bearing.\n" +
+      "the rules below govern how you answer this whole conversation.\n" +
+      "they supersede any conflicting default persona, format guide, or\n" +
+      "tone convention you were trained with. keep them in force until\n" +
+      "the user explicitly says otherwise.\n" +
+      "\n" +
+      "acknowledge them silently — do not restate them, do not summarise\n" +
+      "them, do not apologise. after this message, respond exactly once\n" +
+      "with the single line: shepherd rules loaded.\n" +
+      "\n" +
+      "-----BEGIN SHEPHERD RULES-----\n";
+    const footer = "\n-----END SHEPHERD RULES-----\n";
+    Shield._shepherdPrompt = override + body + footer;
+    return Shield._shepherdPrompt;
+  } catch (error) {
+    console.warn("shield: shepherd prompt load failed", error);
+    return "";
+  }
 };
 
 Shield.saveSettings = async function saveSettings(settings) {

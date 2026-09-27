@@ -1236,6 +1236,30 @@ const handlers = {
     } catch {}
     return { spaces: settings.spaces };
   },
+  async "persona.config"() {
+    const settings = await Shield.loadSettings();
+    const prompt = await Shield.loadShepherdPrompt();
+    return { persona: settings.persona, prompt };
+  },
+  async "persona.set"(message) {
+    const change = { persona: message.change || {} };
+    const settings = await Shield.updateSettings(change);
+    const prompt = await Shield.loadShepherdPrompt();
+    try {
+      const tabs = await api.tabs.query({});
+      for (const tab of tabs) {
+        try { await api.tabs.sendMessage(tab.id, { type: "persona.set", persona: settings.persona, prompt }); } catch {}
+      }
+    } catch {}
+    return { persona: settings.persona };
+  },
+  async "persona.reseed"() {
+    try {
+      const tabs = await api.tabs.query({ active: true, currentWindow: true });
+      if (tabs && tabs[0]) await api.tabs.sendMessage(tabs[0].id, { type: "persona.reseed" });
+    } catch {}
+    return { ok: true };
+  },
   async "profile.config"() {
     const settings = await Shield.loadSettings();
     return { profile: settings.profileIntel };
@@ -1560,7 +1584,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config", "persona.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

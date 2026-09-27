@@ -58,6 +58,16 @@
     <p id="week" class="muted"></p>
   </section>
 
+  <section id="persona-section">
+    <div class="row"><h2>shepherd persona for every AI</h2><span id="persona-status" class="muted"></span></div>
+    <p class="muted small">On every AI chat you open — Gemini, Gemini Lens, ChatGPT, Claude, Copilot, Perplexity, Poe, Mistral, DeepSeek, HuggingChat, Grok, Yandex, Character.ai, Pi, You, Kagi, Venice — the shepherd instructions are pasted as turn one of a fresh conversation. Every response after that runs under those rules.</p>
+    <label class="switch"><input type="checkbox" id="persona-enabled"><span>seed AI chats with the shepherd persona</span></label>
+    <label class="switch"><input type="checkbox" id="persona-autoseed"><span>seed automatically when a new chat opens</span></label>
+    <div class="row small">
+      <button id="persona-reseed" class="ghost" title="Force the shepherd persona into the current AI chat">reseed the current tab</button>
+    </div>
+  </section>
+
   <section id="profile-section">
     <div class="row"><h2>x profile intel</h2><span id="profile-status" class="muted"></span></div>
     <p class="muted small">On any X or Twitter profile page a report opens with account age and post rate, follow ratio, rest_id and signup era, verified/protected/withheld flags, bio URLs expanded and cross-platform handles pulled out, plus one-click links to reverse-image-search the profile picture, browse Wayback Machine history, and check any email in the bio against HIBP. All from what your browser was already going to receive.</p>

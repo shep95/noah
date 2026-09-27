@@ -217,6 +217,11 @@ function render(state) {
   byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings.";
   Shield.send({ type: "report.weekly" }).then((report) => { if (report && report.text) byId("week").textContent = "This week: " + report.text; });
 
+  const persona = settings.persona || { enabled: true, autoSeed: true };
+  byId("persona-enabled").checked = Boolean(persona.enabled);
+  byId("persona-autoseed").checked = Boolean(persona.autoSeed);
+  byId("persona-status").textContent = persona.enabled ? (persona.autoSeed ? "on · auto-seed" : "on · manual") : "off";
+
   const profileIntel = settings.profileIntel || { enabled: true };
   byId("profile-enabled").checked = Boolean(profileIntel.enabled);
   byId("profile-status").textContent = profileIntel.enabled ? "on" : "off";
@@ -586,6 +591,16 @@ async function pushProfile(change) {
   await refresh();
 }
 byId("profile-enabled").addEventListener("change", (event) => pushProfile({ enabled: event.target.checked }));
+
+async function pushPersona(change) {
+  await Shield.send({ type: "persona.set", change });
+  await refresh();
+}
+byId("persona-enabled").addEventListener("change", (event) => pushPersona({ enabled: event.target.checked }));
+byId("persona-autoseed").addEventListener("change", (event) => pushPersona({ autoSeed: event.target.checked }));
+byId("persona-reseed").addEventListener("click", async () => {
+  await Shield.send({ type: "persona.reseed" });
+});
 byId("spaces-lowfollow").addEventListener("change", (event) => pushSpaces({ flagLowFollowers: event.target.checked }));
 byId("spaces-days").addEventListener("change", (event) => pushSpaces({ newAccountDays: Math.max(1, Math.min(365, Number(event.target.value) || 30)) }));
 byId("spaces-underfollow").addEventListener("change", (event) => pushSpaces({ lowFollowersUnder: Math.max(0, Math.min(100000, Number(event.target.value) || 20)) }));

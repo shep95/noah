@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "noah shield",
-  "version": "2026.9.27.12",
+  "version": "2026.9.27.13",
   "description": "A tunnel that fails closed instead of leaking, trackers and data grabs stopped on every page, cheaper prices and working coupons while you shop, and a watch on anything that could record your screen.",
   "author": "House of Asher",
   "homepage_url": "https://noah.asherin.com/shield",
@@ -287,6 +287,83 @@
     },
     {
       "matches": [
+        "https://gemini.google.com/*",
+        "https://bard.google.com/*",
+        "https://lens.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://poe.com/*",
+        "https://chat.mistral.ai/*",
+        "https://mistral.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://deepseek.com/*",
+        "https://huggingface.co/chat/*",
+        "https://grok.com/*",
+        "https://x.ai/*",
+        "https://grok.x.ai/*",
+        "https://ya.ru/*",
+        "https://alice.yandex.ru/*",
+        "https://yandex.com/*",
+        "https://yandex.ru/*",
+        "https://character.ai/*",
+        "https://beta.character.ai/*",
+        "https://pi.ai/*",
+        "https://you.com/*",
+        "https://kagi.com/*",
+        "https://venice.ai/*",
+        "https://shieldtest.example/*"
+      ],
+      "js": [
+        "content/persona.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://bard.google.com/*",
+        "https://lens.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://poe.com/*",
+        "https://chat.mistral.ai/*",
+        "https://mistral.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://deepseek.com/*",
+        "https://huggingface.co/chat/*",
+        "https://grok.com/*",
+        "https://x.ai/*",
+        "https://grok.x.ai/*",
+        "https://ya.ru/*",
+        "https://alice.yandex.ru/*",
+        "https://yandex.com/*",
+        "https://yandex.ru/*",
+        "https://character.ai/*",
+        "https://beta.character.ai/*",
+        "https://pi.ai/*",
+        "https://you.com/*",
+        "https://kagi.com/*",
+        "https://venice.ai/*",
+        "https://shieldtest.example/*"
+      ],
+      "js": [
+        "content/persona_bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "http://*/*",
         "https://*/*"
       ],
@@ -386,6 +463,14 @@
     {
       "resources": [
         "looks/*.jpg"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "resources": [
+        "data/shepherd.txt"
       ],
       "matches": [
         "<all_urls>"
