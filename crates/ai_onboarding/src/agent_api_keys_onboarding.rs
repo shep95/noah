@@ -106,6 +106,31 @@ impl Render for ApiKeysWithProviders {
     }
 }
 
+/// Providers with a free tier that needs no payment details, so someone new
+/// can try shepherd without spending anything.
+const FREE_PROVIDERS: &[(&str, &str, &str)] = &[
+    (
+        "free-google",
+        "Google Gemini: free key from AI Studio",
+        "https://aistudio.google.com/apikey",
+    ),
+    (
+        "free-groq",
+        "Groq: free key, fast open models",
+        "https://console.groq.com/keys",
+    ),
+    (
+        "free-openrouter",
+        "OpenRouter: free models with one key",
+        "https://openrouter.ai/keys",
+    ),
+    (
+        "free-ollama",
+        "Ollama: run models on this computer, fully private",
+        "https://ollama.com/download",
+    ),
+];
+
 #[derive(IntoElement)]
 pub struct ApiKeysWithoutProviders;
 
@@ -134,6 +159,33 @@ impl RenderOnce for ApiKeysWithoutProviders {
             .child(List::new().child(ListBulletItem::new(
                 "Paste your Venice API key and every Venice model appears, or connect Ollama for local models.",
             )))
+            .child(
+                h_flex()
+                    .pt_1()
+                    .gap_2()
+                    .child(
+                        Label::new("free to start")
+                            .size(LabelSize::Small)
+                            .color(Color::Muted)
+                            .buffer_font(cx),
+                    )
+                    .child(Divider::horizontal()),
+            )
+            .child(
+                Label::new(
+                    "These give you a free key in a minute, no card needed. Paste it under set up models.",
+                )
+                .size(LabelSize::Small)
+                .color(Color::Muted),
+            )
+            .children(FREE_PROVIDERS.iter().map(|(id, label, url)| {
+                Button::new(*id, *label)
+                    .full_width()
+                    .style(ButtonStyle::Subtle)
+                    .label_size(LabelSize::Small)
+                    .end_icon(Icon::new(IconName::ArrowUpRight).size(IconSize::XSmall))
+                    .on_click(move |_, _, cx| cx.open_url(url))
+            }))
             .child(
                 Button::new("configure-providers", "set up models")
                     .full_width()
