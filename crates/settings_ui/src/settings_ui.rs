@@ -1032,6 +1032,69 @@ struct SearchDocument {
     words: Vec<String>,
 }
 
+fn document_matches_with_typos(query_words: &[&str], document_words: &[String]) -> bool {
+    query_words.iter().all(|query_word| {
+        document_words
+            .iter()
+            .any(|document_word| word_matches_with_typos(query_word, document_word))
+    })
+}
+
+/// Matches a query word against a settings word allowing a few slips: a
+/// swapped, missing, extra or wrong letter. The query may also be a
+/// misspelled beginning of the word, since people search as they type.
+fn word_matches_with_typos(query_word: &str, document_word: &str) -> bool {
+    if document_word.starts_with(query_word) {
+        return true;
+    }
+    let query: Vec<char> = query_word.chars().collect();
+    let allowed_edits = match query.len() {
+        0..=2 => return false,
+        3..=5 => 1,
+        _ => 2,
+    };
+    let document: Vec<char> = document_word.chars().collect();
+    if edit_distance(&query, &document) <= allowed_edits {
+        return true;
+    }
+    // Compare against the start of the word, one letter shorter and longer
+    // too, so a dropped or doubled letter inside a prefix still matches.
+    let lengths = query.len().saturating_sub(1)..=query.len() + 1;
+    lengths
+        .filter(|length| *length < document.len())
+        .any(|length| edit_distance(&query, &document[..length]) <= allowed_edits)
+}
+
+/// Optimal string alignment distance: Levenshtein plus swapping two
+/// neighboring letters as a single edit, the most common typing slip.
+fn edit_distance(left: &[char], right: &[char]) -> usize {
+    let columns = right.len() + 1;
+    let mut rows = vec![vec![0usize; columns]; left.len() + 1];
+    for (index, row) in rows.iter_mut().enumerate() {
+        row[0] = index;
+    }
+    for (index, cell) in rows[0].iter_mut().enumerate() {
+        *cell = index;
+    }
+    for left_index in 1..=left.len() {
+        for right_index in 1..=right.len() {
+            let substitution_cost = usize::from(left[left_index - 1] != right[right_index - 1]);
+            let mut best = (rows[left_index - 1][right_index] + 1)
+                .min(rows[left_index][right_index - 1] + 1)
+                .min(rows[left_index - 1][right_index - 1] + substitution_cost);
+            if left_index > 1
+                && right_index > 1
+                && left[left_index - 1] == right[right_index - 2]
+                && left[left_index - 2] == right[right_index - 1]
+            {
+                best = best.min(rows[left_index - 2][right_index - 2] + 1);
+            }
+            rows[left_index][right_index] = best;
+        }
+    }
+    rows[left.len()][right.len()]
+}
+
 struct SearchIndex {
     documents: Vec<SearchDocument>,
     fuzzy_match_candidates: Vec<StringMatchCandidate>,
@@ -2354,7 +2417,7 @@ impl SettingsWindow {
                     if query_words.is_empty() {
                         return Vec::new();
                     }
-                    search_index
+                    let exact_matches = search_index
                         .documents
                         .iter()
                         .filter(|doc| {
@@ -2364,6 +2427,17 @@ impl SettingsWindow {
                                     .any(|doc_word| doc_word.starts_with(query_word))
                             })
                         })
+                        .map(|doc| doc.id)
+                        .collect::<Vec<usize>>();
+                    // Correctly spelled queries keep exactly the results they had; the
+                    // misspelling pass only runs when they find nothing.
+                    if !exact_matches.is_empty() {
+                        return exact_matches;
+                    }
+                    search_index
+                        .documents
+                        .iter()
+                        .filter(|doc| document_matches_with_typos(&query_words, &doc.words))
                         .map(|doc| doc.id)
                         .collect::<Vec<usize>>()
                 }
@@ -6833,6 +6907,62 @@ pub mod test {
                 );
             })
             .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod typo_search_tests {
+    use super::*;
+
+    fn words(text: &str) -> Vec<String> {
+        text.split_whitespace().map(str::to_string).collect()
+    }
+
+    #[test]
+    fn test_misspellings_match() {
+        for (query, word) in [
+            ("thmee", "theme"),
+            ("teme", "theme"),
+            ("fnot", "font"),
+            ("fotn", "font"),
+            ("terminl", "terminal"),
+            ("autosve", "autosave"),
+            ("keybnid", "keybindings"),
+            ("formater", "formatter"),
+            ("vim", "vim"),
+            ("tab", "tabs"),
+        ] {
+            assert!(word_matches_with_typos(query, word), "{query} should match {word}");
+        }
+    }
+
+    #[test]
+    fn test_unrelated_words_do_not_match() {
+        for (query, word) in [
+            ("theme", "font"),
+            ("vm", "vim"),
+            ("git", "tab"),
+            ("zoom", "theme"),
+            ("terminal", "tabs"),
+        ] {
+            assert!(!word_matches_with_typos(query, word), "{query} should not match {word}");
+        }
+    }
+
+    #[test]
+    fn test_every_query_word_must_match() {
+        let document = words("appearance theme mode");
+        assert!(document_matches_with_typos(&["thme", "mdoe"], &document));
+        assert!(!document_matches_with_typos(&["thme", "cursor"], &document));
+    }
+
+    #[test]
+    fn test_edit_distance() {
+        let chars = |text: &str| text.chars().collect::<Vec<_>>();
+        assert_eq!(edit_distance(&chars("theme"), &chars("theme")), 0);
+        assert_eq!(edit_distance(&chars("thmee"), &chars("theme")), 1);
+        assert_eq!(edit_distance(&chars(""), &chars("abc")), 3);
+        assert_eq!(edit_distance(&chars("kitten"), &chars("sitting")), 3);
     }
 }
 

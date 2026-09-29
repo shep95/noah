@@ -35,11 +35,16 @@ pub struct OpenAiCompatibleSettings {
     pub api_url: String,
     pub available_models: Vec<AvailableModel>,
     pub custom_headers: CustomHeaders,
+    pub requires_api_key: bool,
 }
 
 impl ApiCompatibleProviderSettings for OpenAiCompatibleSettings {
     fn api_url(&self) -> &str {
         &self.api_url
+    }
+
+    fn requires_api_key(&self) -> bool {
+        self.requires_api_key
     }
 }
 
@@ -192,9 +197,8 @@ impl OpenAiCompatibleLanguageModel {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, _cx| {
-            let api_url = &state.settings.api_url;
             (
-                state.api_key_state.key(api_url),
+                state.api_key(),
                 state.settings.api_url.clone(),
                 state.settings.custom_headers.clone(),
             )
@@ -229,9 +233,8 @@ impl OpenAiCompatibleLanguageModel {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, _cx| {
-            let api_url = &state.settings.api_url;
             (
-                state.api_key_state.key(api_url),
+                state.api_key(),
                 state.settings.api_url.clone(),
                 state.settings.custom_headers.clone(),
             )

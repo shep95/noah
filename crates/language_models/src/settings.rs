@@ -195,6 +195,7 @@ impl settings::Settings for AllLanguageModelSettings {
                                 value.custom_headers,
                                 &[],
                             ),
+                            requires_api_key: value.requires_api_key.unwrap_or(true),
                         },
                     )
                 })

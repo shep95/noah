@@ -241,6 +241,9 @@ mod tests {
                 language,
                 project_knowledge: Vec::new(),
                 teaching_mode: false,
+                text_edits: false,
+                verify_after_edits: false,
+                canvas: false,
                 addons: Default::default(),
             }
             .render(&Templates::new())
@@ -278,6 +281,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -311,6 +317,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -348,6 +357,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -395,6 +407,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -432,6 +447,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -466,6 +484,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -492,6 +513,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -516,6 +540,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();
@@ -538,6 +565,9 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            text_edits: false,
+            verify_after_edits: false,
+            canvas: false,
             addons: Default::default(),
         };
         let templates = Templates::new();

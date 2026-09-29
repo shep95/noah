@@ -12,7 +12,15 @@ use ui_input::InputField;
 
 pub trait ApiCompatibleProviderSettings: Clone + Default + PartialEq + 'static {
     fn api_url(&self) -> &str;
+
+    fn requires_api_key(&self) -> bool {
+        true
+    }
 }
+
+/// Sent as the bearer token to endpoints that don't need a key, so the
+/// request still has the shape every OpenAI-compatible server expects.
+const KEYLESS_API_KEY: &str = "noah-free";
 
 pub struct ApiCompatibleProviderState<S: ApiCompatibleProviderSettings> {
     id: Arc<str>,
@@ -53,7 +61,15 @@ impl<S: ApiCompatibleProviderSettings> ApiCompatibleProviderState<S> {
     }
 
     pub fn is_authenticated(&self) -> bool {
-        self.api_key_state.has_key()
+        !self.settings.requires_api_key() || self.api_key_state.has_key()
+    }
+
+    /// The person's own key when they have saved one, so bringing a key
+    /// always takes over from the free starter access.
+    pub fn api_key(&self) -> Option<Arc<str>> {
+        self.api_key_state
+            .key(self.settings.api_url())
+            .or_else(|| (!self.settings.requires_api_key()).then(|| Arc::from(KEYLESS_API_KEY)))
     }
 
     pub fn set_api_key(
@@ -72,6 +88,9 @@ impl<S: ApiCompatibleProviderSettings> ApiCompatibleProviderState<S> {
     }
 
     pub fn authenticate(&mut self, cx: &mut Context<Self>) -> Task<Result<(), AuthenticateError>> {
+        if !self.settings.requires_api_key() {
+            return Task::ready(Ok(()));
+        }
         let api_url = SharedString::new(self.settings.api_url());
         self.api_key_state.load_if_needed(
             api_url,

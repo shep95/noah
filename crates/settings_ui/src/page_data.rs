@@ -8924,6 +8924,20 @@ fn ai_page(cx: &App) -> SettingsPage {
                 metadata: None,
                 files: USER,
             }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Auto-Approve",
+                description: "shepherd never stops to ask for approval: every tool call, sandbox request and sensitive edit runs as approved, whatever the tool permission rules say. Also a switch in the shepherd panel's toolbar.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.auto_approve"),
+                    pick: |settings_content| settings_content.agent.as_ref()?.auto_approve.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().auto_approve = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
             SettingsPageItem::ActionLink(ActionLink {
                 title: "Brain".into(),
                 description: Some(

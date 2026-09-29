@@ -9010,3 +9010,41 @@ impl SubagentCompactionTest {
             .read_with(cx, |thread, _| assert!(thread.is_turn_complete()));
     }
 }
+
+#[gpui::test]
+async fn test_auto_approve_answers_every_prompt(cx: &mut TestAppContext) {
+    init_test(cx);
+    cx.update(|cx| {
+        let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
+        settings.auto_approve = true;
+        settings.tool_permissions.default = settings::ToolPermissionMode::Confirm;
+        agent_settings::AgentSettings::override_global(settings, cx);
+    });
+
+    let (event_stream, mut events) = crate::ToolCallEventStream::test();
+    let confirmed = cx.update(|cx| {
+        event_stream.authorize(
+            "ls",
+            ToolPermissionContext::new(TerminalTool::NAME, vec!["ls -la".to_string()]),
+            cx,
+        )
+    });
+    confirmed.await.expect("auto-approve should approve a confirm");
+
+    let always_prompted = cx.update(|cx| {
+        event_stream.authorize_always_prompt(
+            "edit settings",
+            ToolPermissionContext::new(EditFileTool::NAME, vec![".zed/settings.json".to_string()]),
+            cx,
+        )
+    });
+    always_prompted
+        .await
+        .expect("auto-approve should approve always-prompt edits");
+
+    cx.run_until_parked();
+    assert!(
+        events.try_next().is_err(),
+        "no approval prompt should have been shown"
+    );
+}

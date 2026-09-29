@@ -415,6 +415,11 @@ pub struct OpenAiCompatibleSettingsContent {
     pub api_url: String,
     pub available_models: Vec<OpenAiCompatibleAvailableModel>,
     pub custom_headers: Option<HashMap<String, String>>,
+    /// Whether the endpoint needs an API key. Set it to false for endpoints
+    /// that are free to call, like noah's built-in free starter models.
+    ///
+    /// Default: true
+    pub requires_api_key: Option<bool>,
 }
 
 #[with_fallible_options]

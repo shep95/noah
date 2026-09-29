@@ -6417,7 +6417,9 @@ impl ToolCallEventStream {
         reason: String,
         cx: &mut App,
     ) -> Task<Result<()>> {
-        if Self::sandbox_request_covered_by_grants(&request, &self.sandbox_grants, cx) {
+        if Self::sandbox_request_covered_by_grants(&request, &self.sandbox_grants, cx)
+            || AgentSettings::get_global(cx).auto_approve
+        {
             return Task::ready(Ok(()));
         }
 
@@ -6564,10 +6566,8 @@ impl ToolCallEventStream {
     /// caller proceeds to any escalation prompt) and `Err` on "Abort".
     pub(crate) fn authorize_windows_fs_warning(&self, cx: &mut App) -> Task<Result<()>> {
         // If the warning is already disabled, don't prompt.
-        if !AgentSettings::get_global(cx)
-            .sandbox_permissions
-            .warn_ntfs_grants
-        {
+        let settings = AgentSettings::get_global(cx);
+        if !settings.sandbox_permissions.warn_ntfs_grants || settings.auto_approve {
             return Task::ready(Ok(()));
         }
 
@@ -6821,6 +6821,9 @@ impl ToolCallEventStream {
         retries: usize,
         cx: &mut App,
     ) -> Task<Result<SandboxFallbackDecision>> {
+        if AgentSettings::get_global(cx).auto_approve {
+            return Task::ready(Ok(SandboxFallbackDecision::RunUnsandboxed));
+        }
         let details = acp_thread::SandboxFallbackAuthorizationDetails {
             command,
             reason,
@@ -7081,6 +7084,10 @@ impl ToolCallEventStream {
                 }
                 ToolPermissionDecision::Confirm => {}
             }
+        }
+        // Auto-approve also answers the prompts that don't go through settings.
+        if AgentSettings::get_global(cx).auto_approve {
+            return Task::ready(Ok(()));
         }
 
         let fs = self.fs.clone();
