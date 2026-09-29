@@ -9044,7 +9044,7 @@ async fn test_auto_approve_answers_every_prompt(cx: &mut TestAppContext) {
 
     cx.run_until_parked();
     assert!(
-        events.try_next().is_err(),
+        events.try_recv().is_err(),
         "no approval prompt should have been shown"
     );
 }

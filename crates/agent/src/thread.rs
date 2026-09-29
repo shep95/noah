@@ -54,7 +54,7 @@ use schemars::{JsonSchema, Schema};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use settings::{
-    LanguageModelSelection, Settings, SettingsStore, ToolPermissionMode, update_settings_file,
+    LanguageModelSelection, ResearchMode, Settings, SettingsStore, ToolPermissionMode, update_settings_file,
 };
 use std::fmt::Write;
 use std::{cell::RefCell, ops::ControlFlow};
@@ -4836,6 +4836,10 @@ impl Thread {
             },
             project_knowledge: self.project_knowledge(cx),
             teaching_mode: AgentSettings::get_global(cx).teaching_mode,
+            research_always: !self.is_subagent()
+                && AgentSettings::get_global(cx).research_mode == ResearchMode::Always,
+            research_on_trigger: !self.is_subagent()
+                && AgentSettings::get_global(cx).research_mode == ResearchMode::OnTrigger,
             addons: crate::addon_catalog(&self.project, cx),
             text_edits: self.model().is_some_and(|model| !model.supports_tools()),
             verify_after_edits: AgentSettings::get_global(cx).verify_after_edits

@@ -1282,6 +1282,9 @@
     // Teaching mode: shepherd explains, asks you questions and leaves the
     // critical part of each change for you to write.
     "teaching_mode": false,
+    // R&D mode: "off", "on_trigger" (when you ask shepherd to research,
+    // investigate, prototype or benchmark) or "always".
+    "research_mode": "on_trigger",
     // After shepherd changes code, noah runs the project's own check and hands
     // failures back to be fixed, until it passes (three rounds at most).
     "verify_after_edits": true,

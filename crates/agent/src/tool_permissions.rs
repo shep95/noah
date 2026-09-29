@@ -601,6 +601,7 @@ mod tests {
             teaching_mode: false,
             offline: false,
             auto_approve: false,
+            research_mode: Default::default(),
             canvas: false,
             verify_after_edits: false,
             monthly_budget_usd: None,

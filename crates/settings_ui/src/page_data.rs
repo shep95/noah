@@ -9047,6 +9047,22 @@ fn ai_page(cx: &App) -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
+                title: "R&D Mode",
+                description: "shepherd works like a researcher: it forms hypotheses, runs small experiments and writes its findings to .noah/research/. On trigger switches it on when you ask it to research, investigate, prototype or benchmark.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.research_mode"),
+                    pick: |settings_content| {
+                        settings_content.agent.as_ref()?.research_mode.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().research_mode = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
                 title: "Follow Live Edits",
                 description: "Open each file shepherd edits while it works, so its changes can be watched as they land. New and removed text fades in and out in your theme's colors.",
                 field: Box::new(SettingField {

@@ -70,6 +70,10 @@ pub struct SystemPromptTemplate<'a> {
     pub project_knowledge: Vec<KnowledgeFile>,
     /// Whether the person turned on teaching mode.
     pub teaching_mode: bool,
+    /// R&D mode is on for every request.
+    pub research_always: bool,
+    /// R&D mode switches on when the request asks for research.
+    pub research_on_trigger: bool,
     /// The saved add-ons shepherd can run with `run_addon`.
     pub addons: AddonCatalog,
     /// Whether the model cannot call tools, so files are written through
@@ -212,6 +216,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             addons: Default::default(),
             text_edits: false,
             verify_after_edits: true,
@@ -241,6 +247,8 @@ mod tests {
                 language,
                 project_knowledge: Vec::new(),
                 teaching_mode: false,
+                research_always: false,
+                research_on_trigger: false,
                 text_edits: false,
                 verify_after_edits: false,
                 canvas: false,
@@ -252,6 +260,41 @@ mod tests {
         assert!(!render(None).contains("the person's language"));
         let japanese = render(Some("Japanese (日本語)".to_string()));
         assert!(japanese.contains("the person chose Japanese (日本語) as noah's language"));
+    }
+
+    #[test]
+    fn test_system_prompt_describes_research_mode() {
+        let project = prompt_store::ProjectContext::default();
+        let render = |research_always: bool, research_on_trigger: bool| {
+            SystemPromptTemplate {
+                project: &project,
+                available_tools: Vec::new(),
+                model_name: None,
+                date: "2026-01-01".to_string(),
+                user_agents_md: None,
+                sandboxing: false,
+                is_linux: false,
+                is_windows: false,
+                language: None,
+                project_knowledge: Vec::new(),
+                teaching_mode: false,
+                research_always,
+                research_on_trigger,
+                text_edits: false,
+                verify_after_edits: false,
+                canvas: false,
+                addons: Default::default(),
+            }
+            .render(&Templates::new())
+            .unwrap()
+        };
+        assert!(!render(false, false).contains("## R&D mode"));
+        let always = render(true, false);
+        assert!(always.contains("R&D mode for every request"));
+        assert!(always.contains(".noah/research/"));
+        let on_trigger = render(false, true);
+        assert!(on_trigger.contains("when the person asks you to research"));
+        assert!(on_trigger.contains("for ordinary requests, work as usual"));
     }
 
     #[test]
@@ -281,6 +324,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -317,6 +362,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -357,6 +404,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -407,6 +456,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -447,6 +498,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -484,6 +537,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -513,6 +568,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -540,6 +597,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,
@@ -565,6 +624,8 @@ mod tests {
             language: None,
             project_knowledge: Vec::new(),
             teaching_mode: false,
+            research_always: false,
+            research_on_trigger: false,
             text_edits: false,
             verify_after_edits: false,
             canvas: false,

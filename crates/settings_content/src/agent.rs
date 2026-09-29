@@ -344,6 +344,13 @@ pub struct AgentSettingsContent {
     ///
     /// Default: false
     pub teaching_mode: Option<bool>,
+    /// R&D mode: shepherd works like a researcher. It forms hypotheses, runs
+    /// small experiments to test them, and writes what it learned to
+    /// `.noah/research/`. "on_trigger" switches it on when you ask it to
+    /// research, investigate, prototype, benchmark or compare approaches.
+    ///
+    /// Default: on_trigger
+    pub research_mode: Option<ResearchMode>,
     /// After shepherd changes code, noah runs the project's own check (build,
     /// tests or type check, found per project), hands failures back to
     /// shepherd to fix, and repeats until it passes or three rounds are up.
@@ -668,6 +675,27 @@ pub enum NotifyWhenAgentWaiting {
     PrimaryScreen,
     AllScreens,
     Never,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Default,
+    Debug,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    MergeFrom,
+    PartialEq,
+    strum::VariantArray,
+    strum::VariantNames,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ResearchMode {
+    Off,
+    #[default]
+    OnTrigger,
+    Always,
 }
 
 #[derive(
