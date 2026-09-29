@@ -106,29 +106,68 @@ impl Render for ApiKeysWithProviders {
     }
 }
 
-/// Providers with a free tier that needs no payment details, so someone new
-/// can try shepherd without spending anything.
-const FREE_PROVIDERS: &[(&str, &str, &str)] = &[
-    (
-        "free-google",
-        "Google Gemini: free key from AI Studio",
-        "https://aistudio.google.com/apikey",
-    ),
-    (
-        "free-groq",
-        "Groq: free key, fast open models",
-        "https://console.groq.com/keys",
-    ),
-    (
-        "free-openrouter",
-        "OpenRouter: free models with one key",
-        "https://openrouter.ai/keys",
-    ),
-    (
-        "free-ollama",
-        "Ollama: run models on this computer, fully private",
-        "https://ollama.com/download",
-    ),
+/// A provider with a free tier that needs no payment details, so someone
+/// new can try shepherd without spending anything. `data` is what that
+/// provider's own terms say happens to prompts on the free tier, as of
+/// September 2026: check the link before trusting it with private code.
+struct FreeProvider {
+    id: &'static str,
+    name: &'static str,
+    country: &'static str,
+    data: &'static str,
+    url: &'static str,
+}
+
+const FREE_PROVIDERS: &[FreeProvider] = &[
+    FreeProvider {
+        id: "free-google",
+        name: "Google Gemini",
+        country: "United States",
+        data: "free-tier prompts may be read and used to improve Google's models",
+        url: "https://aistudio.google.com/apikey",
+    },
+    FreeProvider {
+        id: "free-groq",
+        name: "Groq",
+        country: "United States",
+        data: "does not train on your prompts; keeps error logs up to 30 days, which you can turn off",
+        url: "https://console.groq.com/keys",
+    },
+    FreeProvider {
+        id: "free-openrouter",
+        name: "OpenRouter",
+        country: "United States",
+        data: "one key for many free models; the model's own company may store or train on prompts, with an opt-out in your account settings",
+        url: "https://openrouter.ai/keys",
+    },
+    FreeProvider {
+        id: "free-mistral",
+        name: "Mistral",
+        country: "France",
+        data: "free tier needs a phone number and trains on your prompts unless you opt out under privacy settings",
+        url: "https://console.mistral.ai/api-keys",
+    },
+    FreeProvider {
+        id: "free-zai",
+        name: "Z.ai (GLM)",
+        country: "China",
+        data: "free GLM Flash models; prompts are handled on servers in China under Chinese law",
+        url: "https://z.ai/model-api",
+    },
+    FreeProvider {
+        id: "free-siliconflow",
+        name: "SiliconFlow",
+        country: "China",
+        data: "free Qwen and DeepSeek models; account data is stored in China as its terms require",
+        url: "https://cloud.siliconflow.cn",
+    },
+    FreeProvider {
+        id: "free-ollama",
+        name: "Ollama",
+        country: "your computer",
+        data: "models run here; nothing you type leaves this machine",
+        url: "https://ollama.com/download",
+    },
 ];
 
 #[derive(IntoElement)]
@@ -173,18 +212,26 @@ impl RenderOnce for ApiKeysWithoutProviders {
             )
             .child(
                 Label::new(
-                    "These give you a free key in a minute, no card needed. Paste it under set up models.",
+                    "These give you a free key in a minute, no card needed. Paste it under set up models. Each line says where the company is and what it does with what you send.",
                 )
                 .size(LabelSize::Small)
                 .color(Color::Muted),
             )
-            .children(FREE_PROVIDERS.iter().map(|(id, label, url)| {
-                Button::new(*id, *label)
-                    .full_width()
-                    .style(ButtonStyle::Subtle)
-                    .label_size(LabelSize::Small)
-                    .end_icon(Icon::new(IconName::ArrowUpRight).size(IconSize::XSmall))
-                    .on_click(move |_, _, cx| cx.open_url(url))
+            .children(FREE_PROVIDERS.iter().map(|provider| {
+                v_flex()
+                    .child(
+                        Button::new(provider.id, format!("{} ({})", provider.name, provider.country))
+                            .full_width()
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::Small)
+                            .end_icon(Icon::new(IconName::ArrowUpRight).size(IconSize::XSmall))
+                            .on_click(move |_, _, cx| cx.open_url(provider.url)),
+                    )
+                    .child(
+                        Label::new(provider.data)
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted),
+                    )
             }))
             .child(
                 Button::new("configure-providers", "set up models")
