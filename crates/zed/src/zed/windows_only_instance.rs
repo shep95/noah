@@ -1,4 +1,8 @@
-use std::{sync::Arc, thread::JoinHandle};
+use std::{
+    sync::{Arc, mpsc},
+    thread::JoinHandle,
+    time::Duration,
+};
 
 use anyhow::Context;
 use cli::{CliRequest, CliResponse, IpcHandshake, ipc::IpcOneShotServer};
@@ -7,7 +11,9 @@ use release_channel::app_identifier;
 use util::ResultExt;
 use windows::{
     Win32::{
-        Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GENERIC_WRITE, GetLastError, HANDLE},
+        Foundation::{
+            CloseHandle, ERROR_ALREADY_EXISTS, ERROR_PIPE_BUSY, GENERIC_WRITE, GetLastError, HANDLE,
+        },
         Storage::FileSystem::{
             CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_MODE, OPEN_EXISTING,
             PIPE_ACCESS_INBOUND, ReadFile, WriteFile,
@@ -15,7 +21,7 @@ use windows::{
         System::{
             Pipes::{
                 ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
-                PIPE_TYPE_MESSAGE, PIPE_WAIT,
+                PIPE_TYPE_MESSAGE, PIPE_WAIT, WaitNamedPipeW,
             },
             Threading::CreateMutexW,
         },
@@ -25,61 +31,121 @@ use windows::{
 
 use crate::{Args, OpenListener, RawOpenRequest};
 
+/// How long a fresh launch waits for the running copy to take over its
+/// request. A live copy answers in milliseconds; one that is hung, or stuck
+/// on the way out, never answers, and without a limit the new launch would
+/// wait forever with nothing on screen.
+const HANDOFF_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long to wait for the running copy's pipe when it is busy with another
+/// launch before treating it as unresponsive.
+const PIPE_BUSY_TIMEOUT_MS: u32 = 2_000;
+
 #[inline]
 fn is_first_instance() -> bool {
-    unsafe {
+    let created = unsafe {
         CreateMutexW(
             None,
             false,
             &HSTRING::from(format!("{}-Instance-Mutex", app_identifier())),
         )
-        .expect("Unable to create instance mutex.")
     };
-    unsafe { GetLastError() != ERROR_ALREADY_EXISTS }
+    match created {
+        Ok(_) => unsafe { GetLastError() != ERROR_ALREADY_EXISTS },
+        // The mutex can be refused (for example, one made by another user
+        // session with stricter rights). Opening a window is better than
+        // failing silently at the double-click.
+        Err(error) => {
+            log::error!("Unable to create the instance mutex, opening anyway: {error}");
+            true
+        }
+    }
 }
 
 pub fn handle_single_instance(opener: OpenListener, args: &Args) -> bool {
-    let is_first_instance = is_first_instance();
-    if is_first_instance {
-        // We are the first instance, listen for messages sent from other instances
-        std::thread::Builder::new()
-            .name("EnsureSingleton".to_owned())
-            .spawn(move || {
-                with_pipe(&|url| {
-                    opener.open(RawOpenRequest {
-                        urls: vec![url],
-                        ..Default::default()
-                    })
+    if is_first_instance() {
+        listen_for_other_instances(opener);
+        return true;
+    }
+    if args.foreground {
+        return false;
+    }
+    // We are not the first instance, send args to the first instance.
+    match send_args_to_instance_with_timeout(args) {
+        Ok(Some(status)) => std::process::exit(status),
+        Ok(None) => false,
+        // The running copy is hung or a leftover that never finished quitting.
+        // Its window is not coming, so open one here rather than leave the
+        // person clicking. The listener below keeps retrying the pipe, so once
+        // the old copy is gone, later launches reach this one.
+        Err(error) => {
+            log::warn!(
+                "the running copy of noah did not respond ({error:#}); opening a new window"
+            );
+            listen_for_other_instances(opener);
+            true
+        }
+    }
+}
+
+fn listen_for_other_instances(opener: OpenListener) {
+    std::thread::Builder::new()
+        .name("EnsureSingleton".to_owned())
+        .spawn(move || {
+            with_pipe(&|url| {
+                opener.open(RawOpenRequest {
+                    urls: vec![url],
+                    ..Default::default()
                 })
             })
-            .unwrap();
-    } else if !args.foreground {
-        // We are not the first instance, send args to the first instance
-        send_args_to_instance(args).log_err();
-    }
+        })
+        .unwrap();
+}
 
-    is_first_instance
+/// Runs the handoff on its own thread so the launch can give up on it. A
+/// thread left waiting on a dead copy costs nothing and ends with the process.
+fn send_args_to_instance_with_timeout(args: &Args) -> anyhow::Result<Option<i32>> {
+    let (sender, receiver) = mpsc::channel();
+    let args = args.clone();
+    std::thread::Builder::new()
+        .name("InstanceHandoff".to_owned())
+        .spawn(move || {
+            sender.send(send_args_to_instance(&args)).ok();
+        })
+        .unwrap();
+    match receiver.recv_timeout(HANDOFF_TIMEOUT) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            anyhow::bail!("no reply within {} seconds", HANDOFF_TIMEOUT.as_secs())
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => anyhow::bail!("the handoff thread ended"),
+    }
 }
 
 fn with_pipe(f: &dyn Fn(String)) {
-    let pipe = unsafe {
-        CreateNamedPipeW(
-            &HSTRING::from(format!("\\\\.\\pipe\\{}-Named-Pipe", app_identifier())),
-            PIPE_ACCESS_INBOUND,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            1,
-            128,
-            128,
-            0,
-            None,
-        )
-    };
-    if pipe.is_invalid() {
-        log::error!("Failed to create named pipe: {:?}", unsafe {
+    let pipe = loop {
+        let pipe = unsafe {
+            CreateNamedPipeW(
+                &HSTRING::from(format!("\\\\.\\pipe\\{}-Named-Pipe", app_identifier())),
+                PIPE_ACCESS_INBOUND,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                1,
+                128,
+                128,
+                0,
+                None,
+            )
+        };
+        if !pipe.is_invalid() {
+            break pipe;
+        }
+        // A hung or half-quit copy may still own the pipe. Keep trying so
+        // this window takes over once that copy is finally gone.
+        log::error!("Failed to create named pipe, retrying: {:?}", unsafe {
             GetLastError()
         });
-        return;
-    }
+        std::thread::sleep(Duration::from_secs(5));
+    };
 
     loop {
         if let Some(message) = retrieve_message_from_pipe(pipe)
@@ -108,10 +174,11 @@ fn retrieve_message_from_pipe_inner(pipe: HANDLE) -> anyhow::Result<String> {
 }
 
 // This part of code is mostly from crates/cli/src/main.rs
-fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
+fn send_args_to_instance(args: &Args) -> anyhow::Result<Option<i32>> {
     if let Some(dock_menu_action_idx) = args.dock_action {
         let url = format!("zed-dock-action://{}", dock_menu_action_idx);
-        return write_message_to_instance_pipe(url.as_bytes());
+        write_message_to_instance_pipe(url.as_bytes())?;
+        return Ok(None);
     }
 
     let (server, server_name) =
@@ -199,26 +266,43 @@ fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
         .unwrap();
 
     write_message_to_instance_pipe(url.as_bytes())?;
-    sender.join().unwrap()?;
-    if let Some(exit_status) = exit_status.lock().take() {
-        std::process::exit(exit_status);
+    sender
+        .join()
+        .map_err(|_| anyhow::anyhow!("the CLI receiver thread panicked"))??;
+    let exit_status = exit_status.lock().take();
+    Ok(exit_status)
+}
+
+fn write_message_to_instance_pipe(message: &[u8]) -> anyhow::Result<()> {
+    let name = HSTRING::from(format!("\\\\.\\pipe\\{}-Named-Pipe", app_identifier()));
+    unsafe {
+        let pipe = match open_instance_pipe(&name) {
+            // The pipe takes one client at a time; another launch may hold it
+            // for a moment. Wait for it, but not on a copy that never lets go.
+            Err(error) if error.code() == ERROR_PIPE_BUSY.to_hresult() => {
+                WaitNamedPipeW(&name, PIPE_BUSY_TIMEOUT_MS)
+                    .context("the running copy's pipe stayed busy")?;
+                open_instance_pipe(&name)
+            }
+            other => other,
+        }
+        .context("could not open the running copy's pipe")?;
+        WriteFile(pipe, Some(message), None, None)?;
+        CloseHandle(pipe)?;
     }
     Ok(())
 }
 
-fn write_message_to_instance_pipe(message: &[u8]) -> anyhow::Result<()> {
+unsafe fn open_instance_pipe(name: &HSTRING) -> windows::core::Result<HANDLE> {
     unsafe {
-        let pipe = CreateFileW(
-            &HSTRING::from(format!("\\\\.\\pipe\\{}-Named-Pipe", app_identifier())),
+        CreateFileW(
+            name,
             GENERIC_WRITE.0,
             FILE_SHARE_MODE::default(),
             None,
             OPEN_EXISTING,
             FILE_FLAGS_AND_ATTRIBUTES::default(),
             None,
-        )?;
-        WriteFile(pipe, Some(message), None, None)?;
-        CloseHandle(pipe)?;
+        )
     }
-    Ok(())
 }

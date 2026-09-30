@@ -1736,7 +1736,7 @@ fn stdout_is_a_pty() -> bool {
     !*FORCE_CLI_MODE && io::stdout().is_terminal()
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(name = "zed", disable_version_flag = true, max_term_width = 100)]
 struct Args {
     /// A sequence of space-separated paths or urls that you want to open.
