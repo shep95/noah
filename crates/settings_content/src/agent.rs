@@ -351,6 +351,13 @@ pub struct AgentSettingsContent {
     ///
     /// Default: on_trigger
     pub research_mode: Option<ResearchMode>,
+    /// Whether shepherd may take screenshots of pages in the browser room.
+    /// A screenshot shows the model whatever is on the page, including
+    /// pages you signed in to there, so it is off until you turn it on, and
+    /// each one asks first.
+    ///
+    /// Default: false
+    pub browser_screenshots: Option<bool>,
     /// After shepherd changes code, noah runs the project's own check (build,
     /// tests or type check, found per project), hands failures back to
     /// shepherd to fix, and repeats until it passes or three rounds are up.

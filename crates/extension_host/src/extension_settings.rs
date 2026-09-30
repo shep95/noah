@@ -27,11 +27,15 @@ impl ExtensionSettings {
             .unwrap_or(true)
     }
 
+    /// An extension update is code from its author's registry running here,
+    /// so it happens only for extensions the person named, or for all of
+    /// them with `"*": true`.
     pub fn should_auto_update(&self, extension_id: &str) -> bool {
         self.auto_update_extensions
             .get(extension_id)
+            .or_else(|| self.auto_update_extensions.get("*"))
             .copied()
-            .unwrap_or(true)
+            .unwrap_or(false)
     }
 }
 

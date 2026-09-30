@@ -208,7 +208,7 @@ pub struct WorktreeSettingsContent {
     pub file_scan_depth: Option<u32>,
 
     /// Treat the files matching these globs as `.env` files.
-    /// Default: ["**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt", "**/secrets.yml"]
+    /// Default: ["**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt", "**/secrets.yml", "**/.ssh/**", "**/id_rsa*", "**/id_ed25519*", "**/id_ecdsa*", "**/*.pfx", "**/*.p12", "**/*.kdbx", "**/.netrc", "**/.npmrc", "**/.pypirc", "**/.git-credentials", "**/.aws/credentials"]
     pub private_files: Option<ExtendingVec<String>>,
 
     /// Treat files and folders matching these glob patterns as hidden, including

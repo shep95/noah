@@ -22,14 +22,23 @@
   let seedingInProgress = false;
   let site = null;
 
-  window.addEventListener("noah-persona-config", (event) => {
+  // The bridge and this script pair up with a nonce before any page script
+  // runs (both start at document_start), so a page cannot forge the events
+  // that drive this script or listen in on them.
+  const nonce = crypto.randomUUID();
+  const channel = (name) => name + ":" + nonce;
+  const hello = () => { try { window.dispatchEvent(new CustomEvent("noah-persona-hello", { detail: nonce })); } catch {} };
+  window.addEventListener("noah-persona-bridge-ready", hello);
+  hello();
+
+  window.addEventListener(channel("noah-persona-config"), (event) => {
     const next = event.detail || {};
     if (next.prompt) prompt = next.prompt;
     if (next.config) config = { ...config, ...next.config };
     ensurePill();
     if (config.enabled && config.autoSeed && prompt && !seededThisChat) tryAutoSeed();
   });
-  window.addEventListener("noah-persona-force-seed", () => { seededThisChat = false; tryAutoSeed(); });
+  window.addEventListener(channel("noah-persona-force-seed"), () => { seededThisChat = false; tryAutoSeed(); });
 
   // ---- per-site selectors + new-chat detection ------------------------------
   // Each entry answers: which node is the composer, which is the send button,
@@ -454,9 +463,9 @@
   watchNavigation();
   // Ask the bridge for the config, in case its initial dispatch happened
   // before this script's listener was registered.
-  try { window.dispatchEvent(new CustomEvent("noah-persona-request")); } catch {}
+  hello();
   setTimeout(() => {
-    try { window.dispatchEvent(new CustomEvent("noah-persona-request")); } catch {}
+    hello();
     if (config.enabled && config.autoSeed && prompt) tryAutoSeed();
   }, 1500);
 })();

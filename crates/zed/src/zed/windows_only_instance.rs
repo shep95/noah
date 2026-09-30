@@ -20,13 +20,17 @@ use windows::{
         },
         System::{
             Pipes::{
-                ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
-                PIPE_TYPE_MESSAGE, PIPE_WAIT, WaitNamedPipeW,
+                ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe,
+                GetNamedPipeServerProcessId, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
+                WaitNamedPipeW,
             },
-            Threading::CreateMutexW,
+            Threading::{
+                CreateMutexW, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+                QueryFullProcessImageNameW,
+            },
         },
     },
-    core::HSTRING,
+    core::{HSTRING, PWSTR},
 };
 
 use crate::{Args, OpenListener, RawOpenRequest};
@@ -287,9 +291,48 @@ fn write_message_to_instance_pipe(message: &[u8]) -> anyhow::Result<()> {
             other => other,
         }
         .context("could not open the running copy's pipe")?;
+        // Any program can create a pipe by this name. Hand the launch over
+        // only to a copy of this same noah; anything else would swallow the
+        // request and leave the person with no window.
+        if let Err(error) = ensure_pipe_is_served_by_noah(pipe) {
+            CloseHandle(pipe).log_err();
+            return Err(error);
+        }
         WriteFile(pipe, Some(message), None, None)?;
         CloseHandle(pipe)?;
     }
+    Ok(())
+}
+
+unsafe fn ensure_pipe_is_served_by_noah(pipe: HANDLE) -> anyhow::Result<()> {
+    let server_exe = unsafe {
+        let mut server_pid = 0u32;
+        GetNamedPipeServerProcessId(pipe, &mut server_pid)
+            .context("could not identify the pipe's owner")?;
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, server_pid)
+            .context("could not open the pipe owner's process")?;
+        let mut buffer = [0u16; 32 * 1024];
+        let mut length = buffer.len() as u32;
+        let queried = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut length,
+        );
+        CloseHandle(process).log_err();
+        queried.context("could not read the pipe owner's path")?;
+        std::path::PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]))
+    };
+    let own_exe = std::env::current_exe().context("could not find this noah's path")?;
+    let same_program = server_exe
+        .file_name()
+        .zip(own_exe.file_name())
+        .is_some_and(|(server, own)| server.eq_ignore_ascii_case(own));
+    anyhow::ensure!(
+        same_program,
+        "the instance pipe is served by {}, not by noah",
+        server_exe.display()
+    );
     Ok(())
 }
 

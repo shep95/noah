@@ -29,7 +29,10 @@ const BINARY_NAME: &str = if cfg!(windows) {
 };
 
 pub fn init(cx: &mut App) {
-    let browser = cx.new(|_| AgentBrowser::default());
+    let browser = cx.new(|_| AgentBrowser {
+        running_commands: 0,
+        person_driving: true,
+    });
     cx.set_global(GlobalAgentBrowser(browser));
     browser_panel::init(cx);
     prewarm(cx);
@@ -56,9 +59,12 @@ pub enum BrowserEvent {
     Show { url: String },
 }
 
-#[derive(Default)]
 pub struct AgentBrowser {
     running_commands: usize,
+    /// Whether the person, not shepherd, opened the page in the room last.
+    /// Shepherd reads pages it opened freely; a page the person opened is
+    /// theirs, and looking at it asks first.
+    person_driving: bool,
 }
 
 impl EventEmitter<BrowserEvent> for AgentBrowser {}
@@ -71,6 +77,18 @@ impl AgentBrowser {
 
     pub fn is_busy(&self) -> bool {
         self.running_commands > 0
+    }
+
+    pub fn person_is_driving(&self) -> bool {
+        self.person_driving
+    }
+
+    pub fn mark_person_driving(&mut self) {
+        self.person_driving = true;
+    }
+
+    pub fn mark_agent_driving(&mut self) {
+        self.person_driving = false;
     }
 
     /// Opens the address and brings the browser room in front: the canvas.
@@ -217,8 +235,14 @@ async fn run_to_exit(
             _ = grace => {},
         }
     }
-    let stdout = stdout_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
-    let stderr = stderr_buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
+    let stdout = stdout_buffer
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
+    let stderr = stderr_buffer
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
     Ok((status, stdout, stderr))
 }
 
@@ -229,12 +253,17 @@ fn remember_output(arguments: &[String], code: Option<i32>, stdout: &str, stderr
     let mut text = format!(
         "agent-browser {} → exit {}",
         arguments.join(" "),
-        code.map(|code| code.to_string()).unwrap_or_else(|| "signal".into())
+        code.map(|code| code.to_string())
+            .unwrap_or_else(|| "signal".into())
     );
     for (label, body) in [("stdout", stdout), ("stderr", stderr)] {
         if !body.is_empty() {
             let start = body.len().saturating_sub(600);
-            let start = body.char_indices().map(|(index, _)| index).find(|index| *index >= start).unwrap_or(0);
+            let start = body
+                .char_indices()
+                .map(|(index, _)| index)
+                .find(|index| *index >= start)
+                .unwrap_or(0);
             text.push_str(&format!("\n{label}: {}", &body[start..]));
         }
     }
@@ -251,7 +280,9 @@ pub fn doctor() -> Vec<String> {
     let mut lines = Vec::new();
     match find_binary() {
         Some(path) => lines.push(format!("agent-browser: {}", path.display())),
-        None => lines.push("agent-browser: not found next to noah or on the PATH; reinstall noah".to_string()),
+        None => lines.push(
+            "agent-browser: not found next to noah or on the PATH; reinstall noah".to_string(),
+        ),
     }
     match std::env::var_os("AGENT_BROWSER_EXECUTABLE_PATH").map(PathBuf::from).or_else(find_browser) {
         Some(path) => lines.push(format!("browser: {}", path.display())),
@@ -394,11 +425,7 @@ impl PageStyle {
         let theme = cx.theme();
         let colors = theme.colors();
         let dark = !theme.appearance().is_light();
-        let base = if dark {
-            gpui::black()
-        } else {
-            gpui::white()
-        };
+        let base = if dark { gpui::black() } else { gpui::white() };
         // Surfaces are translucent over the wallpaper, so flatten them onto
         // the window background the way noah paints them.
         let window = base.blend(colors.background);
@@ -623,7 +650,10 @@ pub fn address_to_url(address: &str, style: &PageStyle) -> SharedString {
     }
     let host = address.split(['/', '?', '#']).next().unwrap_or_default();
     let host_name = if host.starts_with('[') {
-        host.split(']').next().map(|name| format!("{name}]")).unwrap_or_default()
+        host.split(']')
+            .next()
+            .map(|name| format!("{name}]"))
+            .unwrap_or_default()
     } else {
         host.split(':').next().unwrap_or_default().to_string()
     };
@@ -695,7 +725,10 @@ mod tests {
         assert!(html.contains("background:#101412"));
         assert!(html.contains("font-family:\"IBM Plex Sans\""));
         assert!(html.contains("name=\"k9\" value=\"9fd4b4\""));
-        assert!(!html.contains("body::before"), "no wallpaper without a file");
+        assert!(
+            !html.contains("body::before"),
+            "no wallpaper without a file"
+        );
     }
 
     #[test]
@@ -707,11 +740,17 @@ mod tests {
     #[test]
     fn missing_browser_is_recognized_in_any_case() {
         let explained = explain_failure("Error: Chrome Not Found");
-        assert!(explained.starts_with("Error: Chrome Not Found\n"), "{explained}");
+        assert!(
+            explained.starts_with("Error: Chrome Not Found\n"),
+            "{explained}"
+        );
         assert!(explained.contains("No Chrome, Edge or Chromium was found"));
 
         let explained = explain_failure("NO BROWSER available");
-        assert!(explained.starts_with("NO BROWSER available\n"), "{explained}");
+        assert!(
+            explained.starts_with("NO BROWSER available\n"),
+            "{explained}"
+        );
         assert!(explained.contains("download a browser"));
 
         assert_eq!(explain_failure(""), "");
@@ -792,7 +831,9 @@ mod tests {
         } else {
             "/srv/site/index.html"
         };
-        let expected = url::Url::from_file_path(path).expect("absolute path").to_string();
+        let expected = url::Url::from_file_path(path)
+            .expect("absolute path")
+            .to_string();
         assert_eq!(address_to_url(path, &style), expected.as_str());
     }
 
@@ -836,7 +877,10 @@ mod tests {
             "{url}"
         );
         let url = style().search_url("keep-these_.~");
-        assert!(url.starts_with("https://duckduckgo.com/?q=keep-these_.~&"), "{url}");
+        assert!(
+            url.starts_with("https://duckduckgo.com/?q=keep-these_.~&"),
+            "{url}"
+        );
 
         let odd_font = PageStyle {
             font: "A&B=C".into(),
@@ -856,9 +900,7 @@ mod tests {
         let html = page_style.start_page_html();
         assert!(!html.contains("<script>"), "{html}");
         assert!(!html.contains("<b>"), "{html}");
-        assert!(html.contains(
-            "placeholder=\"say &quot;hi&quot; &lt;b&gt;&amp;&lt;/b&gt;\""
-        ));
+        assert!(html.contains("placeholder=\"say &quot;hi&quot; &lt;b&gt;&amp;&lt;/b&gt;\""));
         assert!(html.contains(
             "font-family:\"Evil&quot;&lt;/style&gt;&lt;script&gt;alert(1)&lt;/script&gt;\""
         ));
@@ -929,7 +971,10 @@ mod tests {
     #[test]
     fn escape_html_escapes_ampersands_first() {
         assert_eq!(escape_html("&lt;"), "&amp;lt;");
-        assert_eq!(escape_html("<a href=\"x\">"), "&lt;a href=&quot;x&quot;&gt;");
+        assert_eq!(
+            escape_html("<a href=\"x\">"),
+            "&lt;a href=&quot;x&quot;&gt;"
+        );
         assert_eq!(escape_html("plain"), "plain");
     }
 }

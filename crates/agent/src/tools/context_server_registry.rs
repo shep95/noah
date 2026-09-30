@@ -369,11 +369,7 @@ impl AnyAgentTool for ContextServerTool {
                 None
             };
 
-            log::trace!(
-                "Running tool: {} with arguments: {:?}",
-                tool_name,
-                arguments
-            );
+            log::trace!("Running tool: {tool_name}");
 
             let request = protocol.request::<context_server::types::requests::CallTool>(
                 context_server::types::CallToolParams {

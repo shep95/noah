@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · footprint</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="footprint.css">
+</head>
+<body class="options footprint">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>noah shield · footprint</h1>
+    <span class="muted"><a href="tools.html">tools</a> · <a href="options.html">settings</a></span>
+  </header>
+  <main>
+    <section id="who">
+      <h2>what the web holds about you</h2>
+      <p class="muted">Enter what someone would search for. The shield asks several search engines in many countries, without cookies and without your address in a referrer, then draws what came back as a map. Nothing here is sent to noah's servers; the requests go straight to the engines from this browser.</p>
+      <div class="grid two">
+        <label>Full name<input id="f-name" type="text" placeholder="Asher Newton" autocomplete="off"></label>
+        <label>Also known as (names, handles; comma-separated)<input id="f-aliases" type="text" placeholder="asherin, ash newton" autocomplete="off"></label>
+        <label>Emails (comma-separated)<input id="f-emails" type="text" placeholder="me@example.com" autocomplete="off"></label>
+        <label>Phone numbers (comma-separated)<input id="f-phones" type="text" placeholder="+1 239 555 0100" autocomplete="off"></label>
+        <label>City, employer, school (helps tell you apart from namesakes)<input id="f-context" type="text" placeholder="Cape Coral, Gear Coat" autocomplete="off"></label>
+        <label>Read results in<select id="f-lang"></select></label>
+      </div>
+      <p class="row">
+        <label class="switch"><input id="f-world" type="checkbox" checked> ask engines in every country, not only mine</label>
+        <label class="switch"><input id="f-translate" type="checkbox" checked> translate foreign results (uses Google's public translate endpoint; may stop working)</label>
+        <label class="switch"><input id="f-remember" type="checkbox"> remember these details in this browser</label>
+      </p>
+      <p><button id="f-go" class="ghost primary">Search the web for me</button> <button id="f-stop" class="ghost" hidden>Stop</button> <span id="f-status" class="muted"></span></p>
+      <div id="f-progress" class="progress" hidden><div></div></div>
+    </section>
+
+    <section id="map-section" hidden>
+      <h2>the map</h2>
+      <p class="muted">You in the middle; around you the kinds of places that mention you; on the outside every site. Drag anything. Hover for a line about it, click for the pages and what to do. Colours are yours to change.</p>
+      <div id="legend" class="legend"></div>
+      <div class="map-wrap">
+        <canvas id="map" aria-label="map of where your details appear"></canvas>
+        <div id="tip" class="tip" hidden></div>
+      </div>
+      <p class="row">
+        <button id="map-png" class="ghost">Save the map as a picture</button>
+        <button id="map-reset" class="ghost">Untangle</button>
+        <span id="map-summary" class="muted"></span>
+      </p>
+    </section>
+
+    <section id="detail" hidden>
+      <h2 id="detail-title">…</h2>
+      <p id="detail-lede" class="muted"></p>
+      <div id="detail-actions" class="row"></div>
+      <table id="detail-results"></table>
+    </section>
+
+    <section id="removal" hidden>
+      <h2>getting it taken down</h2>
+      <p class="muted">Plainly: no button anywhere can delete what other sites hold. Only they can. What this does is put every removal form and privacy address you need in one list, filled with your details, and remember which you have filed. With noah installed, shepherd can work through the forms for you in its browser room, asking before each one is sent; captchas and "click the link in your email" steps stay yours.</p>
+      <div class="row">
+        <button id="removal-shepherd" class="ghost primary">Have shepherd file these</button>
+        <button id="removal-copy" class="ghost">Copy the plan for any assistant</button>
+        <button id="removal-letter" class="ghost">Copy a deletion letter</button>
+        <span id="removal-status" class="muted"></span>
+      </div>
+      <table id="removal-table"></table>
+    </section>
+
+    <section id="checks" hidden>
+      <h2>other places to look yourself</h2>
+      <p class="muted">Pages that cannot be searched from here (they need you signed in, or they refuse programs). Each opens in a new tab with your details in the search box.</p>
+      <ul id="checks-list"></ul>
+    </section>
+  </main>
+  <script src="lib/common.js"></script>
+  <script src="lib/host.js"></script>
+  <script src="lib/look.js"></script>
+  <script src="footprint.js"></script>
+</body>
+</html>

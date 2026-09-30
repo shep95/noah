@@ -105,6 +105,11 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  ; The install path comes from a registry value anyone on the account can
+  ; rewrite. Only ever remove a folder that really holds noah.
+  IfFileExists "$INSTDIR\noah.exe" +3 0
+    MessageBox MB_ICONSTOP "noah was not found in $INSTDIR, so nothing was removed." /SD IDOK
+    Abort
   nsExec::Exec 'taskkill /F /IM noah.exe'
   nsExec::Exec 'taskkill /F /IM agent-browser.exe'
   Delete "$SMPROGRAMS\${APPNAME}.lnk"

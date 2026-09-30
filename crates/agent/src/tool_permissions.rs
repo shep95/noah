@@ -602,6 +602,7 @@ mod tests {
             offline: false,
             auto_approve: false,
             research_mode: Default::default(),
+            browser_screenshots: false,
             canvas: false,
             verify_after_edits: false,
             monthly_budget_usd: None,

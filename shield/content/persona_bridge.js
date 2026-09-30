@@ -9,9 +9,25 @@
   if (!api || !api.runtime || !api.runtime.sendMessage) return;
 
   let cached = null;
+  // The MAIN-world script announces a nonce at document_start, before any
+  // page script can listen; every event to it carries that nonce, and one
+  // without it is a page's forgery and is ignored.
+  let nonce = null;
+  const channel = (name) => name + ":" + nonce;
+  window.addEventListener("noah-persona-hello", (event) => {
+    if (nonce !== null) return;
+    nonce = String(event.detail || "");
+    onPaired();
+  });
+  try { window.dispatchEvent(new CustomEvent("noah-persona-bridge-ready")); } catch {}
+  function onPaired() {
+    if (cached) send(cached);
+    else fetchAndSend();
+  }
   function send(payload) {
     cached = payload;
-    try { window.dispatchEvent(new CustomEvent("noah-persona-config", { detail: payload })); } catch {}
+    if (nonce === null) return;
+    try { window.dispatchEvent(new CustomEvent(channel("noah-persona-config"), { detail: payload })); } catch {}
   }
   function fetchAndSend() {
     api.runtime.sendMessage({ type: "persona.config" }, (reply) => {
@@ -20,12 +36,6 @@
     });
   }
   fetchAndSend();
-  // Persona.js runs at document_idle so it may miss the first dispatch;
-  // it fires a request event on load and we replay the cached config.
-  window.addEventListener("noah-persona-request", () => {
-    if (cached) send(cached);
-    else fetchAndSend();
-  });
 
   if (api.runtime.onMessage && api.runtime.onMessage.addListener) {
     api.runtime.onMessage.addListener((message) => {
@@ -33,7 +43,7 @@
       if (message.type === "persona.set") {
         send({ config: message.persona || { enabled: true, autoSeed: true }, prompt: message.prompt || null });
       } else if (message.type === "persona.reseed") {
-        try { window.dispatchEvent(new CustomEvent("noah-persona-force-seed")); } catch {}
+        if (nonce !== null) try { window.dispatchEvent(new CustomEvent(channel("noah-persona-force-seed"))); } catch {}
       }
     });
   }

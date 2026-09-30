@@ -497,7 +497,7 @@ fn completion_headers(extra_headers: &CustomHeaders) -> CustomHeaders {
     let mut headers = Vec::with_capacity(extra_headers.iter().len() + 2);
     headers.push((
         http::HeaderName::from_static("http-referer"),
-        http::HeaderValue::from_static("https://zed.dev"),
+        http::HeaderValue::from_static("https://noah.asherin.com"),
     ));
     headers.push((
         http::HeaderName::from_static("x-title"),
@@ -523,7 +523,7 @@ pub async fn list_models(
         .uri(uri)
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", api_key))
-        .header("HTTP-Referer", "https://zed.dev")
+        .header("HTTP-Referer", "https://noah.asherin.com")
         .header("X-Title", OPEN_ROUTER_APP_TITLE)
         .extra_headers(extra_headers)
         .body(AsyncBody::default())
@@ -832,7 +832,7 @@ mod tests {
         assert!(responses[0].choices.is_empty());
         let headers = captured_headers.lock().expect("captured headers lock");
         let headers = headers.as_ref().expect("captured headers");
-        assert_eq!(headers["http-referer"], "https://zed.dev");
+        assert_eq!(headers["http-referer"], "https://noah.asherin.com");
         assert_eq!(headers["x-title"], OPEN_ROUTER_APP_TITLE);
         assert_eq!(headers["x-custom-header"], "custom-value");
     }

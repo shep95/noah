@@ -37,7 +37,7 @@
     return sum % 10 === 0;
   }
   const AI_CHAT = /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|gemini\.google\.com|copilot\.microsoft\.com|perplexity\.ai|poe\.com|character\.ai|meta\.ai|grok\.com|x\.ai|deepseek\.com|chat\.mistral\.ai|huggingface\.co|you\.com|pi\.ai|kimi\.moonshot\.cn|chat\.qwen\.ai)$/i;
-  const PAYMENT = /(^|\.)(stripe\.com|paypal\.com|checkout\.com|adyen\.com|klarna\.com|affirm\.com|shopify\.com|amazon\.[a-z.]+|apple\.com|google\.com)$/i;
+  const PAYMENT = /(^|\.)(stripe\.com|paypal\.com|checkout\.com|adyen\.com|klarna\.com|affirm\.com|shopify\.com|amazon\.(?:com|co\.uk|co\.jp|com\.au|com\.br|com\.mx|com\.tr|de|fr|it|es|ca|in|nl|se|pl|sg|ae|sa|eg)|apple\.com|google\.com)$/i;
   function classify(textValue) {
     const found = [];
     const digitsOnly = textValue.replace(/[\s-]/g, "");

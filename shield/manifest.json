@@ -321,7 +321,7 @@
       "js": [
         "content/persona.js"
       ],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "world": "MAIN"
     },
     {
@@ -463,14 +463,6 @@
     {
       "resources": [
         "looks/*.jpg"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    },
-    {
-      "resources": [
-        "data/shepherd.txt"
       ],
       "matches": [
         "<all_urls>"

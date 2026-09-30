@@ -17,9 +17,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
     DockPosition, DockSide, IntoGpui, LanguageModelParameters, LanguageModelSelection,
-    NotifyWhenAgentWaiting, PlaySoundWhenAgentDone, ResearchMode, RegisterSetting, Settings, SettingsContent,
-    SettingsStore, SidebarDockPosition, SidebarSide, ThinkingBlockDisplay, ToolPermissionMode,
-    update_settings_file, update_settings_file_with_completion,
+    NotifyWhenAgentWaiting, PlaySoundWhenAgentDone, RegisterSetting, ResearchMode, Settings,
+    SettingsContent, SettingsStore, SidebarDockPosition, SidebarSide, ThinkingBlockDisplay,
+    ToolPermissionMode, update_settings_file, update_settings_file_with_completion,
 };
 use util::ResultExt as _;
 
@@ -239,6 +239,7 @@ pub struct AgentSettings {
     pub verifier_model: Option<LanguageModelSelection>,
     pub teaching_mode: bool,
     pub research_mode: ResearchMode,
+    pub browser_screenshots: bool,
     pub verify_after_edits: bool,
     pub canvas: bool,
     pub offline: bool,
@@ -835,6 +836,7 @@ impl Settings for AgentSettings {
             verifier_model: agent.verifier_model,
             teaching_mode: agent.teaching_mode.unwrap_or(false),
             research_mode: agent.research_mode.unwrap_or_default(),
+            browser_screenshots: agent.browser_screenshots.unwrap_or(false),
             verify_after_edits: agent.verify_after_edits.unwrap_or(true),
             canvas: agent.canvas.unwrap_or(true),
             offline: agent.offline.unwrap_or(false),

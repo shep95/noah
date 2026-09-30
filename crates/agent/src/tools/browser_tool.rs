@@ -14,6 +14,8 @@ use ui::SharedString;
 use util::markdown::MarkdownInlineCode;
 
 use crate::{AgentTool, ToolCallEventStream, ToolInput};
+use agent_settings::AgentSettings;
+use settings::Settings as _;
 
 /// Output longer than this is cut, so one busy page can't fill the context.
 const MAX_OUTPUT_CHARS: usize = 40_000;
@@ -121,19 +123,40 @@ impl BrowserAction {
     }
 
     /// Looking at a page, or moving around in it, can't change anything
-    /// outside the browser; these run without asking. Everything that acts on
-    /// a page, loads a new one or runs code asks first.
+    /// outside the browser; these run without asking on a page shepherd
+    /// opened itself. Everything that acts on a page, loads a new one or
+    /// runs code asks first, and so does a screenshot: it is the one
+    /// observation that shows the model the page exactly as the person
+    /// sees it.
     fn is_observation(self) -> bool {
         matches!(
             self,
             BrowserAction::Snapshot
                 | BrowserAction::Get
-                | BrowserAction::Screenshot
                 | BrowserAction::Wait
                 | BrowserAction::Scroll
                 | BrowserAction::Scrollintoview
                 | BrowserAction::Hover
                 | BrowserAction::Set
+        )
+    }
+
+    /// Reads that show shepherd what is on the page.
+    fn reads_the_page(self) -> bool {
+        matches!(self, BrowserAction::Snapshot | BrowserAction::Get)
+    }
+
+    /// Actions that load a page of shepherd's choosing, after which the page
+    /// in the room is shepherd's to look at.
+    fn navigates(self) -> bool {
+        matches!(
+            self,
+            BrowserAction::Open
+                | BrowserAction::Read
+                | BrowserAction::Tab
+                | BrowserAction::Back
+                | BrowserAction::Forward
+                | BrowserAction::Reload
         )
     }
 }
@@ -274,7 +297,9 @@ impl AgentTool for BrowserTool {
             let mut arguments = command_arguments(&input)?;
             let destination = match input.action {
                 BrowserAction::Open | BrowserAction::Read => input.arguments.first(),
-                BrowserAction::Tab if input.arguments.first().map(String::as_str) == Some("new") => {
+                BrowserAction::Tab
+                    if input.arguments.first().map(String::as_str) == Some("new") =>
+                {
                     input.arguments.get(1)
                 }
                 _ => None,
@@ -292,15 +317,39 @@ impl AgentTool for BrowserTool {
                 .collect::<Vec<_>>()
                 .join(" ");
 
-            if !input.action.is_observation() {
+            let Some(browser) = cx.update(|cx| AgentBrowser::global(cx)) else {
+                return Err("the browser isn't available in this build of noah"
+                    .to_string()
+                    .into());
+            };
+            if input.action == BrowserAction::Screenshot
+                && !cx.update(|cx| AgentSettings::get_global(cx).browser_screenshots)
+            {
+                return Err(
+                    "screenshots are off: the person can turn on agent.browser_screenshots \
+                     in settings; use snapshot or get to read the page instead"
+                        .to_string()
+                        .into(),
+                );
+            }
+            // A page the person opened in the room is theirs: reading it is
+            // like looking over their shoulder, so it asks.
+            let person_driving = cx.update(|cx| browser.read(cx).person_is_driving());
+            let must_ask =
+                !input.action.is_observation() || (input.action.reads_the_page() && person_driving);
+            if must_ask {
                 let authorize = cx.update(|cx| {
                     let context =
                         crate::ToolPermissionContext::new(Self::NAME, vec![described.clone()]);
-                    event_stream.authorize(
-                        format!("browser {}", MarkdownInlineCode(&described)),
-                        context,
-                        cx,
-                    )
+                    let title = if input.action.is_observation() {
+                        format!(
+                            "browser {} (a page you opened)",
+                            MarkdownInlineCode(&described)
+                        )
+                    } else {
+                        format!("browser {}", MarkdownInlineCode(&described))
+                    };
+                    event_stream.authorize(title, context, cx)
                 });
                 futures::select! {
                     result = authorize.fuse() => result.map_err(|error| error.to_string())?,
@@ -323,12 +372,12 @@ impl AgentTool for BrowserTool {
                 arguments.push(path.to_string_lossy().into_owned());
             }
 
-            let Some(browser) = cx.update(|cx| AgentBrowser::global(cx)) else {
-                return Err("the browser isn't available in this build of noah"
-                    .to_string()
-                    .into());
-            };
-            let command = browser.update(cx, |browser, cx| browser.run(arguments, cx));
+            let command = browser.update(cx, |browser, cx| {
+                if input.action.navigates() {
+                    browser.mark_agent_driving();
+                }
+                browser.run(arguments, cx)
+            });
             let output = futures::select! {
                 result = command.fuse() => result.map_err(|error| format!("{error:#}"))?,
                 _ = event_stream.cancelled_by_user().fuse() => {

@@ -7,8 +7,25 @@
   const api = (typeof chrome !== "undefined" && chrome.runtime) ? chrome : (typeof browser !== "undefined" ? browser : null);
   if (!api || !api.runtime || !api.runtime.sendMessage) return;
 
+  let cached = null;
+  // The MAIN-world script announces a nonce at document_start, before any
+  // page script can listen; every event to it carries that nonce, and one
+  // without it is a page's forgery and is ignored.
+  let nonce = null;
+  const channel = (name) => name + ":" + nonce;
+  window.addEventListener("noah-profile-hello", (event) => {
+    if (nonce !== null) return;
+    nonce = String(event.detail || "");
+    onPaired();
+  });
+  try { window.dispatchEvent(new CustomEvent("noah-profile-bridge-ready")); } catch {}
+  function onPaired() {
+    if (cached) send(cached);
+  }
   function send(config) {
-    try { window.dispatchEvent(new CustomEvent("noah-profile-config", { detail: config })); } catch {}
+    cached = config;
+    if (nonce === null) return;
+    try { window.dispatchEvent(new CustomEvent(channel("noah-profile-config"), { detail: config })); } catch {}
   }
 
   api.runtime.sendMessage({ type: "profile.config" }, (reply) => {

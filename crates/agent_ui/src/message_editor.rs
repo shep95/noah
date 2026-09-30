@@ -2019,7 +2019,9 @@ pub(crate) fn draft_is_vague(text: &str) -> bool {
             || word.rsplit_once('.').is_some_and(|(stem, extension)| {
                 !stem.is_empty()
                     && (1..=5).contains(&extension.len())
-                    && extension.chars().all(|character| character.is_ascii_alphanumeric())
+                    && extension
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric())
             })
     };
     !words.iter().any(names_something)
@@ -5810,7 +5812,11 @@ mod sharpen_hint_tests {
 
     #[test]
     fn only_short_drafts_that_name_nothing_get_the_hint() {
-        for draft in ["fix the bug", "make it faster please", "why does login fail sometimes?"] {
+        for draft in [
+            "fix the bug",
+            "make it faster please",
+            "why does login fail sometimes?",
+        ] {
             assert!(draft_is_vague(draft), "{draft}");
         }
         for draft in [

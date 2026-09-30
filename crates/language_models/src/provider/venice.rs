@@ -1,15 +1,19 @@
 use anyhow::{Context as _, Result};
 use credentials_provider::CredentialsProvider;
 use futures::{AsyncReadExt as _, FutureExt, StreamExt, future::BoxFuture};
+
+/// A model list is a few hundred KB at most; anything larger is not one.
+const MAX_MODEL_LIST_BYTES: u64 = 8 * 1024 * 1024;
 use gpui::{App, AppContext, AsyncApp, Context, Entity, SharedString, Task};
 use http_client::{AsyncBody, HttpClient, Method, Request as HttpRequest};
 use language_model::chat_completion::ChatCompletionEventMapper;
 use language_model::{
-    ApiKeyConfiguration, ApiKeyState, ApiKeyStatus, AuthenticateError, EnvVar, IconOrSvg, LanguageModel,
-    LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId,
-    LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
-    LanguageModelEffortLevel, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, ProviderSettingsView, RateLimiter, ReasoningEffort, env_var,
+    ApiKeyConfiguration, ApiKeyState, ApiKeyStatus, AuthenticateError, EnvVar, IconOrSvg,
+    LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
+    LanguageModelEffortLevel, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice, ProviderSettingsView, RateLimiter,
+    ReasoningEffort, env_var,
 };
 use open_ai::ResponseStreamEvent;
 use open_ai::completion::{ChatCompletionMaxTokensParameter, into_open_ai};
@@ -139,7 +143,12 @@ fn parse_models(body: &str) -> Result<Vec<VeniceModel>> {
         // use, but nothing else is held back (no capability filter, and
         // models Venice marks offline stay listed so nobody wonders where
         // one went; a request to one fails with Venice's own words).
-        .filter(|entry| entry.model_type.as_deref().is_none_or(|kind| kind == "text"))
+        .filter(|entry| {
+            entry
+                .model_type
+                .as_deref()
+                .is_none_or(|kind| kind == "text")
+        })
         .map(|entry| {
             let spec = entry.model_spec;
             VeniceModel {
@@ -151,9 +160,9 @@ fn parse_models(body: &str) -> Result<Vec<VeniceModel>> {
                 supports_images: spec.capabilities.supports_vision,
                 supports_reasoning: spec.capabilities.supports_reasoning,
                 traits: spec.traits,
-                pricing: spec.pricing.and_then(|pricing| {
-                    Some((pricing.input?.usd?, pricing.output?.usd?))
-                }),
+                pricing: spec
+                    .pricing
+                    .and_then(|pricing| Some((pricing.input?.usd?, pricing.output?.usd?))),
             }
         })
         .collect())
@@ -175,7 +184,15 @@ async fn list_models(
         .await
         .with_context(|| format!("couldn't reach Venice at {api_url}"))?;
     let mut body = String::new();
-    response.body_mut().read_to_string(&mut body).await?;
+    response
+        .body_mut()
+        .take(MAX_MODEL_LIST_BYTES + 1)
+        .read_to_string(&mut body)
+        .await?;
+    anyhow::ensure!(
+        body.len() as u64 <= MAX_MODEL_LIST_BYTES,
+        "Venice's model list is larger than {MAX_MODEL_LIST_BYTES} bytes, so it wasn't used"
+    );
     if matches!(response.status().as_u16(), 401 | 403) {
         anyhow::bail!("Venice didn't accept this API key. Check it at venice.ai/settings/api.");
     }
@@ -399,7 +416,12 @@ impl LanguageModelProvider for VeniceLanguageModelProvider {
         let models = &self.state.read(cx).available_models;
         models
             .iter()
-            .find(|model| model.traits.iter().any(|model_trait| model_trait == "fastest"))
+            .find(|model| {
+                model
+                    .traits
+                    .iter()
+                    .any(|model_trait| model_trait == "fastest")
+            })
             .cloned()
             .map(|model| self.create_language_model(model))
     }
@@ -770,7 +792,11 @@ mod tests {
         let levels = reasoning_levels(&reasoning_model(true));
         let values: Vec<_> = levels.iter().map(|level| level.value.as_ref()).collect();
         assert_eq!(values, ["low", "medium", "high"]);
-        assert!(levels.iter().any(|level| level.is_default && level.value == "medium"));
+        assert!(
+            levels
+                .iter()
+                .any(|level| level.is_default && level.value == "medium")
+        );
         assert!(reasoning_levels(&reasoning_model(false)).is_empty());
     }
 
@@ -782,15 +808,24 @@ mod tests {
             thinking_effort: Some("high".into()),
             ..Default::default()
         };
-        assert_eq!(reasoning_for(&model, &request), (Some(ReasoningEffort::High), false));
+        assert_eq!(
+            reasoning_for(&model, &request),
+            (Some(ReasoningEffort::High), false)
+        );
 
         request.thinking_effort = Some("xhigh".into());
-        assert_eq!(reasoning_for(&model, &request), (Some(ReasoningEffort::Medium), false));
+        assert_eq!(
+            reasoning_for(&model, &request),
+            (Some(ReasoningEffort::Medium), false)
+        );
 
         request.thinking_allowed = false;
         assert_eq!(reasoning_for(&model, &request), (None, true));
 
-        assert_eq!(reasoning_for(&reasoning_model(false), &request), (None, false));
+        assert_eq!(
+            reasoning_for(&reasoning_model(false), &request),
+            (None, false)
+        );
     }
 
     #[test]

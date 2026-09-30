@@ -26,7 +26,16 @@
     if (stored !== null) collapsed = stored === "true";
   } catch {}
   let config = { enabled: true };
-  window.addEventListener("noah-profile-config", (event) => {
+  // The bridge and this script pair up with a nonce before any page script
+  // runs (both start at document_start), so a page cannot forge the events
+  // that drive this script or listen in on them.
+  const nonce = crypto.randomUUID();
+  const channel = (name) => name + ":" + nonce;
+  const hello = () => { try { window.dispatchEvent(new CustomEvent("noah-profile-hello", { detail: nonce })); } catch {} };
+  window.addEventListener("noah-profile-bridge-ready", hello);
+  hello();
+
+  window.addEventListener(channel("noah-profile-config"), (event) => {
     const next = event.detail || {};
     config = { ...config, ...next };
     if (!config.enabled && panel) { panel.remove(); panel = null; }

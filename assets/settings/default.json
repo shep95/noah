@@ -511,7 +511,7 @@
   // The default number of context lines shown in multibuffer excerpts.
   "excerpt_context_lines": 2,
   // Globs to match against file paths to determine if a file is private.
-  "private_files": ["**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt", "**/secrets.yml"],
+  "private_files": ["**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt", "**/secrets.yml", "**/.ssh/**", "**/id_rsa*", "**/id_ed25519*", "**/id_ecdsa*", "**/*.pfx", "**/*.p12", "**/*.kdbx", "**/.netrc", "**/.npmrc", "**/.pypirc", "**/.git-credentials", "**/.aws/credentials"],
   // Whether to use additional LSP queries to format (and amend) the code after
   // every "trigger" symbol input, defined by LSP server capabilities.
   "use_on_type_format": true,
@@ -1285,6 +1285,9 @@
     // R&D mode: "off", "on_trigger" (when you ask shepherd to research,
     // investigate, prototype or benchmark) or "always".
     "research_mode": "on_trigger",
+    // Whether shepherd may take screenshots of pages in the browser room.
+    // Off until you turn it on; each screenshot asks first either way.
+    "browser_screenshots": false,
     // After shepherd changes code, noah runs the project's own check and hands
     // failures back to be fixed, until it passes (three rounds at most).
     "verify_after_edits": true,
@@ -2401,6 +2404,10 @@
   "auto_install_extensions": {
     "html": true,
   },
+  // Which installed extensions noah updates on its own from their registry.
+  // Off unless you name one, since an update is new code from outside; set
+  // an extension's id to true, or "*" for all of them.
+  "auto_update_extensions": {},
   // The capabilities granted to extensions.
   //
   // This list can be customized to restrict what extensions are able to do.

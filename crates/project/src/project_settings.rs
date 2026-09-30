@@ -827,7 +827,7 @@ pub struct SettingsObserver {
     project_id: u64,
     task_store: Entity<TaskStore>,
     pending_local_settings:
-        HashMap<PathTrust, BTreeMap<(WorktreeId, Arc<RelPath>), Option<String>>>,
+        HashMap<PathTrust, BTreeMap<(WorktreeId, Arc<RelPath>, LocalSettingsKind), Option<String>>>,
     _trusted_worktrees_watcher: Option<Subscription>,
     _user_settings_watcher: Option<Subscription>,
     _editorconfig_watcher: Option<Subscription>,
@@ -867,15 +867,24 @@ impl SettingsObserver {
                                     .pending_local_settings
                                     .remove(trusted_path)
                                 {
-                                    for ((worktree_id, directory_path), settings_contents) in
+                                    for ((worktree_id, directory_path, kind), settings_contents) in
                                         pending_local_settings
                                     {
                                         let path =
                                             LocalSettingsPath::InWorktree(directory_path.clone());
+                                        if kind == LocalSettingsKind::Tasks {
+                                            settings_observer.apply_local_tasks(
+                                                worktree_id,
+                                                &directory_path,
+                                                settings_contents.as_deref(),
+                                                cx,
+                                            );
+                                            continue;
+                                        }
                                         apply_local_settings(
                                             worktree_id,
                                             path.clone(),
-                                            LocalSettingsKind::Settings,
+                                            kind,
                                             &settings_contents,
                                             cx,
                                         );
@@ -889,10 +898,7 @@ impl SettingsObserver {
                                                     path: path.to_proto(),
                                                     content: settings_contents,
                                                     kind: Some(
-                                                        local_settings_kind_to_proto(
-                                                            LocalSettingsKind::Settings,
-                                                        )
-                                                        .into(),
+                                                        local_settings_kind_to_proto(kind).into(),
                                                     ),
                                                     outside_worktree: Some(false),
                                                 })
@@ -1133,6 +1139,42 @@ impl SettingsObserver {
             anyhow::Ok(())
         })?;
         Ok(())
+    }
+
+    fn apply_local_tasks(
+        &self,
+        worktree_id: WorktreeId,
+        directory: &Arc<RelPath>,
+        file_content: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let result = self.task_store.update(cx, |task_store, cx| {
+            task_store.update_user_tasks(
+                TaskSettingsLocation::Worktree(SettingsLocation {
+                    worktree_id,
+                    path: directory.as_ref(),
+                }),
+                file_content,
+                cx,
+            )
+        });
+
+        match result {
+            Err(InvalidSettingsError::Tasks { path, message }) => {
+                log::error!("Failed to set local tasks in {path:?}: {message:?}");
+                cx.emit(SettingsObserverEvent::LocalTasksUpdated(Err(
+                    InvalidSettingsError::Tasks { path, message },
+                )));
+            }
+            Err(e) => {
+                log::error!("Failed to set local tasks: {e}");
+            }
+            Ok(()) => {
+                cx.emit(SettingsObserverEvent::LocalTasksUpdated(Ok(directory
+                    .as_std_path()
+                    .join(task_file_name()))));
+            }
+        }
     }
 
     fn on_worktree_store_event(
@@ -1379,36 +1421,35 @@ impl SettingsObserver {
                         self.pending_local_settings
                             .entry(PathTrust::Worktree(worktree_id))
                             .or_default()
-                            .insert((worktree_id, directory.clone()), file_content.clone());
+                            .insert(
+                                (worktree_id, directory.clone(), LocalSettingsKind::Settings),
+                                file_content.clone(),
+                            );
                     }
                 }
                 (LocalSettingsPath::InWorktree(directory), LocalSettingsKind::Tasks) => {
-                    let result = task_store.update(cx, |task_store, cx| {
-                        task_store.update_user_tasks(
-                            TaskSettingsLocation::Worktree(SettingsLocation {
-                                worktree_id,
-                                path: directory.as_ref(),
-                            }),
-                            file_content.as_deref(),
-                            cx,
-                        )
-                    });
-
-                    match result {
-                        Err(InvalidSettingsError::Tasks { path, message }) => {
-                            log::error!("Failed to set local tasks in {path:?}: {message:?}");
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Err(
-                                InvalidSettingsError::Tasks { path, message },
-                            )));
+                    // A task is a command, and one hooked to worktree creation
+                    // runs on its own, so a repository's tasks wait for the
+                    // same trust as its settings.
+                    if *can_trust_worktree.get_or_init(|| {
+                        if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
+                            trusted_worktrees.update(cx, |trusted_worktrees, cx| {
+                                trusted_worktrees.can_trust(&self.worktree_store, worktree_id, cx)
+                            })
+                        } else {
+                            true
                         }
-                        Err(e) => {
-                            log::error!("Failed to set local tasks: {e}");
-                        }
-                        Ok(()) => {
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Ok(directory
-                                .as_std_path()
-                                .join(task_file_name()))));
-                        }
+                    }) {
+                        self.apply_local_tasks(worktree_id, directory, file_content.as_deref(), cx);
+                    } else {
+                        applied = false;
+                        self.pending_local_settings
+                            .entry(PathTrust::Worktree(worktree_id))
+                            .or_default()
+                            .insert(
+                                (worktree_id, directory.clone(), LocalSettingsKind::Tasks),
+                                file_content.clone(),
+                            );
                     }
                 }
                 (LocalSettingsPath::InWorktree(directory), LocalSettingsKind::Debug) => {

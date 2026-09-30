@@ -592,7 +592,8 @@ impl Tour {
         text.lines()
             .filter_map(|line| {
                 let (number, rest) = line.split_once(". ")?;
-                if number.is_empty() || !number.chars().all(|character| character.is_ascii_digit()) {
+                if number.is_empty() || !number.chars().all(|character| character.is_ascii_digit())
+                {
                     return None;
                 }
                 let path = rest
@@ -864,8 +865,7 @@ impl ThreadView {
         let parent_session_id = thread.read(cx).parent_session_id().cloned();
 
         let has_slash_completions = session_capabilities.read().has_slash_completions();
-        let placeholder =
-            placeholder_text(agent_display_name.as_ref(), has_slash_completions, cx);
+        let placeholder = placeholder_text(agent_display_name.as_ref(), has_slash_completions, cx);
 
         let mut should_auto_submit = false;
         let mut show_external_source_prompt_warning = false;
@@ -2985,7 +2985,11 @@ impl ThreadView {
         let thread = &self.thread;
         let telemetry = ActionLogTelemetry::from(thread.read(cx));
         let action_log = thread.read(cx).action_log().clone();
-        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        let changed: Vec<_> = action_log
+            .read(cx)
+            .changed_buffers(cx)
+            .map(|(buffer, _)| buffer)
+            .collect();
         crate::mission_control::record_review_outcome(changed, true, cx);
         action_log.update(cx, |action_log, cx| {
             action_log.keep_all_edits(Some(telemetry), cx)
@@ -2997,7 +3001,11 @@ impl ThreadView {
         let telemetry = ActionLogTelemetry::from(thread.read(cx));
         let action_log = thread.read(cx).action_log().clone();
         let has_changes = action_log.read(cx).changed_buffers(cx).next().is_some();
-        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        let changed: Vec<_> = action_log
+            .read(cx)
+            .changed_buffers(cx)
+            .map(|(buffer, _)| buffer)
+            .collect();
         crate::mission_control::record_review_outcome(changed, false, cx);
 
         action_log
@@ -5525,26 +5533,45 @@ impl ThreadView {
         let reading_aloud = self.voice.read_aloud.is_some();
         let speaking = self.voice.speaking.is_some() || self.voice.playback.is_some();
         vec![
-            IconButton::new("voice-input", if listening { IconName::MicMute } else { IconName::Mic })
-                .icon_size(IconSize::Small)
-                .icon_color(if listening { Color::Error } else { Color::Muted })
-                .toggle_state(listening)
-                .disabled(transcribing)
-                .tooltip(Tooltip::text(if listening {
-                    "listening: click to stop and write down what you said"
-                } else if transcribing {
-                    "writing down what you said…"
-                } else {
-                    "speak to shepherd (your provider turns speech into text)"
-                }))
-                .on_click(cx.listener(|this, _, window, cx| this.toggle_listening(window, cx)))
-                .into_any_element(),
             IconButton::new(
-                "voice-output",
-                if reading_aloud { IconName::AudioOn } else { IconName::AudioOff },
+                "voice-input",
+                if listening {
+                    IconName::MicMute
+                } else {
+                    IconName::Mic
+                },
             )
             .icon_size(IconSize::Small)
-            .icon_color(if speaking { Color::Accent } else { Color::Muted })
+            .icon_color(if listening {
+                Color::Error
+            } else {
+                Color::Muted
+            })
+            .toggle_state(listening)
+            .disabled(transcribing)
+            .tooltip(Tooltip::text(if listening {
+                "listening: click to stop and write down what you said"
+            } else if transcribing {
+                "writing down what you said…"
+            } else {
+                "speak to shepherd (your provider turns speech into text)"
+            }))
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_listening(window, cx)))
+            .into_any_element(),
+            IconButton::new(
+                "voice-output",
+                if reading_aloud {
+                    IconName::AudioOn
+                } else {
+                    IconName::AudioOff
+                },
+            )
+            .icon_size(IconSize::Small)
+            .icon_color(if speaking {
+                Color::Accent
+            } else {
+                Color::Muted
+            })
             .toggle_state(reading_aloud)
             .tooltip(Tooltip::text(if speaking {
                 "reading the reply aloud: click to stop"
@@ -5645,12 +5672,19 @@ impl ThreadView {
         }
         self.voice.read_aloud = Some(cx.subscribe(&self.thread, |this, thread, event, cx| {
             if matches!(event, acp_thread::AcpThreadEvent::Stopped(_)) {
-                let reply = thread.read(cx).entries().iter().rev().find_map(|entry| match entry {
-                    AgentThreadEntry::AssistantMessage(message) if !message.is_subagent_output => {
-                        Some(message.to_markdown(cx))
-                    }
-                    _ => None,
-                });
+                let reply = thread
+                    .read(cx)
+                    .entries()
+                    .iter()
+                    .rev()
+                    .find_map(|entry| match entry {
+                        AgentThreadEntry::AssistantMessage(message)
+                            if !message.is_subagent_output =>
+                        {
+                            Some(message.to_markdown(cx))
+                        }
+                        _ => None,
+                    });
                 if let Some(reply) = reply {
                     this.speak(reply, cx);
                 }
@@ -5690,10 +5724,16 @@ impl ThreadView {
             // Clear the playing state once the reply has been read, so the
             // button stops showing it as speaking.
             loop {
-                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(500))
+                    .await;
                 let done = this
                     .update(cx, |this, cx| {
-                        let done = this.voice.playback.as_ref().is_none_or(|playback| playback.is_done());
+                        let done = this
+                            .voice
+                            .playback
+                            .as_ref()
+                            .is_none_or(|playback| playback.is_done());
                         if done {
                             this.voice.playback = None;
                             this.voice.speaking = None;
@@ -5728,7 +5768,13 @@ impl ThreadView {
                 .background_spawn(async move {
                     let output = util::command::new_command(paths::git_program())
                         .current_dir(&root)
-                        .args(["log", "-n", "2000", "--name-only", noah_trust::outcomes::GIT_LOG_FORMAT])
+                        .args([
+                            "log",
+                            "-n",
+                            "2000",
+                            "--name-only",
+                            noah_trust::outcomes::GIT_LOG_FORMAT,
+                        ])
                         .output()
                         .await
                         .ok()?;
@@ -5736,7 +5782,8 @@ impl ThreadView {
                         return None;
                     }
                     let log = String::from_utf8_lossy(&output.stdout);
-                    let outcomes = noah_trust::outcomes::measure(&noah_trust::outcomes::parse_git_log(&log));
+                    let outcomes =
+                        noah_trust::outcomes::measure(&noah_trust::outcomes::parse_git_log(&log));
                     if outcomes.shepherd_commits == 0 {
                         return None;
                     }
@@ -5745,7 +5792,11 @@ impl ThreadView {
                     let held: usize = outcomes
                         .by_model
                         .values()
-                        .map(|model| model.commits.saturating_sub(model.reverted + model.fixed_soon_after))
+                        .map(|model| {
+                            model
+                                .commits
+                                .saturating_sub(model.reverted + model.fixed_soon_after)
+                        })
                         .sum();
                     Some((held, outcomes.shepherd_commits))
                 })
@@ -5781,11 +5832,13 @@ impl ThreadView {
         let stops: Vec<TourStop> = std::fs::read_to_string(&tour_path)
             .map(|text| Tour::parse_stops(&text))
             .unwrap_or_default();
-        let read: std::collections::HashSet<usize> = std::fs::read_to_string(Tour::progress_path(&root))
-            .ok()
-            .and_then(|json| serde_json::from_str(&json).ok())
-            .unwrap_or_default();
-        let has_map = noah_trust::project_files::path(&root, noah_trust::project_files::MAP).exists();
+        let read: std::collections::HashSet<usize> =
+            std::fs::read_to_string(Tour::progress_path(&root))
+                .ok()
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default();
+        let has_map =
+            noah_trust::project_files::path(&root, noah_trust::project_files::MAP).exists();
         self.tour = Some(Tour {
             root,
             stops,
@@ -5837,16 +5890,24 @@ impl ThreadView {
                     .into_any_element(),
             );
         }
-        let read_count = tour.stops.iter().enumerate().filter(|(index, _)| tour.read.contains(index)).count();
+        let read_count = tour
+            .stops
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| tour.read.contains(index))
+            .count();
         Some(
             v_flex()
                 .px_5()
                 .py_2()
                 .gap_1()
                 .child(
-                    Label::new(format!("reading path · {read_count} of {} read", tour.stops.len()))
-                        .size(LabelSize::XSmall)
-                        .color(Color::Muted),
+                    Label::new(format!(
+                        "reading path · {read_count} of {} read",
+                        tour.stops.len()
+                    ))
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
                 )
                 .children(tour.stops.iter().enumerate().map(|(index, stop)| {
                     let done = tour.read.contains(&index);
@@ -5865,7 +5926,9 @@ impl ThreadView {
                                 .color(if done { Color::Muted } else { Color::Default })
                                 .truncate(),
                         )
-                        .on_click(cx.listener(move |this, _, window, cx| this.visit_tour_stop(index, window, cx)))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.visit_tour_stop(index, window, cx)
+                        }))
                 }))
                 .into_any_element(),
         )
@@ -5977,8 +6040,13 @@ impl ThreadView {
     fn render_handoff_card(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let bundle = self.handoff.as_ref()?;
         let colors = cx.theme().colors();
-        let line = |text: String, color: Color| Label::new(text).size(LabelSize::Small).color(color);
-        let heading = |text: &str| Label::new(text.to_string()).size(LabelSize::XSmall).color(Color::Muted);
+        let line =
+            |text: String, color: Color| Label::new(text).size(LabelSize::Small).color(color);
+        let heading = |text: &str| {
+            Label::new(text.to_string())
+                .size(LabelSize::XSmall)
+                .color(Color::Muted)
+        };
         let changes: Vec<String> = if bundle.behavior_changes.is_empty() {
             vec![bundle.summary.clone()]
         } else {
@@ -5988,7 +6056,10 @@ impl ThreadView {
             .claims
             .iter()
             .map(|claim| {
-                let grounded = matches!(bundle.grounding(claim), noah_trust::evidence::Grounding::Grounded);
+                let grounded = matches!(
+                    bundle.grounding(claim),
+                    noah_trust::evidence::Grounding::Grounded
+                );
                 (grounded, claim.text.clone())
             })
             .collect();
@@ -6005,14 +6076,23 @@ impl ThreadView {
                 .bg(colors.elevated_surface_background)
                 .child(Label::new(bundle.title.clone()).size(LabelSize::Default))
                 .child(heading("behavior changed"))
-                .children(changes.into_iter().map(|change| line(change, Color::Default)))
+                .children(
+                    changes
+                        .into_iter()
+                        .map(|change| line(change, Color::Default)),
+                )
                 .when(!claims.is_empty(), |this| {
-                    this.child(heading("claims")).children(claims.into_iter().map(|(grounded, text)| {
-                        line(
-                            format!("{} {text}", if grounded { "✓" } else { "✗" }),
-                            if grounded { Color::Success } else { Color::Warning },
-                        )
-                    }))
+                    this.child(heading("claims"))
+                        .children(claims.into_iter().map(|(grounded, text)| {
+                            line(
+                                format!("{} {text}", if grounded { "✓" } else { "✗" }),
+                                if grounded {
+                                    Color::Success
+                                } else {
+                                    Color::Warning
+                                },
+                            )
+                        }))
                 })
                 .when(!bundle.not_verified.is_empty(), |this| {
                     this.child(heading("not tested")).children(
@@ -6067,9 +6147,11 @@ impl ThreadView {
                 .px_5()
                 .py_2()
                 .child(
-                    Label::new(format!("shepherd's work here: {percent}% held up ({held} of {of})"))
-                        .size(LabelSize::Small)
-                        .color(Color::Muted),
+                    Label::new(format!(
+                        "shepherd's work here: {percent}% held up ({held} of {of})"
+                    ))
+                    .size(LabelSize::Small)
+                    .color(Color::Muted),
                 )
                 .into_any_element(),
         )
@@ -13021,15 +13103,17 @@ impl Render for ThreadView {
                 this.set_flagged_claims(false, cx);
                 cx.notify();
             }))
-            .on_action(cx.listener(|this, _: &crate::RequestRevisions, window, cx| {
-                this.handoff = None;
-                this.set_flagged_claims(false, cx);
-                this.message_editor.update(cx, |editor, cx| {
-                    editor.set_text("please revise: ", window, cx);
-                    editor.focus_handle(cx).focus(window, cx);
-                });
-                cx.notify();
-            }))
+            .on_action(
+                cx.listener(|this, _: &crate::RequestRevisions, window, cx| {
+                    this.handoff = None;
+                    this.set_flagged_claims(false, cx);
+                    this.message_editor.update(cx, |editor, cx| {
+                        editor.set_text("please revise: ", window, cx);
+                        editor.focus_handle(cx).focus(window, cx);
+                    });
+                    cx.notify();
+                }),
+            )
             .on_action(cx.listener(|this, _: &menu::Cancel, _, cx| {
                 if this.parent_session_id.is_none() {
                     this.cancel_generation(cx);
@@ -13499,10 +13583,33 @@ pub(crate) fn open_link(
                     .detach_and_log_err(cx);
             }
         })
-    } else {
+    } else if link_scheme_is_safe(&url) {
         workspace.update(cx, |workspace, cx| {
             workspace.open_url_or_file(&url, None, window, cx);
         });
+    } else {
+        // A model can write any link. Handing an unknown scheme to the
+        // operating system would run whatever handler is registered for it.
+        let scheme = url
+            .trim()
+            .split_once(':')
+            .map(|(scheme, _)| scheme)
+            .unwrap_or("");
+        log::warn!("not opening a link with an unexpected scheme: {scheme}:");
+    }
+}
+
+/// Web pages, mail and files are the links a reply may open. Anything else
+/// (`javascript:`, `ms-msdt:`, `vscode:` and the like) stays a dead link.
+fn link_scheme_is_safe(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    match lower.split_once(':') {
+        None => true,
+        Some((scheme, _)) => {
+            matches!(scheme, "http" | "https" | "mailto" | "file")
+                // A Windows drive letter is a path, not a scheme.
+                || (scheme.len() == 1 && scheme.chars().all(|c| c.is_ascii_alphabetic()))
+        }
     }
 }
 
@@ -13544,6 +13651,34 @@ fn strip_leading_command(text: &str, command_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reply_links_open_only_web_mail_and_files() {
+        for url in [
+            "https://noah.asherin.com",
+            "http://localhost:3000",
+            "mailto:someone@example.com",
+            "file:///home/me/notes.md",
+            "C:\\Users\\me\\notes.md",
+            "src/main.rs",
+            "HTTPS://EXAMPLE.COM",
+        ] {
+            assert!(super::link_scheme_is_safe(url), "{url} should open");
+        }
+        for url in [
+            "javascript:alert(1)",
+            "ms-msdt:/id PCWDiagnostic",
+            "vscode://extension",
+            "zed://settings",
+            "search-ms:query=x",
+            " data:text/html,hi",
+        ] {
+            assert!(
+                !super::link_scheme_is_safe(url),
+                "{url} must stay a dead link"
+            );
+        }
+    }
+
     use super::*;
     use project::{FakeFs, Project};
     use serde_json::json;

@@ -18,6 +18,59 @@ const RESERVED_HOST_NAMES: [&str; 6] = [
     "ip6-localhost",
 ];
 
+/// Hosts a downloaded block list must never be allowed to cut off: noah's
+/// own update and source hosts, and the model providers people bring keys
+/// for. The list comes from a third party's repository, and whoever controls
+/// it could otherwise switch noah's updates or a person's provider off
+/// system-wide with one line. Matched by domain suffix.
+const PROTECTED_DOMAIN_SUFFIXES: &[&str] = &[
+    "asherin.com",
+    "github.com",
+    "githubusercontent.com",
+    "zed.dev",
+    "anthropic.com",
+    "openai.com",
+    "googleapis.com",
+    "google.com",
+    "groq.com",
+    "openrouter.ai",
+    "mistral.ai",
+    "venice.ai",
+    "deepseek.com",
+    "x.ai",
+    "together.xyz",
+    "fireworks.ai",
+    "perplexity.ai",
+    "cerebras.ai",
+    "cohere.com",
+    "huggingface.co",
+    "ollama.com",
+    "aliyuncs.com",
+    "moonshot.cn",
+    "moonshot.ai",
+    "bigmodel.cn",
+    "z.ai",
+    "siliconflow.cn",
+    "siliconflow.com",
+    "minimax.chat",
+    "minimaxi.com",
+    "volces.com",
+    "tencent.com",
+    "hunyuan.cloud.tencent.com",
+    "amazonaws.com",
+    "azure.com",
+    "microsoft.com",
+];
+
+pub fn is_protected_domain(domain: &str) -> bool {
+    PROTECTED_DOMAIN_SUFFIXES.iter().any(|suffix| {
+        domain == *suffix
+            || domain
+                .strip_suffix(suffix)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+    })
+}
+
 pub fn hosts_path() -> PathBuf {
     if cfg!(windows) {
         let system_root = std::env::var_os("SystemRoot")
@@ -49,7 +102,7 @@ pub fn parse_blocklist(text: &str) -> Vec<String> {
         }
         for domain in fields {
             let domain = domain.trim_end_matches('.').to_ascii_lowercase();
-            if !is_blockable_domain(&domain) {
+            if !is_blockable_domain(&domain) || is_protected_domain(&domain) {
                 continue;
             }
             if seen.insert(domain.clone()) {
@@ -426,6 +479,35 @@ ff02::1 ip6-allnodes
 
     fn domains() -> Vec<String> {
         vec!["ads.example.com".into(), "tracker.example.net".into()]
+    }
+
+    #[test]
+    fn never_blocks_noah_or_provider_hosts() {
+        for domain in [
+            "noah.asherin.com",
+            "asherin.com",
+            "api.github.com",
+            "raw.githubusercontent.com",
+            "api.openai.com",
+            "api.anthropic.com",
+            "generativelanguage.googleapis.com",
+            "api.groq.com",
+            "openrouter.ai",
+            "api.z.ai",
+            "api.siliconflow.cn",
+        ] {
+            assert!(is_protected_domain(domain), "{domain} must stay reachable");
+        }
+        for domain in [
+            "ads.example.com",
+            "notasherin.com",
+            "zai.example",
+            "x.ai.evil.com",
+        ] {
+            assert!(!is_protected_domain(domain), "{domain} should be blockable");
+        }
+        let list = "0.0.0.0 ads.example.com\n0.0.0.0 noah.asherin.com\n0.0.0.0 api.openai.com\n";
+        assert_eq!(parse_blocklist(list), vec!["ads.example.com"]);
     }
 
     const LINUX_HOSTS: &str = "127.0.0.1\tlocalhost\n127.0.1.1\tmy-laptop\n\n# The following lines are desirable for IPv6 capable hosts\n::1     ip6-localhost ip6-loopback\n";

@@ -235,9 +235,29 @@
     });
     text.append(counts.paid + counts.farms === 1 && !counts.dimmed ? " result removed" : " results");
     note.append(text);
+    const query = new URLSearchParams(location.search).get("q") || new URLSearchParams(location.search).get("p") || "";
+    if (looksLikeAName(query)) {
+      const footprint = document.createElement("a");
+      footprint.href = api.runtime.getURL("footprint.html?name=" + encodeURIComponent(query.replace(/^"|"$/g, "")));
+      footprint.target = "_blank";
+      footprint.rel = "noopener";
+      footprint.textContent = "your footprint?";
+      footprint.style.cssText = "margin-left:10px;color:inherit;text-decoration:underline;text-underline-offset:3px;";
+      note.append(footprint);
+    }
     note.classList.add("on");
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => note.classList.remove("on"), 6000);
+  }
+
+  // Two to four capitalised words, or a quoted phrase, with no operators:
+  // what someone types when they look a person up.
+  function looksLikeAName(query) {
+    const trimmed = query.trim();
+    if (!trimmed || /[:@/.]/.test(trimmed)) return false;
+    if (/^".+"$/.test(trimmed)) return true;
+    const words = trimmed.split(/\s+/);
+    return words.length >= 2 && words.length <= 4 && words.every((word) => /^\p{Lu}[\p{L}'’-]+$/u.test(word));
   }
 
   let reportTimer = null;

@@ -24,6 +24,15 @@
   let paused = false;
   let counter = 0;
 
+  // The bridge and this script pair up with a nonce before any page script
+  // runs (both start at document_start), so a page cannot forge the events
+  // that drive this script or listen in on them.
+  const nonce = crypto.randomUUID();
+  const channel = (name) => name + ":" + nonce;
+  const hello = () => { try { window.dispatchEvent(new CustomEvent("noah-inspect-hello", { detail: nonce })); } catch {} };
+  window.addEventListener("noah-inspect-bridge-ready", hello);
+  hello();
+
   function push(event) {
     event.id = ++counter;
     event.at = Date.now();
@@ -35,11 +44,11 @@
     if (!enabled || paused) return;
     events.push(event);
     if (events.length > MAX_EVENTS) events.shift();
-    window.dispatchEvent(new CustomEvent("noah-inspect-out", { detail: event }));
+    window.dispatchEvent(new CustomEvent(channel("noah-inspect-out"), { detail: event }));
     renderRow(event);
   }
 
-  window.addEventListener("noah-inspect-decision", (event) => {
+  window.addEventListener(channel("noah-inspect-decision"), (event) => {
     enabled = Boolean(event.detail && event.detail.enabled);
     if (enabled) {
       // Flush anything the hooks caught while we waited.
@@ -51,7 +60,7 @@
       buffer.length = 0;
     }
   });
-  window.addEventListener("noah-inspect-control", (event) => {
+  window.addEventListener(channel("noah-inspect-control"), (event) => {
     const detail = event.detail || {};
     if (detail.action === "off") {
       enabled = false;

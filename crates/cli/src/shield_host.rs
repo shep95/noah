@@ -92,8 +92,36 @@ fn handle(message: &Value) -> Result<Value> {
         }
         "tor.stop" => tor::stop(),
         "tor.log" => Ok(json!({ "log": tor::log_tail(60) })),
+        // The shield's footprint page hands shepherd a removal plan. The
+        // prompt only lands in the composer; the person still sends it, and
+        // every browser action shepherd takes afterwards asks as usual.
+        "agent.prompt" => {
+            let prompt = message.get("prompt").and_then(Value::as_str).context("prompt is missing")?;
+            anyhow::ensure!(prompt.len() <= MAX_AGENT_PROMPT_BYTES, "the prompt is too long");
+            open_agent_prompt(prompt)?;
+            Ok(json!({ "ok": true }))
+        }
         other => bail!("unknown request {other:?}"),
     }
+}
+
+/// A removal plan lists a few dozen forms with the person's details; far
+/// more than this is not one.
+const MAX_AGENT_PROMPT_BYTES: usize = 64 * 1024;
+
+/// Opens noah (or reaches the running copy) with the prompt waiting in
+/// shepherd's composer, the same way a `zed://agent?prompt=` link does.
+fn open_agent_prompt(prompt: &str) -> Result<()> {
+    let url = format!("zed://agent?prompt={}", urlencoding::encode(prompt));
+    let cli = std::env::current_exe().context("could not find noah's command-line program")?;
+    Command::new(cli)
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("could not start noah")?;
+    Ok(())
 }
 
 // ---- registration ------------------------------------------------------------------------------

@@ -309,7 +309,11 @@ impl AgentDiffPane {
     fn keep_all(&mut self, _: &KeepAll, _window: &mut Window, cx: &mut Context<Self>) {
         let telemetry = ActionLogTelemetry::from(self.thread.read(cx));
         let action_log = self.thread.read(cx).action_log().clone();
-        let changed: Vec<_> = action_log.read(cx).changed_buffers(cx).map(|(buffer, _)| buffer).collect();
+        let changed: Vec<_> = action_log
+            .read(cx)
+            .changed_buffers(cx)
+            .map(|(buffer, _)| buffer)
+            .collect();
         crate::mission_control::record_review_outcome(changed, true, cx);
         action_log.update(cx, |action_log, cx| {
             action_log.keep_all_edits(Some(telemetry), cx)
@@ -1631,9 +1635,10 @@ impl AgentDiff {
         let Some(workspace_thread) = self.workspace_threads.get(workspace) else {
             return;
         };
-        let shepherd_is_working = workspace_thread.thread.upgrade().is_some_and(|thread| {
-            thread.read(cx).status() == acp_thread::ThreadStatus::Generating
-        });
+        let shepherd_is_working = workspace_thread
+            .thread
+            .upgrade()
+            .is_some_and(|thread| thread.read(cx).status() == acp_thread::ThreadStatus::Generating);
         if !shepherd_is_working || edits.is_empty() {
             return;
         }

@@ -470,7 +470,7 @@ impl EditPipeline {
             EditEvent::OldTextChunk {
                 chunk, done: false, ..
             } => {
-                log::debug!("old_text_chunk: done=false, chunk='{}'", chunk);
+                log::debug!("old_text_chunk: done=false, {} chars", chunk.len());
                 self.ensure_resolving_old_text(buffer, cx);
 
                 if let Some(EditPipelineEntry::ResolvingOldText { matcher }) =
@@ -495,7 +495,7 @@ impl EditPipeline {
                 chunk,
                 done: true,
             } => {
-                log::debug!("old_text_chunk: done=true, chunk='{}'", chunk);
+                log::debug!("old_text_chunk: done=true, {} chars", chunk.len());
 
                 self.ensure_resolving_old_text(buffer, cx);
 
@@ -568,11 +568,11 @@ impl EditPipeline {
                 let old_text_in_buffer = snapshot.text_for_range(range.clone()).collect::<String>();
 
                 log::debug!(
-                    "edit[{}] old_text matched at {}..{}: {:?}",
+                    "edit[{}] old_text matched at {}..{} ({} chars)",
                     edit_index,
                     range.start,
                     range.end,
-                    old_text_in_buffer,
+                    old_text_in_buffer.len(),
                 );
 
                 let text_snapshot = buffer.read_with(cx, |buffer, _cx| buffer.text_snapshot());
@@ -592,7 +592,7 @@ impl EditPipeline {
             EditEvent::NewTextChunk {
                 chunk, done: false, ..
             } => {
-                log::debug!("new_text_chunk: done=false, chunk='{}'", chunk);
+                log::debug!("new_text_chunk: done=false, {} chars", chunk.len());
 
                 let Some(EditPipelineEntry::StreamingNewText {
                     streaming_diff,
@@ -628,7 +628,7 @@ impl EditPipeline {
             EditEvent::NewTextChunk {
                 chunk, done: true, ..
             } => {
-                log::debug!("new_text_chunk: done=true, chunk='{}'", chunk);
+                log::debug!("new_text_chunk: done=true, {} chars", chunk.len());
 
                 let Some(EditPipelineEntry::StreamingNewText {
                     mut streaming_diff,
@@ -649,7 +649,10 @@ impl EditPipeline {
                 let mut final_text = reindenter.push(chunk);
                 final_text.push_str(&reindenter.finish());
 
-                log::debug!("new_text_chunk: done=true, final_text='{}'", final_text);
+                log::debug!(
+                    "new_text_chunk: done=true, final text {} chars",
+                    final_text.len()
+                );
 
                 let mut char_ops = if final_text.is_empty() {
                     Vec::new()
@@ -808,12 +811,12 @@ impl EditSession {
         }
 
         if log::log_enabled!(log::Level::Debug) {
-            log::debug!("Got edits:");
+            log::debug!("Got {} edit(s)", edits.len());
             for edit in &edits {
                 log::debug!(
-                    "  old_text: '{}', new_text: '{}'",
-                    edit.old_text.replace('\n', "\\n"),
-                    edit.new_text.replace('\n', "\\n")
+                    "  old_text: {} chars, new_text: {} chars",
+                    edit.old_text.len(),
+                    edit.new_text.len()
                 );
             }
         }

@@ -4,6 +4,9 @@ mod agent_diff;
 mod agent_model_selector;
 mod agent_panel;
 mod agent_registry_ui;
+mod asherin_chat;
+mod asherin_chat_tree;
+mod asherin_search;
 mod buffer_codegen;
 mod completion_provider;
 mod config_options;
@@ -19,11 +22,8 @@ mod inline_assistant;
 mod inline_prompt_editor;
 mod language_model_selector;
 mod mention_set;
-pub mod mission_control;
-mod asherin_chat;
-mod asherin_chat_tree;
-mod asherin_search;
 mod message_editor;
+pub mod mission_control;
 mod mode_selector;
 mod model_selector;
 mod model_selector_popover;
@@ -1016,6 +1016,7 @@ mod tests {
             offline: false,
             auto_approve: false,
             research_mode: Default::default(),
+            browser_screenshots: false,
             canvas: false,
             verify_after_edits: false,
             monthly_budget_usd: None,

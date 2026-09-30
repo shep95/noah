@@ -1,12 +1,13 @@
 use crate::{
-    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, ContextServerRegistry,
-    CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
-    DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, FindReferencesTool, GetCodeActionsTool,
-    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool, EvidenceTool, VerifyTool, ProjectMemoryTool, CodebaseTool,
-    ListAddonsTool, RunAddonTool, SaveAddonTool,
-    MovePathTool, ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
-    SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
-    WriteFileTool, decide_permission_from_settings,
+    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, CodebaseTool,
+    ContextServerRegistry, CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel,
+    DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, EvidenceTool, FetchTool, FindPathTool,
+    FindReferencesTool, GetCodeActionsTool, GoToDefinitionTool, GrepTool, ListAddonsTool,
+    ListAgentsAndModelsTool, ListDirectoryTool, ModelFileTool, MovePathTool, ProjectMemoryTool,
+    ProjectSnapshot, ReadFileTool, RenameTool, RunAddonTool, SandboxedTerminalTool, SaveAddonTool,
+    SpawnAgentTool, SystemPromptTemplate, Template, Templates, TerminalTool,
+    ToolPermissionDecision, VerifyTool, WebSearchTool, WriteFileTool,
+    decide_permission_from_settings,
 };
 use acp_thread::{ClientUserMessageId, MentionUri};
 use action_log::ActionLog;
@@ -54,7 +55,8 @@ use schemars::{JsonSchema, Schema};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use settings::{
-    LanguageModelSelection, ResearchMode, Settings, SettingsStore, ToolPermissionMode, update_settings_file,
+    LanguageModelSelection, ResearchMode, Settings, SettingsStore, ToolPermissionMode,
+    update_settings_file,
 };
 use std::fmt::Write;
 use std::{cell::RefCell, ops::ControlFlow};
@@ -2466,7 +2468,9 @@ impl Thread {
         if usd <= 0.0 || !Self::is_chat_project(&self.project, cx) {
             return;
         }
-        let Some(message_id) = self.last_user_message().map(|message| message.id.to_string())
+        let Some(message_id) = self
+            .last_user_message()
+            .map(|message| message.id.to_string())
         else {
             return;
         };
@@ -2474,7 +2478,11 @@ impl Thread {
         let database = crate::ThreadsDatabase::connect(cx);
         cx.background_spawn(async move {
             let recorded = match database.await {
-                Ok(database) => database.add_chat_turn_cost(thread_id, message_id, usd).await,
+                Ok(database) => {
+                    database
+                        .add_chat_turn_cost(thread_id, message_id, usd)
+                        .await
+                }
                 Err(error) => Err(anyhow!(error)),
             };
             if let Err(error) = recorded {
@@ -2660,7 +2668,7 @@ impl Thread {
         T: Into<UserMessageContent>,
     {
         let content = content.into_iter().map(Into::into).collect::<Arc<_>>();
-        log::debug!("Thread::send content: {:?}", content);
+        log::debug!("Thread::send: {} content block(s)", content.len());
 
         self.messages
             .push(Arc::new(Message::User(UserMessage { id, content })));
@@ -3395,7 +3403,7 @@ impl Thread {
                 return Err(anyhow::anyhow!("Compaction produced an empty summary"));
             }
 
-            log::debug!("Compaction succeeded:\n{summary}");
+            log::debug!("Compaction succeeded: {} chars", summary.len());
             event_stream.update_context_compaction_status(
                 compaction_id.clone(),
                 acp_thread::ContextCompactionStatus::Completed,
@@ -3443,7 +3451,11 @@ impl Thread {
         owning_message_ix: usize,
         tool_result: LanguageModelToolResult,
     ) -> Result<(), anyhow::Error> {
-        log::debug!("Tool finished {:?}", tool_result);
+        log::debug!(
+            "Tool finished: {} ({})",
+            tool_result.tool_name,
+            if tool_result.is_error { "error" } else { "ok" }
+        );
 
         event_stream.update_tool_call_fields(
             &scoped_tool_call_id(owning_message_ix, &tool_result.tool_use_id),
@@ -3524,7 +3536,7 @@ impl Thread {
         cancellation_rx: watch::Receiver<bool>,
         cx: &mut Context<Self>,
     ) -> Result<Option<Task<(usize, LanguageModelToolResult)>>> {
-        log::trace!("Handling streamed completion event: {:?}", event);
+        log::trace!("Handling streamed completion event");
         use LanguageModelCompletionEvent::*;
 
         match event {
@@ -3776,7 +3788,10 @@ impl Thread {
                 .visible_worktrees(cx)
                 .map(|worktree| {
                     let worktree = worktree.read(cx);
-                    (worktree.root_name_str().to_string(), worktree.abs_path().to_path_buf())
+                    (
+                        worktree.root_name_str().to_string(),
+                        worktree.abs_path().to_path_buf(),
+                    )
                 })
                 .collect();
             let text_edits = this.model().is_some_and(|model| !model.supports_tools());
@@ -3791,7 +3806,9 @@ impl Thread {
             let mut interface_edited = false;
             let mut reply_text = String::new();
             for message in &this.messages[last_user..] {
-                let Message::Agent(agent_message) = message.as_ref() else { continue };
+                let Message::Agent(agent_message) = message.as_ref() else {
+                    continue;
+                };
                 for content in &agent_message.content {
                     match content {
                         AgentMessageContent::Text(text) => {
@@ -3800,10 +3817,14 @@ impl Thread {
                         }
                         AgentMessageContent::ToolUse(tool_use) => {
                             let name = tool_use.name.as_ref();
-                            if matches!(name, "edit_file" | "write_file" | "move_path" | "delete_path") {
+                            if matches!(
+                                name,
+                                "edit_file" | "write_file" | "move_path" | "delete_path"
+                            ) {
                                 edited = true;
                                 if let Ok(input) = tool_use.input.clone().into_json()
-                                    && let Some(path) = input.get("path").and_then(|value| value.as_str())
+                                    && let Some(path) =
+                                        input.get("path").and_then(|value| value.as_str())
                                     && crate::finish_line::is_interface_file(path)
                                 {
                                     interface_edited = true;
@@ -3839,7 +3860,9 @@ impl Thread {
             let roots = plan.roots.clone();
             let blocks = plan.blocks;
             let written = cx
-                .background_spawn(async move { crate::finish_line::apply_file_blocks(&blocks, &roots) })
+                .background_spawn(
+                    async move { crate::finish_line::apply_file_blocks(&blocks, &roots) },
+                )
                 .await;
             match written {
                 Ok(written) => {
@@ -3849,13 +3872,22 @@ impl Thread {
                         .any(|path| crate::finish_line::is_interface_file(&path.to_string_lossy()));
                     let names = written
                         .iter()
-                        .filter_map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+                        .filter_map(|path| {
+                            path.file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                        })
                         .collect::<Vec<_>>()
                         .join(", ");
-                    event_stream.send_text(&format!("\n\nnoah wrote {} file{} from this reply: {names}\n", written.len(), if written.len() == 1 { "" } else { "s" }));
+                    event_stream.send_text(&format!(
+                        "\n\nnoah wrote {} file{} from this reply: {names}\n",
+                        written.len(),
+                        if written.len() == 1 { "" } else { "s" }
+                    ));
                 }
                 Err(error) => {
-                    event_stream.send_text(&format!("\n\nnoah could not write the files from this reply: {error:#}\n"));
+                    event_stream.send_text(&format!(
+                        "\n\nnoah could not write the files from this reply: {error:#}\n"
+                    ));
                 }
             }
         }
@@ -3901,7 +3933,9 @@ impl Thread {
                     .await;
                 match opened {
                     Ok(url) => {
-                        event_stream.send_text(&format!("\nthe canvas is up: {url} (in the browser room)\n"));
+                        event_stream.send_text(&format!(
+                            "\nthe canvas is up: {url} (in the browser room)\n"
+                        ));
                         cx.update(|cx| {
                             if let Some(browser) = agent_browser::AgentBrowser::global(cx) {
                                 browser.update(cx, |browser, cx| browser.show(url, cx).detach());
@@ -3909,7 +3943,8 @@ impl Thread {
                         });
                     }
                     Err(error) => {
-                        event_stream.send_text(&format!("\nthe canvas could not open: {error:#}\n"));
+                        event_stream
+                            .send_text(&format!("\nthe canvas could not open: {error:#}\n"));
                     }
                 }
             }
@@ -3973,9 +4008,9 @@ impl Thread {
                 .visible_worktrees(cx)
                 .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
                 .collect(),
-            model: self.model().map(|model| {
-                format!("{}/{}", model.provider_id().0, model.id().0)
-            }),
+            model: self
+                .model()
+                .map(|model| format!("{}/{}", model.provider_id().0, model.id().0)),
             thread: self.id().to_string(),
             prompt_sha256: self.last_user_message().map(|message| {
                 noah_trust::provenance::sha256_hex(message.to_markdown().as_bytes())
@@ -4275,7 +4310,7 @@ impl Thread {
                     summary.extend(lines.next());
                 }
 
-                log::debug!("Setting summary: {}", summary);
+                log::debug!("Setting summary: {} chars", summary.len());
                 let summary = SharedString::from(summary);
 
                 this.update(cx, |this, cx| {
@@ -4444,14 +4479,20 @@ impl Thread {
         else {
             return Vec::new();
         };
+        // These files go to the model verbatim on every request, so a key
+        // pasted into one would reach the provider each time. Same
+        // redaction as tool output.
+        let known_secrets = crate::trust::brokered_secrets(cx);
+        let redact = |text: &str| noah_trust::secrets::redact(text, &known_secrets).text;
         let mut knowledge: Vec<crate::KnowledgeFile> = noah_trust::project_files::CONTEXT_FILES
             .iter()
             .filter_map(|(name, label)| {
-                let text = std::fs::read_to_string(noah_trust::project_files::path(&root, name)).ok()?;
+                let text =
+                    std::fs::read_to_string(noah_trust::project_files::path(&root, name)).ok()?;
                 let text = text.trim();
                 (!text.is_empty()).then(|| crate::KnowledgeFile {
                     label: label.to_string(),
-                    content: noah_trust::project_files::clip(text),
+                    content: redact(&noah_trust::project_files::clip(text)),
                 })
             })
             .collect();
@@ -4464,7 +4505,7 @@ impl Thread {
             knowledge.push(crate::KnowledgeFile {
                 label: "global chat memory (~/.noah/chat/memory.md, shared by every chat)"
                     .to_string(),
-                content: noah_trust::project_files::clip(text.trim()),
+                content: redact(&noah_trust::project_files::clip(text.trim())),
             });
         }
         knowledge
@@ -4492,7 +4533,11 @@ impl Thread {
         // A model that cannot call tools gets none: sending them makes some
         // providers refuse the request outright, and the prompt tells such a
         // model to write files through fenced blocks instead.
-        let tools = if let Some(turn) = self.running_turn.as_ref().filter(|_| model.supports_tools()) {
+        let tools = if let Some(turn) = self
+            .running_turn
+            .as_ref()
+            .filter(|_| model.supports_tools())
+        {
             turn.tools
                 .iter()
                 .map(|(tool_name, tool)| {
@@ -6354,12 +6399,8 @@ impl ToolCallEventStream {
         let input_values = context.input_values.clone();
         // noah's capability file and taint tracking have a say alongside the
         // settings patterns.
-        let gate = crate::trust::ToolGate::new(
-            self.thread_entity_id(),
-            &tool_name,
-            &input_values,
-            cx,
-        );
+        let gate =
+            crate::trust::ToolGate::new(self.thread_entity_id(), &tool_name, &input_values, cx);
         let title = gate.title(title.into());
         let check_settings: Box<dyn Fn(&App) -> ToolPermissionDecision> = Box::new({
             let gate = gate.clone();
@@ -7455,13 +7496,13 @@ impl UserMessageContent {
                     // TODO
                     Self::Text("[blob]".to_string())
                 }
-                other => {
-                    log::warn!("Unexpected content type: {:?}", other);
+                _ => {
+                    log::warn!("Unexpected content type");
                     Self::Text("[unknown]".to_string())
                 }
             },
-            other => {
-                log::warn!("Unexpected content type: {:?}", other);
+            _ => {
+                log::warn!("Unexpected content type");
                 Self::Text("[unknown]".to_string())
             }
         }

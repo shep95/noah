@@ -8,8 +8,34 @@
   const api = (typeof chrome !== "undefined" && chrome.runtime) ? chrome : (typeof browser !== "undefined" ? browser : null);
   if (!api || !api.runtime || !api.runtime.sendMessage) return;
 
+  let cached = null;
+  // The MAIN-world script announces a nonce at document_start, before any
+  // page script can listen; every event to it carries that nonce, and one
+  // without it is a page's forgery and is ignored.
+  let nonce = null;
+  const channel = (name) => name + ":" + nonce;
+  window.addEventListener("noah-spaces-hello", (event) => {
+    if (nonce !== null) return;
+    nonce = String(event.detail || "");
+    onPaired();
+  });
+  try { window.dispatchEvent(new CustomEvent("noah-spaces-bridge-ready")); } catch {}
+  function onPaired() {
+    if (cached) send(cached);
+    // The audit link inside the Space panel: only the paired panel can ask.
+    window.addEventListener(channel("noah-space-audit-request"), () => {
+      api.runtime.sendMessage({ type: "inspect.arm.self" }, (reply) => {
+        if (api.runtime.lastError || !reply || !reply.enabled) return;
+        // Reload so the inspect panel catches the requests the page has
+        // already made; the arm state is per tab in the background.
+        try { location.reload(); } catch {}
+      });
+    });
+  }
   function send(config) {
-    try { window.dispatchEvent(new CustomEvent("noah-spaces-config", { detail: config })); } catch {}
+    cached = config;
+    if (nonce === null) return;
+    try { window.dispatchEvent(new CustomEvent(channel("noah-spaces-config"), { detail: config })); } catch {}
   }
 
   api.runtime.sendMessage({ type: "spaces.config" }, (reply) => {
@@ -24,19 +50,4 @@
     });
   }
 
-  // The "audit this page" link inside the Space panel: arms inspect mode
-  // for this tab, then dispatches the decision so inspect.js opens its
-  // recording panel next to the Space panel. A reload catches everything
-  // from the first request; without one, whatever comes after is captured.
-  window.addEventListener("noah-space-audit-request", () => {
-    api.runtime.sendMessage({ type: "inspect.arm.self" }, (reply) => {
-      if (api.runtime.lastError || !reply || !reply.enabled) return;
-      // Reload so the panel catches the requests the page has already made.
-      // The arm state is stored per-tab-id in the background's session, so
-      // the fresh page load will see enabled=true on its first bridge call.
-      try { location.reload(); } catch {
-        try { window.dispatchEvent(new CustomEvent("noah-inspect-decision", { detail: { enabled: true } })); } catch {}
-      }
-    });
-  });
 })();

@@ -34,7 +34,16 @@
     if (stored !== null) collapsed = stored === "true";
   } catch {}
   let config = { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
-  window.addEventListener("noah-spaces-config", (event) => {
+  // The bridge and this script pair up with a nonce before any page script
+  // runs (both start at document_start), so a page cannot forge the events
+  // that drive this script or listen in on them.
+  const nonce = crypto.randomUUID();
+  const channel = (name) => name + ":" + nonce;
+  const hello = () => { try { window.dispatchEvent(new CustomEvent("noah-spaces-hello", { detail: nonce })); } catch {} };
+  window.addEventListener("noah-spaces-bridge-ready", hello);
+  hello();
+
+  window.addEventListener(channel("noah-spaces-config"), (event) => {
     const next = event.detail || {};
     config = { ...config, ...next };
     if (!config.enabled && panel) { panel.remove(); panel = null; }
@@ -666,7 +675,7 @@
     auditBtn.textContent = "arm inspect + reload";
     auditBtn.addEventListener("click", (event) => {
       event.preventDefault();
-      window.dispatchEvent(new CustomEvent("noah-space-audit-request"));
+      window.dispatchEvent(new CustomEvent(channel("noah-space-audit-request")));
     });
     auditRow.append(auditNote, auditBtn);
     panel.append(auditRow);

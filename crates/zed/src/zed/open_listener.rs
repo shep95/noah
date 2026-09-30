@@ -408,16 +408,41 @@ impl OpenListener {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn listen_for_cli_connections(opener: OpenListener) -> Result<()> {
     use release_channel::RELEASE_CHANNEL_NAME;
+    use std::os::unix::fs::FileTypeExt;
     use std::os::unix::net::UnixDatagram;
 
     let sock_path = paths::data_dir().join(format!("zed-{}.sock", *RELEASE_CHANNEL_NAME));
-    // remove the socket if the process listening on it has died
-    if let Err(e) = UnixDatagram::unbound()?.connect(&sock_path)
-        && e.kind() == std::io::ErrorKind::ConnectionRefused
-    {
-        std::fs::remove_file(&sock_path)?;
+    // Clear the path when nothing live is behind it: a socket whose process
+    // has died, or a plain file something else left there. Either would
+    // otherwise keep noah from starting.
+    match std::fs::symlink_metadata(&sock_path) {
+        Ok(metadata) if !metadata.file_type().is_socket() => {
+            log::warn!("{} is not a socket; replacing it", sock_path.display());
+            std::fs::remove_file(&sock_path).log_err();
+        }
+        Ok(_) => {
+            let live = UnixDatagram::unbound()
+                .and_then(|probe| probe.connect(&sock_path))
+                .is_ok();
+            if !live {
+                std::fs::remove_file(&sock_path).log_err();
+            }
+        }
+        Err(_) => {}
     }
-    let listener = UnixDatagram::bind(&sock_path)?;
+    // Failing to listen is never a reason to refuse the person a window.
+    // Whatever holds the socket, another copy of noah or another program,
+    // this one still opens; it only won't receive URLs from the CLI.
+    let listener = match UnixDatagram::bind(&sock_path) {
+        Ok(listener) => listener,
+        Err(error) => {
+            log::warn!(
+                "not listening for CLI connections on {}: {error}; opening anyway",
+                sock_path.display()
+            );
+            return Ok(());
+        }
+    };
     thread::spawn(move || {
         let mut buf = [0u8; 1024];
         while let Ok(len) = listener.recv(&mut buf) {

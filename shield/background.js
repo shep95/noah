@@ -1006,11 +1006,18 @@ const handlers = {
       wallet: settings.security.walletSites,
     }[kind];
     if (allowed.includes(site) || (await onceAllowed(site, kind))) return { decision: "allow" };
+    pendingCaptureAsks.set(captureAskKey(sender, kind), Date.now());
     return { decision: "ask", site };
   },
+  // A decision counts only as the answer to a question this worker asked
+  // that tab; a script that never asked cannot grant itself the capture.
   async "capture.decide"(message, sender) {
     const site = Shield.siteOf(Shield.hostOf(sender.url || ""));
     const kind = ["screen", "camera", "clipboard", "wallet"].includes(message.kind) ? message.kind : "camera";
+    const key = captureAskKey(sender, kind);
+    const askedAt = pendingCaptureAsks.get(key);
+    pendingCaptureAsks.delete(key);
+    if (!askedAt || Date.now() - askedAt > 10 * 60 * 1000) return { error: "nothing was asked" };
     if (message.always) {
       const settings = await Shield.loadSettings();
       if (kind === "clipboard") await Shield.updateSettings({ security: { clipboardSites: toggleInList(settings.security.clipboardSites, site, true) } });
@@ -1575,7 +1582,19 @@ function boundToSender(message, sender) {
   }
 }
 
+// Capture questions this worker put to a tab, awaiting the person's answer.
+const pendingCaptureAsks = new Map();
+function captureAskKey(sender, kind) {
+  return (sender.tab ? sender.tab.id : "none") + "|" + (sender.frameId ?? 0) + "|" + kind;
+}
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Only this extension's own scripts speak here; nothing is exposed to
+  // other extensions, so a message from one is refused before it is read.
+  if (!sender || sender.id !== api.runtime.id) {
+    sendResponse({ error: "not from here" });
+    return false;
+  }
   const handler = message && handlers[message.type];
   if (!handler) {
     sendResponse({ error: "unknown message" });

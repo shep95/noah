@@ -268,15 +268,12 @@ fn main() {
         Vec::new()
     };
 
+    // A missing command-line helper costs git's password prompts, not the
+    // editor: a launch never fails over it.
     #[cfg(target_os = "windows")]
     match util::get_zed_cli_path() {
         Ok(path) => askpass::set_askpass_program(path),
-        Err(err) => {
-            eprintln!("Error: {}", err);
-            if std::option_env!("ZED_BUNDLE").is_some() {
-                process::exit(1);
-            }
-        }
+        Err(err) => eprintln!("Error: the noah command-line helper was not found: {}", err),
     }
 
     let file_errors = init_paths();

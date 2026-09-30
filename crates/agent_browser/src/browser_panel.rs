@@ -42,19 +42,21 @@ pub(crate) fn init(cx: &mut App) {
                 }
             },
         );
-        workspace.register_action(|workspace, _: &zed_actions::PreviewFileInBrowser, window, cx| {
-            let Some(editor) = workspace.active_item_as::<Editor>(cx) else {
-                return;
-            };
-            let Some(path) = editor.update(cx, |editor, cx| editor.target_file_abs_path(cx))
-            else {
-                return;
-            };
-            let Some(panel) = workspace.focus_panel::<BrowserPanel>(window, cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| panel.preview(path, &editor, window, cx));
-        });
+        workspace.register_action(
+            |workspace, _: &zed_actions::PreviewFileInBrowser, window, cx| {
+                let Some(editor) = workspace.active_item_as::<Editor>(cx) else {
+                    return;
+                };
+                let Some(path) = editor.update(cx, |editor, cx| editor.target_file_abs_path(cx))
+                else {
+                    return;
+                };
+                let Some(panel) = workspace.focus_panel::<BrowserPanel>(window, cx) else {
+                    return;
+                };
+                panel.update(cx, |panel, cx| panel.preview(path, &editor, window, cx));
+            },
+        );
     })
     .detach();
 }
@@ -130,7 +132,8 @@ impl BrowserPanel {
                     }
                     BrowserEvent::Show { url } => {
                         this.error = None;
-                        this.address.update(cx, |editor, cx| editor.set_text(url.clone(), window, cx));
+                        this.address
+                            .update(cx, |editor, cx| editor.set_text(url.clone(), window, cx));
                         if matches!(this.connection, Connection::Disconnected) {
                             this.connect(window, cx);
                         }
@@ -252,7 +255,10 @@ impl BrowserPanel {
             return;
         };
         self.error = None;
-        let command = browser.update(cx, |browser, cx| browser.run(arguments, cx));
+        let command = browser.update(cx, |browser, cx| {
+            browser.mark_person_driving();
+            browser.run(arguments, cx)
+        });
         cx.spawn_in(window, async move |this, cx| {
             if let Err(error) = command.await {
                 this.update(cx, |this, cx| {
@@ -603,7 +609,11 @@ impl BrowserPanel {
                 this.child(
                     IconButton::new(
                         "browser-pin",
-                        if pinned { IconName::Unpin } else { IconName::Pin },
+                        if pinned {
+                            IconName::Unpin
+                        } else {
+                            IconName::Pin
+                        },
                     )
                     .icon_size(IconSize::Small)
                     .tooltip(Tooltip::text(if pinned {
