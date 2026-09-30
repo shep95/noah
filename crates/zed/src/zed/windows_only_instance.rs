@@ -285,6 +285,7 @@ fn write_message_to_instance_pipe(message: &[u8]) -> anyhow::Result<()> {
             // for a moment. Wait for it, but not on a copy that never lets go.
             Err(error) if error.code() == ERROR_PIPE_BUSY.to_hresult() => {
                 WaitNamedPipeW(&name, PIPE_BUSY_TIMEOUT_MS)
+                    .ok()
                     .context("the running copy's pipe stayed busy")?;
                 open_instance_pipe(&name)
             }
