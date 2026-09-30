@@ -46,6 +46,52 @@ It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and exte
 - Pin any app or page you build to the rail and switch back to it in one click.
 - Updates are signed with noah's release key and checked before they install.
 
+### "This file might be a security risk"
+
+When you download or open noah, your browser or Windows may warn you that the file is
+unrecognised, from an unknown publisher, or "might harm your computer". The file is not
+harmful. The warning appears because noah is not code-signed, and code-signing is something you
+pay for. Here is who is saying it, from the surface down to the root:
+
+1. **Your browser** (Chrome, Edge, Firefox). It shows "this file isn't commonly downloaded" or
+   "may be dangerous". It is not scanning the file for anything; it is asking a reputation
+   service (Google Safe Browsing, or Microsoft SmartScreen inside Edge) whether it has seen this
+   exact file, from this publisher, downloaded many times before. A new release of a small
+   program has no history, so the answer is no.
+2. **Windows SmartScreen**, when you run the installer: "Windows protected your PC. Unknown
+   publisher." Windows looks for a digital signature on the .exe. Ours has none, so it cannot
+   name a publisher, and it treats a program it cannot name as suspect. Click "More info", then
+   "Run anyway".
+3. **The signature itself.** A signature needs a code-signing certificate, which only a
+   certificate authority can issue: DigiCert, Sectigo, GlobalSign, SSL.com, Certum and a few
+   others. A standard one costs a few hundred dollars a year, and SmartScreen still warns until
+   it has built up reputation. An "extended validation" one skips the warning immediately, costs
+   more, is delivered on a hardware key, and requires a registered company to be checked by the
+   authority first.
+4. **The root: Microsoft's Trusted Root Program.** Windows trusts a certificate only if it chains
+   to an authority Microsoft has admitted to this program. Those authorities are the businesses in
+   step 3. The same shape exists on macOS, where Apple charges a developer fee and notarises each
+   build itself.
+
+So the chain is: a browser and an operating system that decide trust by signature and download
+count; certificate authorities that sell the signature; and Microsoft and Apple, who decide which
+authorities count. Nowhere in that chain does anyone look at what the program does. Signed
+malware exists, and unsigned honest software gets warned about every day. The warning tells you
+that nobody has paid to vouch for the file. That is all it tells you.
+
+If you would rather check for yourself than click through a warning, you can:
+
+- Compare the file's SHA-256 with the one printed on the download page. If they match, the file
+  is the one we published.
+- Read the source, here, and build it yourself (below). That is the only real proof, and it is
+  the reason noah is open.
+
+We intend to sign releases once the certificate is paid for. Until then the warning will show,
+and this section is here so you know why.
+
+Linux has no such gate. The .deb and the .tar.xz install without a warning, though a browser may
+still flag the download by the same reputation logic as step 1.
+
 Community: [Discord](https://discord.gg/M9hnebRwvk) · [asherin.com](https://asherin.com)
 
 ---
