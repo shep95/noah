@@ -89,11 +89,10 @@ static ZED_CLIENT_CHECKSUM_SEED: LazyLock<Option<Vec<u8>>> = LazyLock::new(|| {
         })
 });
 
-pub static MINIDUMP_ENDPOINT: LazyLock<Option<String>> = LazyLock::new(|| {
-    option_env!("ZED_MINIDUMP_ENDPOINT")
-        .map(str::to_string)
-        .or_else(|| env::var("ZED_MINIDUMP_ENDPOINT").ok())
-});
+// Fixed at build time: a launcher that sets the variable at run time must
+// not be able to collect the person's crash dumps.
+pub static MINIDUMP_ENDPOINT: LazyLock<Option<String>> =
+    LazyLock::new(|| option_env!("ZED_MINIDUMP_ENDPOINT").map(str::to_string));
 
 pub fn should_install_crash_handler(channel: ReleaseChannel) -> bool {
     matches!(

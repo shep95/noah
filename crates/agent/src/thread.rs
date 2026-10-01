@@ -3841,13 +3841,22 @@ impl Thread {
                 Vec::new()
             };
             let settings = AgentSettings::get_global(cx);
+            // The check and the canvas run the project's own scripts
+            // (build.rs, package.json, conftest.py). A workspace the person
+            // has not trusted gets neither: approving an edit is not
+            // approving the repository's code.
+            let trusted = this.project.read(cx).is_local()
+                && !TrustedWorktrees::has_restricted_worktrees(
+                    &this.project.read(cx).worktree_store(),
+                    cx,
+                );
             FinishPlan {
                 roots,
                 blocks,
                 edited,
                 interface_edited,
-                verify: settings.verify_after_edits && this.parent_thread_id().is_none(),
-                canvas: settings.canvas && this.parent_thread_id().is_none(),
+                verify: settings.verify_after_edits && trusted && this.parent_thread_id().is_none(),
+                canvas: settings.canvas && trusted && this.parent_thread_id().is_none(),
             }
         })?;
         if plan.roots.is_empty() {

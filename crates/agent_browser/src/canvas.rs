@@ -38,7 +38,12 @@ pub fn kind_of(root: &Path) -> Option<CanvasKind> {
             }
         }
     }
-    for candidate in ["index.html", "public/index.html", "src/index.html", "dist/index.html"] {
+    for candidate in [
+        "index.html",
+        "public/index.html",
+        "src/index.html",
+        "dist/index.html",
+    ] {
         if root.join(candidate).is_file() {
             return Some(CanvasKind::Static(candidate.to_string()));
         }
@@ -71,7 +76,10 @@ pub async fn open(root: PathBuf) -> Result<String> {
     let entry = match kind {
         CanvasKind::Static(page) => {
             let port = serve_static(root.clone())?;
-            Served { url: format!("http://127.0.0.1:{port}/{page}"), child: None }
+            Served {
+                url: format!("http://127.0.0.1:{port}/{page}"),
+                child: None,
+            }
         }
         CanvasKind::DevScript(script) => start_dev_script(&root, &script).await?,
     };
@@ -102,29 +110,63 @@ fn serve_static(root: PathBuf) -> Result<u16> {
     std::thread::Builder::new()
         .name("noah-canvas".into())
         .spawn(move || {
+            let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
             for request in server.incoming_requests() {
-                let raw = request.url().split(['?', '#']).next().unwrap_or("/").to_string();
+                // Only a browser on this machine, addressing the server by
+                // its own name: a web page elsewhere that rebinds a host name
+                // to 127.0.0.1 carries that name in the Host header and gets
+                // nothing.
+                let host_ok = request
+                    .headers()
+                    .iter()
+                    .find(|header| header.field.equiv("Host"))
+                    .map(|header| host_is_local(header.value.as_str()))
+                    .unwrap_or(false);
+                let raw = request
+                    .url()
+                    .split(['?', '#'])
+                    .next()
+                    .unwrap_or("/")
+                    .to_string();
                 let decoded = percent_decode(&raw);
                 let mut path = root.clone();
                 let mut escaped = false;
                 for part in decoded.split('/') {
                     match part {
                         "" | "." => {}
-                        ".." => escaped = true,
+                        // Backslashes and drive letters would let Windows'
+                        // path joining leave the folder; hidden files (.env,
+                        // .git) are never served.
+                        part if part == ".."
+                            || part.contains(['\\', ':'])
+                            || part.starts_with('.') =>
+                        {
+                            escaped = true
+                        }
                         part => path.push(part),
                     }
                 }
                 if path.is_dir() {
                     path = path.join("index.html");
                 }
-                let response = if escaped || !path.is_file() {
+                // A symlink inside the folder may point outside it.
+                let inside = path
+                    .canonicalize()
+                    .map(|real| real.starts_with(&canonical_root))
+                    .unwrap_or(false);
+                let response = if !host_ok {
+                    tiny_http::Response::from_string("not from here").with_status_code(403)
+                } else if escaped || !inside || !path.is_file() {
                     tiny_http::Response::from_string("not here").with_status_code(404)
                 } else {
                     match std::fs::File::open(&path) {
-                        Ok(mut file) => {
+                        Ok(file) => {
                             let mut bytes = Vec::new();
-                            if file.read_to_end(&mut bytes).is_err() {
+                            let mut limited = file.take(MAX_SERVED_BYTES + 1);
+                            if limited.read_to_end(&mut bytes).is_err() {
                                 tiny_http::Response::from_string("unreadable").with_status_code(500)
+                            } else if bytes.len() as u64 > MAX_SERVED_BYTES {
+                                tiny_http::Response::from_string("too large").with_status_code(413)
                             } else {
                                 let content_type = content_type_for(&path);
                                 tiny_http::Response::from_data(bytes).with_header(
@@ -133,11 +175,14 @@ fn serve_static(root: PathBuf) -> Result<u16> {
                                 )
                             }
                         }
-                        Err(_) => tiny_http::Response::from_string("unreadable").with_status_code(500),
+                        Err(_) => {
+                            tiny_http::Response::from_string("unreadable").with_status_code(500)
+                        }
                     }
                 };
                 let response = response.with_header(
-                    tiny_http::Header::from_bytes("Cache-Control", "no-store").expect("static header"),
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store")
+                        .expect("static header"),
                 );
                 if let Err(error) = request.respond(response) {
                     log::debug!("canvas: {error}");
@@ -146,6 +191,14 @@ fn serve_static(root: PathBuf) -> Result<u16> {
         })
         .context("could not start the canvas thread")?;
     Ok(port)
+}
+
+/// A page's own assets are small; anything past this is not one.
+const MAX_SERVED_BYTES: u64 = 64 * 1024 * 1024;
+
+fn host_is_local(host: &str) -> bool {
+    let name = host.rsplit_once(':').map(|(name, _)| name).unwrap_or(host);
+    matches!(name, "127.0.0.1" | "localhost" | "[::1]")
 }
 
 fn percent_decode(text: &str) -> String {
@@ -171,7 +224,11 @@ fn percent_decode(text: &str) -> String {
 }
 
 fn content_type_for(path: &Path) -> &'static str {
-    match path.extension().and_then(|extension| extension.to_str()).unwrap_or("") {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+    {
         "html" | "htm" => "text/html; charset=utf-8",
         "css" => "text/css; charset=utf-8",
         "js" | "mjs" => "text/javascript; charset=utf-8",
@@ -212,7 +269,9 @@ async fn start_dev_script(root: &Path, script: &str) -> Result<Served> {
             .current_dir(root)
             .status()
             .await
-            .with_context(|| format!("{manager} is not installed, so the dev server cannot start"))?;
+            .with_context(|| {
+                format!("{manager} is not installed, so the dev server cannot start")
+            })?;
         if !status.success() {
             bail!("`{manager} install` failed in {}", root.display());
         }
@@ -232,10 +291,19 @@ async fn start_dev_script(root: &Path, script: &str) -> Result<Served> {
     let mut child = command
         .spawn()
         .with_context(|| format!("{manager} is not installed, so the dev server cannot start"))?;
-    let stdout = child.stdout.take().context("no output from the dev server")?;
-    let stderr = child.stderr.take().context("no output from the dev server")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("no output from the dev server")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("no output from the dev server")?;
     let (sender, receiver) = smol::channel::unbounded::<String>();
-    for stream in [Box::new(stdout) as Box<dyn futures::AsyncRead + Unpin + Send>, Box::new(stderr)] {
+    for stream in [
+        Box::new(stdout) as Box<dyn futures::AsyncRead + Unpin + Send>,
+        Box::new(stderr),
+    ] {
         let sender = sender.clone();
         smol::spawn(async move {
             use futures::AsyncBufReadExt as _;
@@ -269,19 +337,32 @@ async fn start_dev_script(root: &Path, script: &str) -> Result<Served> {
         transcript.push_str(&line);
         transcript.push('\n');
         if let Some(url) = local_url_in(&line) {
-            return Ok(Served { url, child: Some(child) });
+            return Ok(Served {
+                url,
+                child: Some(child),
+            });
         }
         if let Ok(Some(status)) = child.try_status() {
-            bail!("the dev server stopped ({status}):\n{}", tail(&transcript, 1200));
+            bail!(
+                "the dev server stopped ({status}):\n{}",
+                tail(&transcript, 1200)
+            );
         }
     }
     child.kill().ok();
-    bail!("the dev server printed no address in 90 seconds:\n{}", tail(&transcript, 1200))
+    bail!(
+        "the dev server printed no address in 90 seconds:\n{}",
+        tail(&transcript, 1200)
+    )
 }
 
 fn tail(text: &str, keep: usize) -> &str {
     let start = text.len().saturating_sub(keep);
-    let start = text.char_indices().map(|(index, _)| index).find(|index| *index >= start).unwrap_or(0);
+    let start = text
+        .char_indices()
+        .map(|(index, _)| index)
+        .find(|index| *index >= start)
+        .unwrap_or(0);
     &text[start..]
 }
 
@@ -289,15 +370,33 @@ fn tail(text: &str, keep: usize) -> &str {
 /// coloring stripped.
 pub fn local_url_in(line: &str) -> Option<String> {
     let plain = strip_ansi(line);
-    for start in plain.match_indices("http://").chain(plain.match_indices("https://")) {
+    for start in plain
+        .match_indices("http://")
+        .chain(plain.match_indices("https://"))
+    {
         let candidate: String = plain[start.0..]
             .chars()
-            .take_while(|character| !character.is_whitespace() && !matches!(character, '"' | '\'' | ')' | ']' | ','))
+            .take_while(|character| {
+                !character.is_whitespace() && !matches!(character, '"' | '\'' | ')' | ']' | ',')
+            })
             .collect();
-        let host = candidate.split("//").nth(1).unwrap_or("").split('/').next().unwrap_or("");
+        let host = candidate
+            .split("//")
+            .nth(1)
+            .unwrap_or("")
+            .split('/')
+            .next()
+            .unwrap_or("");
         let name = host.split(':').next().unwrap_or("");
-        if matches!(name, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]" | "[::]") {
-            return Some(candidate.replace("0.0.0.0", "127.0.0.1").replace("[::]", "127.0.0.1"));
+        if matches!(
+            name,
+            "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]" | "[::]"
+        ) {
+            return Some(
+                candidate
+                    .replace("0.0.0.0", "127.0.0.1")
+                    .replace("[::]", "127.0.0.1"),
+            );
         }
     }
     None

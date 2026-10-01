@@ -1342,12 +1342,33 @@ fn open_preview_url(
         }
     }
 
+    // A README is someone else's text. A link with a scheme the operating
+    // system would hand to a program (`ms-msdt:`, `javascript:`, a custom
+    // handler) stays dead; web, mail and files open.
+    if !link_scheme_is_safe(&decoded_path) {
+        log::warn!("markdown preview: not opening a link with an unexpected scheme");
+        return;
+    }
     if let Some(workspace) = workspace.upgrade() {
         workspace.update(cx, |workspace, cx| {
             workspace.open_url_or_file(&decoded_path, base_directory.as_deref(), window, cx);
         });
     } else {
         cx.open_url(url.as_ref());
+    }
+}
+
+fn link_scheme_is_safe(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    match lower.split_once(':') {
+        None => true,
+        Some((scheme, _)) => {
+            matches!(scheme, "http" | "https" | "mailto" | "file")
+                // A Windows drive letter is a path, not a scheme.
+                || (scheme.len() == 1 && scheme.chars().all(|c| c.is_ascii_alphabetic()))
+                // `main.rs:12` and similar path:line links.
+                || scheme.contains(['/', '.', '\\'])
+        }
     }
 }
 

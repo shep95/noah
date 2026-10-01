@@ -13,8 +13,8 @@ use fs::{Fs, RemoveOptions};
 use futures::AsyncReadExt as _;
 use gpui::{
     Action, App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    PromptLevel, SharedString, Task, WeakEntity, Window, actions, canvas, fill, outline, point,
-    px, size,
+    PromptLevel, SharedString, Task, WeakEntity, Window, actions, canvas, fill, outline, point, px,
+    size,
 };
 use http_client::{AsyncBody, HttpClient, Method, Request};
 use noah_device::adblock;
@@ -273,9 +273,7 @@ impl DevicePanel {
         self._traffic_task = Some(cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(TRAFFIC_INTERVAL).await;
-                let still_open = this
-                    .read_with(cx, |this, _| this.active)
-                    .unwrap_or(false);
+                let still_open = this.read_with(cx, |this, _| this.active).unwrap_or(false);
                 if !still_open {
                     break;
                 }
@@ -302,7 +300,11 @@ impl DevicePanel {
     /// and draws the code a phone scans to join. Only on request: macOS puts
     /// up a keychain prompt for it.
     fn reveal_wifi_password(&mut self, cx: &mut Context<Self>) {
-        let Some(link) = self.intel.as_ref().and_then(|intel| intel.wifi.connected.clone()) else {
+        let Some(link) = self
+            .intel
+            .as_ref()
+            .and_then(|intel| intel.wifi.connected.clone())
+        else {
             self.wifi_secret = WifiSecret::Failed("not on a named wifi network".into());
             cx.notify();
             return;
@@ -319,7 +321,10 @@ impl DevicePanel {
                 .await;
             this.update(cx, |this, cx| {
                 this.wifi_secret = match outcome {
-                    Ok((password, qr)) => WifiSecret::Shown { password: password.into(), qr },
+                    Ok((password, qr)) => WifiSecret::Shown {
+                        password: password.into(),
+                        qr,
+                    },
                     Err(error) => WifiSecret::Failed(format!("{error:#}").into()),
                 };
                 cx.notify();
@@ -340,7 +345,9 @@ impl DevicePanel {
                         address,
                         country: geo::country_of(address),
                     },
-                    Err(_) => PublicAddress::Failed("the address service gave an odd answer".into()),
+                    Err(_) => {
+                        PublicAddress::Failed("the address service gave an odd answer".into())
+                    }
                 },
                 Err(error) => PublicAddress::Failed(format!("{error:#}").into()),
             };
@@ -535,11 +542,12 @@ impl DevicePanel {
         let DuplicateScan::Done(groups) = &self.duplicates else {
             return;
         };
-        let paths: Vec<PathBuf> = group_indices
+        let files: Vec<noah_device::duplicates::DuplicateFile> = group_indices
             .iter()
             .filter_map(|index| groups.get(*index))
-            .flat_map(|group| group.older().iter().map(|file| file.path.clone()))
+            .flat_map(|group| group.older().iter().cloned())
             .collect();
+        let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
         if paths.is_empty() {
             return;
         }
@@ -567,7 +575,20 @@ impl DevicePanel {
                 return;
             }
             let mut failed = Vec::new();
-            for path in &paths {
+            for file in &files {
+                let path = &file.path;
+                // The scan is a snapshot; a file written since then is not
+                // the duplicate the person agreed to trash.
+                let unchanged = std::fs::metadata(path)
+                    .map(|now| now.len() == file.size && now.modified().ok() == Some(file.modified))
+                    .unwrap_or(false);
+                if !unchanged {
+                    failed.push(format!(
+                        "{}: changed since the scan, left alone",
+                        path.display()
+                    ));
+                    continue;
+                }
                 if let Err(error) = fs
                     .trash(
                         path,
@@ -645,7 +666,10 @@ impl DevicePanel {
             )
         };
         let (watch_line, watch_color) = if watching.is_empty() {
-            ("no tracker, telemetry or remote-control traffic seen".to_string(), Color::Success)
+            (
+                "no tracker, telemetry or remote-control traffic seen".to_string(),
+                Color::Success,
+            )
         } else {
             (
                 format!(
@@ -663,8 +687,14 @@ impl DevicePanel {
             .border_1()
             .border_color(border)
             .child(Label::new(headline))
-            .child(Label::new(watch_line).size(LabelSize::Small).color(watch_color))
-            .when_some(intel.traffic.note.clone(), |this, note| this.child(muted(note)))
+            .child(
+                Label::new(watch_line)
+                    .size(LabelSize::Small)
+                    .color(watch_color),
+            )
+            .when_some(intel.traffic.note.clone(), |this, note| {
+                this.child(muted(note))
+            })
     }
 
     fn render_watchers(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -688,7 +718,11 @@ impl DevicePanel {
             WATCHERS_SHOWN
         };
         for watcher in intel.watchers.iter().take(shown) {
-            section = section.child(render_finding(watcher.status, &watcher.title, &watcher.detail));
+            section = section.child(render_finding(
+                watcher.status,
+                &watcher.title,
+                &watcher.detail,
+            ));
         }
         if intel.watchers.len() > WATCHERS_SHOWN {
             section = section.child(
@@ -776,7 +810,7 @@ impl DevicePanel {
                         window.paint_quad(
                             fill(Bounds::new(point(x, y), size(dot, dot)), land)
                                 .corner_radii(dot / 2.),
-                    );
+                        );
                     }
                 }
                 let place = |latitude: f32, longitude: f32| {
@@ -858,11 +892,16 @@ impl DevicePanel {
                 .gap_2()
                 .items_center()
                 .child(
-                    Button::new("device-public-address", "show where this device appears to be")
-                        .label_size(LabelSize::Small)
-                        .on_click(cx.listener(|this, _, _, cx| this.find_public_address(cx))),
+                    Button::new(
+                        "device-public-address",
+                        "show where this device appears to be",
+                    )
+                    .label_size(LabelSize::Small)
+                    .on_click(cx.listener(|this, _, _, cx| this.find_public_address(cx))),
                 )
-                .child(muted("asks one address service; the room's only request out"))
+                .child(muted(
+                    "asks one address service; the room's only request out",
+                ))
                 .into_any_element(),
             PublicAddress::Looking => muted("asking…").into_any_element(),
             PublicAddress::Known { address, country } => v_flex()
@@ -935,7 +974,12 @@ impl DevicePanel {
         section
     }
 
-    fn render_flow(&self, index: usize, flow: &DataFlow, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_flow(
+        &self,
+        index: usize,
+        flow: &DataFlow,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let expanded = self.expanded_flows.contains(&flow.process);
         let watching = flow
             .destinations
@@ -1113,7 +1157,11 @@ impl DevicePanel {
             section = section.child(muted(format!("DNS {servers}")));
         }
         for finding in &wifi.findings {
-            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+            section = section.child(render_finding(
+                finding.status,
+                &finding.title,
+                &finding.detail,
+            ));
         }
         if !wifi.nearby.is_empty() {
             section = section.child(
@@ -1194,7 +1242,11 @@ impl DevicePanel {
             None => "radio state unknown",
         }));
         for finding in &bluetooth.findings {
-            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+            section = section.child(render_finding(
+                finding.status,
+                &finding.title,
+                &finding.detail,
+            ));
         }
         if bluetooth.devices.is_empty() {
             section = section.child(muted("no devices known or in range"));
@@ -1246,7 +1298,11 @@ impl DevicePanel {
             section = section.child(muted(facts.join(" · ")));
         }
         for finding in &location.findings {
-            section = section.child(render_finding(finding.status, &finding.title, &finding.detail));
+            section = section.child(render_finding(
+                finding.status,
+                &finding.title,
+                &finding.detail,
+            ));
         }
         section
     }
@@ -1305,7 +1361,11 @@ impl DevicePanel {
             section = section.child(
                 h_flex()
                     .gap_2()
-                    .child(Label::new(app.name.clone()).size(LabelSize::XSmall).truncate())
+                    .child(
+                        Label::new(app.name.clone())
+                            .size(LabelSize::XSmall)
+                            .truncate(),
+                    )
                     .child(div().flex_1())
                     .child(muted(detail.join(" · "))),
             );
@@ -1343,8 +1403,17 @@ impl DevicePanel {
 
     fn render_summary(&self, cx: &Context<Self>) -> impl IntoElement {
         let findings = self.all_findings();
-        let count = |status: Status| findings.iter().filter(|check| check.status == status).count();
-        let (bad, warning, good) = (count(Status::Bad), count(Status::Warning), count(Status::Good));
+        let count = |status: Status| {
+            findings
+                .iter()
+                .filter(|check| check.status == status)
+                .count()
+        };
+        let (bad, warning, good) = (
+            count(Status::Bad),
+            count(Status::Warning),
+            count(Status::Good),
+        );
         let (headline, color) = if self.checks.is_none() {
             ("checking this device…".to_string(), Color::Muted)
         } else if bad > 0 {
@@ -1359,7 +1428,11 @@ impl DevicePanel {
             (
                 format!(
                     "{warning} {}",
-                    plural(warning, "warning is worth a look", "warnings are worth a look")
+                    plural(
+                        warning,
+                        "warning is worth a look",
+                        "warnings are worth a look"
+                    )
                 ),
                 Color::Warning,
             )
@@ -1397,7 +1470,10 @@ impl DevicePanel {
             .child(meter(
                 "processor",
                 health.cpu_usage_percent,
-                format!("{:.0}% of {} cores", health.cpu_usage_percent, health.cpu_cores),
+                format!(
+                    "{:.0}% of {} cores",
+                    health.cpu_usage_percent, health.cpu_cores
+                ),
                 cx,
             ))
             .child(meter(
@@ -1509,10 +1585,17 @@ impl DevicePanel {
             section = section.child(
                 h_flex()
                     .gap_2()
-                    .child(Label::new(format!("{} {}", port.protocol, port.port)).size(LabelSize::Small))
+                    .child(
+                        Label::new(format!("{} {}", port.protocol, port.port))
+                            .size(LabelSize::Small),
+                    )
                     .child(muted(port.address.clone()))
                     .child(div().flex_1())
-                    .child(muted(port.process.clone().unwrap_or_else(|| "unknown program".into()))),
+                    .child(muted(
+                        port.process
+                            .clone()
+                            .unwrap_or_else(|| "unknown program".into()),
+                    )),
             );
         }
         section
@@ -1526,7 +1609,11 @@ impl DevicePanel {
         if self.startup.is_empty() {
             return section.child(muted("nothing found"));
         }
-        let shown = if self.show_all_startup { self.startup.len() } else { 8 };
+        let shown = if self.show_all_startup {
+            self.startup.len()
+        } else {
+            8
+        };
         for item in self.startup.iter().take(shown) {
             section = section.child(
                 v_flex()
@@ -1579,12 +1666,16 @@ impl DevicePanel {
                         .child(
                             Button::new("device-adblock-update", "update the list")
                                 .label_size(LabelSize::Small)
-                                .on_click(cx.listener(|this, _, _, cx| this.set_ad_blocker(true, cx))),
+                                .on_click(
+                                    cx.listener(|this, _, _, cx| this.set_ad_blocker(true, cx)),
+                                ),
                         )
                         .child(
                             Button::new("device-adblock-off", "turn off")
                                 .label_size(LabelSize::Small)
-                                .on_click(cx.listener(|this, _, _, cx| this.set_ad_blocker(false, cx))),
+                                .on_click(
+                                    cx.listener(|this, _, _, cx| this.set_ad_blocker(false, cx)),
+                                ),
                         ),
                 ),
         }
@@ -1616,13 +1707,13 @@ impl DevicePanel {
                             .on_click(cx.listener(|this, _, _, cx| this.stop_scan(cx))),
                     ),
             ),
-            DuplicateScan::Done(groups) if groups.is_empty() => section
-                .child(muted("no duplicate files found"))
-                .child(
+            DuplicateScan::Done(groups) if groups.is_empty() => {
+                section.child(muted("no duplicate files found")).child(
                     Button::new("device-duplicates-rescan", "scan again")
                         .label_size(LabelSize::Small)
                         .on_click(cx.listener(|this, _, _, cx| this.scan_duplicates(cx))),
-                ),
+                )
+            }
             DuplicateScan::Done(groups) => {
                 let reclaimable: u64 = groups.iter().map(DuplicateGroup::reclaimable_bytes).sum();
                 let copies: usize = groups.iter().map(|group| group.older().len()).sum();
@@ -1675,7 +1766,9 @@ impl DevicePanel {
                                 .child(
                                     Button::new(("device-duplicate-remove", index), "keep newest")
                                         .label_size(LabelSize::Small)
-                                        .tooltip(Tooltip::text("move the older copies to the trash"))
+                                        .tooltip(Tooltip::text(
+                                            "move the older copies to the trash",
+                                        ))
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             this.remove_older_copies(vec![index], window, cx);
                                         })),
@@ -1748,7 +1841,9 @@ fn render_finding(status: Status, title: &str, detail: &str) -> impl IntoElement
                 .flex_1()
                 .min_w_0()
                 .child(Label::new(title.to_string()).size(LabelSize::Small))
-                .when(!detail.is_empty(), |this| this.child(muted(detail.to_string()))),
+                .when(!detail.is_empty(), |this| {
+                    this.child(muted(detail.to_string()))
+                }),
         )
 }
 
@@ -1782,7 +1877,10 @@ fn render_check(check: &Check) -> impl IntoElement {
 enum WifiSecret {
     Hidden,
     Looking,
-    Shown { password: SharedString, qr: Option<Vec<Vec<bool>>> },
+    Shown {
+        password: SharedString,
+        qr: Option<Vec<Vec<bool>>>,
+    },
     Failed(SharedString),
 }
 
@@ -1886,10 +1984,11 @@ impl DevicePanel {
 }
 
 fn section(title: &'static str) -> gpui::Div {
-    v_flex()
-        .gap_1()
-        .py_2()
-        .child(Label::new(title).size(LabelSize::Small).color(Color::Default))
+    v_flex().gap_1().py_2().child(
+        Label::new(title)
+            .size(LabelSize::Small)
+            .color(Color::Default),
+    )
 }
 
 fn muted(text: impl Into<SharedString>) -> Label {
@@ -2064,7 +2163,11 @@ impl Render for DevicePanel {
                     ),
             )
             .when_some(self.message.clone(), |this, message| {
-                this.child(Label::new(message).size(LabelSize::Small).color(Color::Accent))
+                this.child(
+                    Label::new(message)
+                        .size(LabelSize::Small)
+                        .color(Color::Accent),
+                )
             })
             .map(|this| {
                 if two_columns {

@@ -773,7 +773,12 @@ impl Registry {
         // finds add-ons saved before the prefix existed.
         let slug = name.trim().strip_prefix(NAME_PREFIX).unwrap_or(name.trim());
         self.addons.iter().find(|addon| {
-            addon.manifest.name.strip_prefix(NAME_PREFIX).unwrap_or(&addon.manifest.name) == slug
+            addon
+                .manifest
+                .name
+                .strip_prefix(NAME_PREFIX)
+                .unwrap_or(&addon.manifest.name)
+                == slug
         })
     }
 
@@ -820,17 +825,28 @@ pub fn discover(roots: &AddonRoots) -> Registry {
         .iter()
         .map(|addon| addon.manifest.name.clone())
         .collect();
-    registry.addons.extend(
-        global
-            .into_iter()
-            .filter(|addon| !project_names.contains(&addon.manifest.name)),
-    );
-    registry
-        .addons
-        .extend(project.into_iter().map(|addon| InstalledAddon {
-            overrides_global: global_names.contains(&addon.manifest.name),
+    // A repository ships its add-ons; one named like a global add-on must
+    // not take its place, so the global one wins and the project's copy is
+    // reported, not run.
+    registry.addons.extend(global);
+    for addon in project {
+        if global_names.contains(&addon.manifest.name) {
+            registry.problems.push(Problem {
+                scope: Scope::Project,
+                directory: addon.directory.clone(),
+                message: format!(
+                    "the project add-on `{}` has the same name as a global add-on and is skipped",
+                    addon.manifest.name
+                ),
+            });
+            continue;
+        }
+        registry.addons.push(InstalledAddon {
+            overrides_global: false,
             ..addon
-        }));
+        });
+    }
+    let _ = project_names;
     registry
         .addons
         .sort_by(|left, right| left.manifest.name.cmp(&right.manifest.name));

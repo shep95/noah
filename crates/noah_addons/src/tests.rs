@@ -701,7 +701,10 @@ fn saving_keeps_every_version() {
         "preparing must not write anything"
     );
     let installed = install(&first).expect("installs");
-    assert_eq!(installed.directory, roots.global.join("asherin.candidate-score"));
+    assert_eq!(
+        installed.directory,
+        roots.global.join("asherin.candidate-score")
+    );
     for file in [MANIFEST_FILE_NAME, DEFAULT_ENTRY, TESTS_FILE_NAME] {
         assert!(installed.directory.join(file).is_file(), "{file} missing");
     }
@@ -811,7 +814,7 @@ fn invalid_drafts_are_rejected_before_testing() {
 // Discovery
 
 #[test]
-fn discovers_global_and_project_addons_with_project_winning() {
+fn discovers_global_and_project_addons_with_global_winning() {
     let temporary = tempfile::tempdir().expect("temp dir");
     let roots = roots_in(temporary.path());
     let project = roots.project.clone().expect("project root");
@@ -848,19 +851,22 @@ fn discovers_global_and_project_addons_with_project_winning() {
             )
         })
         .collect();
+    // A repository's add-on never takes a global add-on's place: the global
+    // one stays, the project's copy is reported and skipped.
     assert_eq!(
         names,
         vec![
-            ("shared", Scope::Project, true),
+            ("shared", Scope::Global, false),
             ("tip", Scope::Global, false),
             ("vat", Scope::Project, false),
         ]
     );
     assert_eq!(
         registry.get("shared").expect("found").manifest.use_when,
-        "the project one"
+        "the global one"
     );
-    assert!(registry.problems.is_empty(), "{:?}", registry.problems);
+    assert_eq!(registry.problems.len(), 1, "{:?}", registry.problems);
+    assert!(registry.problems[0].message.contains("shared"));
 
     let without_project = discover(&AddonRoots::new(roots.global.clone(), None));
     assert_eq!(

@@ -38,7 +38,10 @@ pub fn parse_file_blocks(text: &str) -> Vec<FileBlock> {
             continue;
         };
         let fence_indent = line.len() - trimmed.len();
-        let Some(path) = info.split_whitespace().find_map(|word| word.strip_prefix("path=")) else {
+        let Some(path) = info
+            .split_whitespace()
+            .find_map(|word| word.strip_prefix("path="))
+        else {
             // Not a file block; skip to this fence's end so its contents
             // can't be mistaken for one.
             for inner in lines.by_ref() {
@@ -49,7 +52,7 @@ pub fn parse_file_blocks(text: &str) -> Vec<FileBlock> {
             continue;
         };
         let path = path.trim_matches(['"', '\'', '`']);
-        if path.is_empty() || path.contains("..") || Path::new(path).is_absolute() {
+        if !block_path_is_plain(path) {
             continue;
         }
         let mut contents = String::new();
@@ -59,7 +62,10 @@ pub fn parse_file_blocks(text: &str) -> Vec<FileBlock> {
             }
             // The model may indent the whole block (a list item); strip the
             // fence's own indentation, not the file's.
-            let line = if fence_indent > 0 && inner.len() >= fence_indent && inner[..fence_indent].trim().is_empty() {
+            let line = if fence_indent > 0
+                && inner.len() >= fence_indent
+                && inner[..fence_indent].trim().is_empty()
+            {
                 &inner[fence_indent..]
             } else {
                 inner
@@ -67,9 +73,69 @@ pub fn parse_file_blocks(text: &str) -> Vec<FileBlock> {
             contents.push_str(line);
             contents.push('\n');
         }
-        blocks.push(FileBlock { path: path.to_string(), contents });
+        blocks.push(FileBlock {
+            path: path.to_string(),
+            contents,
+        });
     }
     blocks
+}
+
+/// A block path is a plain relative path: no root, no prefix (drive or UNC),
+/// no `..`, no backslashes, and nothing under `.git`, whose hooks run.
+pub fn block_path_is_plain(path: &str) -> bool {
+    if path.is_empty() || path.contains('\\') || path.contains(':') {
+        return false;
+    }
+    let mut components = Path::new(path).components();
+    components.all(|component| match component {
+        std::path::Component::Normal(name) => {
+            let name = name.to_string_lossy();
+            !name.is_empty() && name != ".git" && !name.eq_ignore_ascii_case(".git")
+        }
+        std::path::Component::CurDir => true,
+        _ => false,
+    })
+}
+
+/// The real place a write lands, with every existing ancestor resolved, so
+/// a symlinked folder inside the project cannot carry the file outside it.
+fn contained_target(root: &Path, target: &Path) -> Result<PathBuf> {
+    let root = root
+        .canonicalize()
+        .with_context(|| format!("couldn't resolve {}", root.display()))?;
+    let mut existing = target.to_path_buf();
+    let mut tail = Vec::new();
+    while !existing.exists() {
+        let Some(name) = existing.file_name().map(|name| name.to_owned()) else {
+            anyhow::bail!(
+                "the path `{}` has no parent inside the project",
+                target.display()
+            );
+        };
+        tail.push(name);
+        existing.pop();
+    }
+    let resolved = existing
+        .canonicalize()
+        .with_context(|| format!("couldn't resolve {}", existing.display()))?;
+    anyhow::ensure!(
+        resolved.starts_with(&root),
+        "the path `{}` leads outside the project",
+        target.display()
+    );
+    anyhow::ensure!(
+        !resolved
+            .components()
+            .any(|component| component.as_os_str() == ".git"),
+        "the path `{}` is inside .git",
+        target.display()
+    );
+    let mut full = resolved;
+    for name in tail.into_iter().rev() {
+        full.push(name);
+    }
+    Ok(full)
 }
 
 /// Resolves a block's path against the project's roots: `myapp/index.html`
@@ -94,11 +160,20 @@ pub fn resolve_block_path(path: &str, roots: &[(String, PathBuf)]) -> Option<Pat
 }
 
 /// Writes the blocks to disk and returns what was written, in words.
-pub fn apply_file_blocks(blocks: &[FileBlock], roots: &[(String, PathBuf)]) -> Result<Vec<PathBuf>> {
+pub fn apply_file_blocks(
+    blocks: &[FileBlock],
+    roots: &[(String, PathBuf)],
+) -> Result<Vec<PathBuf>> {
     let mut written = Vec::new();
     for block in blocks {
         let target = resolve_block_path(&block.path, roots)
             .with_context(|| format!("the path `{}` matches no project root", block.path))?;
+        let root = roots
+            .iter()
+            .map(|(_, root)| root)
+            .find(|root| target.starts_with(root))
+            .context("the path matches no project root")?;
+        let target = contained_target(root, &target)?;
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("couldn't create {}", parent.display()))?;
@@ -116,7 +191,12 @@ pub fn project_check_command(root: &Path) -> Option<(String, Vec<String>)> {
     if root.join("Cargo.toml").is_file() {
         return Some((
             "cargo check".into(),
-            vec!["cargo".into(), "check".into(), "--workspace".into(), "--quiet".into()],
+            vec![
+                "cargo".into(),
+                "check".into(),
+                "--workspace".into(),
+                "--quiet".into(),
+            ],
         ));
     }
     if root.join("package.json").is_file() {
@@ -125,7 +205,11 @@ pub fn project_check_command(root: &Path) -> Option<(String, Vec<String>)> {
             .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
             .and_then(|json| json.get("scripts").cloned());
         if let Some(scripts) = scripts.as_ref().and_then(|value| value.as_object()) {
-            for (script, label) in [("test", "npm test"), ("build", "npm run build"), ("lint", "npm run lint")] {
+            for (script, label) in [
+                ("test", "npm test"),
+                ("build", "npm run build"),
+                ("lint", "npm run lint"),
+            ] {
                 // A placeholder test script fails every project that never
                 // wrote tests; skip it rather than fail every turn.
                 if let Some(body) = scripts.get(script).and_then(|value| value.as_str())
@@ -145,21 +229,50 @@ pub fn project_check_command(root: &Path) -> Option<(String, Vec<String>)> {
             }
         }
         if root.join("tsconfig.json").is_file() {
-            return Some(("tsc".into(), vec!["npx".into(), "--no-install".into(), "tsc".into(), "--noEmit".into()]));
+            return Some((
+                "tsc".into(),
+                vec![
+                    "npx".into(),
+                    "--no-install".into(),
+                    "tsc".into(),
+                    "--noEmit".into(),
+                ],
+            ));
         }
         return None;
     }
     if root.join("go.mod").is_file() {
-        return Some(("go build".into(), vec!["go".into(), "build".into(), "./...".into()]));
+        return Some((
+            "go build".into(),
+            vec!["go".into(), "build".into(), "./...".into()],
+        ));
     }
-    if root.join("pyproject.toml").is_file() || root.join("pytest.ini").is_file() || root.join("setup.py").is_file() {
+    if root.join("pyproject.toml").is_file()
+        || root.join("pytest.ini").is_file()
+        || root.join("setup.py").is_file()
+    {
         return Some((
             "pytest".into(),
-            vec!["python3".into(), "-m".into(), "pytest".into(), "-x".into(), "-q".into(), "--no-header".into()],
+            vec![
+                "python3".into(),
+                "-m".into(),
+                "pytest".into(),
+                "-x".into(),
+                "-q".into(),
+                "--no-header".into(),
+            ],
         ));
     }
     if root.join("tsconfig.json").is_file() {
-        return Some(("tsc".into(), vec!["npx".into(), "--no-install".into(), "tsc".into(), "--noEmit".into()]));
+        return Some((
+            "tsc".into(),
+            vec![
+                "npx".into(),
+                "--no-install".into(),
+                "tsc".into(),
+                "--noEmit".into(),
+            ],
+        ));
     }
     None
 }
@@ -189,7 +302,10 @@ pub async fn run_check(root: PathBuf, command: Vec<String>) -> (bool, String) {
         }
         futures::future::Either::Right(_) => (
             false,
-            format!("the check ran past {} seconds and was abandoned", CHECK_TIME_LIMIT.as_secs()),
+            format!(
+                "the check ran past {} seconds and was abandoned",
+                CHECK_TIME_LIMIT.as_secs()
+            ),
         ),
     }
 }
@@ -197,9 +313,11 @@ pub async fn run_check(root: PathBuf, command: Vec<String>) -> (bool, String) {
 /// Whether a path is interface code the canvas should show.
 pub fn is_interface_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
-    [".html", ".htm", ".css", ".scss", ".jsx", ".tsx", ".vue", ".svelte", ".astro"]
-        .iter()
-        .any(|extension| lower.ends_with(extension))
+    [
+        ".html", ".htm", ".css", ".scss", ".jsx", ".tsx", ".vue", ".svelte", ".astro",
+    ]
+    .iter()
+    .any(|extension| lower.ends_with(extension))
         || ((lower.ends_with(".js") || lower.ends_with(".ts")) && !lower.ends_with(".d.ts"))
 }
 
@@ -236,7 +354,10 @@ mod tests {
             resolve_block_path("myapp/src/a.js", &roots),
             Some(PathBuf::from("/tmp/myapp/src/a.js"))
         );
-        assert_eq!(resolve_block_path("other/a.js", &roots), Some(PathBuf::from("/tmp/myapp/other/a.js")));
+        assert_eq!(
+            resolve_block_path("other/a.js", &roots),
+            Some(PathBuf::from("/tmp/myapp/other/a.js"))
+        );
     }
 
     #[test]

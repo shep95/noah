@@ -881,6 +881,15 @@ impl SettingsObserver {
                                             );
                                             continue;
                                         }
+                                        if kind == LocalSettingsKind::Debug {
+                                            settings_observer.apply_local_debug_scenarios(
+                                                worktree_id,
+                                                &directory_path,
+                                                settings_contents.as_deref(),
+                                                cx,
+                                            );
+                                            continue;
+                                        }
                                         apply_local_settings(
                                             worktree_id,
                                             path.clone(),
@@ -1177,6 +1186,42 @@ impl SettingsObserver {
         }
     }
 
+    fn apply_local_debug_scenarios(
+        &self,
+        worktree_id: WorktreeId,
+        directory: &Arc<RelPath>,
+        file_content: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let result = self.task_store.update(cx, |task_store, cx| {
+            task_store.update_user_debug_scenarios(
+                TaskSettingsLocation::Worktree(SettingsLocation {
+                    worktree_id,
+                    path: directory.as_ref(),
+                }),
+                file_content,
+                cx,
+            )
+        });
+
+        match result {
+            Err(InvalidSettingsError::Debug { path, message }) => {
+                log::error!("Failed to set local debug scenarios in {path:?}: {message:?}");
+                cx.emit(SettingsObserverEvent::LocalDebugScenariosUpdated(Err(
+                    InvalidSettingsError::Debug { path, message },
+                )));
+            }
+            Err(e) => {
+                log::error!("Failed to set local debug scenarios: {e}");
+            }
+            Ok(()) => {
+                cx.emit(SettingsObserverEvent::LocalDebugScenariosUpdated(Ok(
+                    directory.as_std_path().join(debug_task_file_name()),
+                )));
+            }
+        }
+    }
+
     fn on_worktree_store_event(
         &mut self,
         _: Entity<WorktreeStore>,
@@ -1390,7 +1435,6 @@ impl SettingsObserver {
     ) {
         let worktree_id = worktree.read(cx).id();
         let remote_worktree_id = worktree.read(cx).id();
-        let task_store = self.task_store.clone();
         let can_trust_worktree = if is_via_collab {
             OnceCell::from(true)
         } else {
@@ -1453,34 +1497,33 @@ impl SettingsObserver {
                     }
                 }
                 (LocalSettingsPath::InWorktree(directory), LocalSettingsKind::Debug) => {
-                    let result = task_store.update(cx, |task_store, cx| {
-                        task_store.update_user_debug_scenarios(
-                            TaskSettingsLocation::Worktree(SettingsLocation {
-                                worktree_id,
-                                path: directory.as_ref(),
-                            }),
+                    // A debug scenario names an adapter, a program and its
+                    // arguments, one click from running; it waits for trust
+                    // like the repository's tasks and settings.
+                    if *can_trust_worktree.get_or_init(|| {
+                        if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
+                            trusted_worktrees.update(cx, |trusted_worktrees, cx| {
+                                trusted_worktrees.can_trust(&self.worktree_store, worktree_id, cx)
+                            })
+                        } else {
+                            true
+                        }
+                    }) {
+                        self.apply_local_debug_scenarios(
+                            worktree_id,
+                            directory,
                             file_content.as_deref(),
                             cx,
-                        )
-                    });
-
-                    match result {
-                        Err(InvalidSettingsError::Debug { path, message }) => {
-                            log::error!(
-                                "Failed to set local debug scenarios in {path:?}: {message:?}"
+                        );
+                    } else {
+                        applied = false;
+                        self.pending_local_settings
+                            .entry(PathTrust::Worktree(worktree_id))
+                            .or_default()
+                            .insert(
+                                (worktree_id, directory.clone(), LocalSettingsKind::Debug),
+                                file_content.clone(),
                             );
-                            cx.emit(SettingsObserverEvent::LocalDebugScenariosUpdated(Err(
-                                InvalidSettingsError::Debug { path, message },
-                            )));
-                        }
-                        Err(e) => {
-                            log::error!("Failed to set local debug scenarios: {e}");
-                        }
-                        Ok(()) => {
-                            cx.emit(SettingsObserverEvent::LocalDebugScenariosUpdated(Ok(
-                                directory.as_std_path().join(debug_task_file_name()),
-                            )));
-                        }
                     }
                 }
                 (directory, LocalSettingsKind::Editorconfig) => {

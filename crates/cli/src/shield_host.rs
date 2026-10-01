@@ -57,7 +57,9 @@ pub fn serve() -> Result<()> {
         let mut body = vec![0u8; length];
         input.read_exact(&mut body)?;
         let reply = match serde_json::from_slice::<Value>(&body) {
-            Ok(message) => handle(&message).unwrap_or_else(|error| json!({ "error": format!("{error:#}") })),
+            Ok(message) => {
+                handle(&message).unwrap_or_else(|error| json!({ "error": format!("{error:#}") }))
+            }
             Err(error) => json!({ "error": format!("not a message: {error}") }),
         };
         let bytes = serde_json::to_vec(&reply)?;
@@ -79,7 +81,10 @@ fn handle(message: &Value) -> Result<Value> {
         })),
         "brightness.get" => Ok(json!({ "level": brightness::get()? })),
         "brightness.set" => {
-            let level = message.get("level").and_then(Value::as_u64).context("level is missing")?;
+            let level = message
+                .get("level")
+                .and_then(Value::as_u64)
+                .context("level is missing")?;
             let level = level.min(100) as u8;
             brightness::set(level)?;
             Ok(json!({ "ok": true, "level": level }))
@@ -96,8 +101,14 @@ fn handle(message: &Value) -> Result<Value> {
         // prompt only lands in the composer; the person still sends it, and
         // every browser action shepherd takes afterwards asks as usual.
         "agent.prompt" => {
-            let prompt = message.get("prompt").and_then(Value::as_str).context("prompt is missing")?;
-            anyhow::ensure!(prompt.len() <= MAX_AGENT_PROMPT_BYTES, "the prompt is too long");
+            let prompt = message
+                .get("prompt")
+                .and_then(Value::as_str)
+                .context("prompt is missing")?;
+            anyhow::ensure!(
+                prompt.len() <= MAX_AGENT_PROMPT_BYTES,
+                "the prompt is too long"
+            );
             open_agent_prompt(prompt)?;
             Ok(json!({ "ok": true }))
         }
@@ -129,7 +140,8 @@ fn open_agent_prompt(prompt: &str) -> Result<()> {
 /// Writes the host manifests and tells every browser on this machine where
 /// they are. Returns the places it registered in.
 pub fn register(host_binary: &Path) -> Result<Vec<String>> {
-    let host_binary = std::fs::canonicalize(host_binary).unwrap_or_else(|_| host_binary.to_path_buf());
+    let host_binary =
+        std::fs::canonicalize(host_binary).unwrap_or_else(|_| host_binary.to_path_buf());
     let directory = paths::data_dir().join("shield-host");
     std::fs::create_dir_all(&directory)?;
     let path_text = host_binary.to_string_lossy().into_owned();
@@ -236,7 +248,10 @@ fn registry_set(key: &str, manifest: &Path) -> Result<()> {
         .output()
         .context("reg.exe could not run")?;
     if !output.status.success() {
-        bail!("reg add {key} failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+        bail!(
+            "reg add {key} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     Ok(())
 }
@@ -261,7 +276,14 @@ pub mod brightness {
     #[cfg(target_os = "windows")]
     fn powershell(script: &str) -> Result<String> {
         let output = hidden(Command::new("powershell"))
-            .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script])
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                script,
+            ])
             .output()
             .context("powershell could not run")?;
         if !output.status.success() {
@@ -274,8 +296,11 @@ pub mod brightness {
 
     #[cfg(target_os = "windows")]
     pub fn get() -> Result<u8> {
-        let text = powershell("(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction Stop | Select-Object -First 1).CurrentBrightness")?;
-        text.parse::<u8>().map_err(|_| anyhow::anyhow!("this screen does not report its brightness"))
+        let text = powershell(
+            "(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction Stop | Select-Object -First 1).CurrentBrightness",
+        )?;
+        text.parse::<u8>()
+            .map_err(|_| anyhow::anyhow!("this screen does not report its brightness"))
     }
 
     #[cfg(target_os = "windows")]
@@ -288,13 +313,18 @@ pub mod brightness {
 
     #[cfg(target_os = "macos")]
     pub fn get() -> Result<u8> {
-        let output = hidden(Command::new("brightness")).arg("-l").output().context(
-            "the `brightness` tool is not installed (brew install brightness)",
-        )?;
+        let output = hidden(Command::new("brightness"))
+            .arg("-l")
+            .output()
+            .context("the `brightness` tool is not installed (brew install brightness)")?;
         let text = String::from_utf8_lossy(&output.stdout);
         let value = text
             .lines()
-            .find_map(|line| line.rsplit("brightness ").next().and_then(|tail| tail.trim().parse::<f64>().ok()))
+            .find_map(|line| {
+                line.rsplit("brightness ")
+                    .next()
+                    .and_then(|tail| tail.trim().parse::<f64>().ok())
+            })
             .context("this screen does not report its brightness")?;
         Ok((value * 100.0).round().clamp(0.0, 100.0) as u8)
     }
@@ -314,7 +344,10 @@ pub mod brightness {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     fn backlight() -> Option<PathBuf> {
         let entries = std::fs::read_dir("/sys/class/backlight").ok()?;
-        entries.flatten().map(|entry| entry.path()).find(|path| path.join("brightness").is_file())
+        entries
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| path.join("brightness").is_file())
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -323,13 +356,21 @@ pub mod brightness {
             && output.status.success()
         {
             let text = String::from_utf8_lossy(&output.stdout);
-            if let Some(percent) = text.split(',').nth(3).and_then(|field| field.trim_end_matches('%').parse::<u8>().ok()) {
+            if let Some(percent) = text
+                .split(',')
+                .nth(3)
+                .and_then(|field| field.trim_end_matches('%').parse::<u8>().ok())
+            {
                 return Ok(percent);
             }
         }
         let device = backlight().context("no backlight this computer lets programs turn")?;
-        let current: f64 = std::fs::read_to_string(device.join("brightness"))?.trim().parse()?;
-        let max: f64 = std::fs::read_to_string(device.join("max_brightness"))?.trim().parse()?;
+        let current: f64 = std::fs::read_to_string(device.join("brightness"))?
+            .trim()
+            .parse()?;
+        let max: f64 = std::fs::read_to_string(device.join("max_brightness"))?
+            .trim()
+            .parse()?;
         Ok((current / max.max(1.0) * 100.0).round().clamp(0.0, 100.0) as u8)
     }
 
@@ -343,8 +384,12 @@ pub mod brightness {
             return Ok(());
         }
         let device = backlight().context("no backlight this computer lets programs turn")?;
-        let max: f64 = std::fs::read_to_string(device.join("max_brightness"))?.trim().parse()?;
-        let value = (max * level as f64 / 100.0).round().max(if level == 0 { 0.0 } else { 1.0 });
+        let max: f64 = std::fs::read_to_string(device.join("max_brightness"))?
+            .trim()
+            .parse()?;
+        let value = (max * level as f64 / 100.0)
+            .round()
+            .max(if level == 0 { 0.0 } else { 1.0 });
         std::fs::write(device.join("brightness"), format!("{}", value as u64))
             .context("the backlight is not writable for this user (install brightnessctl, or add yourself to the video group)")?;
         Ok(())
@@ -362,7 +407,11 @@ pub mod tor {
     }
 
     fn executable(name: &str) -> String {
-        if cfg!(target_os = "windows") { format!("{name}.exe") } else { name.to_string() }
+        if cfg!(target_os = "windows") {
+            format!("{name}.exe")
+        } else {
+            name.to_string()
+        }
     }
 
     /// Where Tor Browser keeps its own tor, when it is installed.
@@ -373,17 +422,25 @@ pub mod tor {
             let roots = [
                 home.join("Desktop"),
                 home.join("Downloads"),
-                std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| home.join("AppData/Local")),
+                std::env::var_os("LOCALAPPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| home.join("AppData/Local")),
                 PathBuf::from(r"C:\Program Files"),
             ];
             for root in roots {
                 candidates.push(root.join(r"Tor Browser\Browser\TorBrowser\Tor\tor.exe"));
             }
         } else if cfg!(target_os = "macos") {
-            candidates.push(PathBuf::from("/Applications/Tor Browser.app/Contents/MacOS/Tor/tor"));
+            candidates.push(PathBuf::from(
+                "/Applications/Tor Browser.app/Contents/MacOS/Tor/tor",
+            ));
             candidates.push(home.join("Applications/Tor Browser.app/Contents/MacOS/Tor/tor"));
         } else {
-            for root in [home.join("tor-browser"), home.join("Downloads/tor-browser"), home.join(".local/share/torbrowser/tbb/x86_64/tor-browser")] {
+            for root in [
+                home.join("tor-browser"),
+                home.join("Downloads/tor-browser"),
+                home.join(".local/share/torbrowser/tbb/x86_64/tor-browser"),
+            ] {
                 candidates.push(root.join("Browser/TorBrowser/Tor/tor"));
             }
         }
@@ -407,7 +464,10 @@ pub mod tor {
         if bundled.is_file() {
             return Some(bundled);
         }
-        browser_candidates().into_iter().find(|candidate| candidate.is_file()).or_else(|| in_path("tor"))
+        browser_candidates()
+            .into_iter()
+            .find(|candidate| candidate.is_file())
+            .or_else(|| in_path("tor"))
     }
 
     /// The geoip tables next to a tor, needed to pick an exit country.
@@ -440,7 +500,11 @@ pub mod tor {
     }
 
     fn saved_pid() -> Option<u32> {
-        std::fs::read_to_string(pid_file()).ok()?.trim().parse().ok()
+        std::fs::read_to_string(pid_file())
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
     }
 
     fn listening() -> bool {
@@ -469,8 +533,43 @@ pub mod tor {
         saved_pid().map(alive).unwrap_or(false) || listening()
     }
 
+    #[cfg(target_os = "linux")]
+    fn is_tor_process(pid: u32) -> bool {
+        std::fs::read_to_string(format!("/proc/{pid}/comm"))
+            .map(|name| name.trim() == "tor")
+            .unwrap_or(false)
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn is_tor_process(pid: u32) -> bool {
+        let output = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "comm="])
+            .output();
+        match output {
+            Ok(output) => String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .ends_with("tor"),
+            Err(_) => false,
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn is_tor_process(pid: u32) -> bool {
+        let output = hidden(Command::new("tasklist"))
+            .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+            .output();
+        match output {
+            Ok(output) => String::from_utf8_lossy(&output.stdout)
+                .to_ascii_lowercase()
+                .starts_with("\"tor.exe\""),
+            Err(_) => false,
+        }
+    }
+
     pub fn log_tail(lines: usize) -> Vec<String> {
-        let Ok(text) = std::fs::read_to_string(log_file()) else { return Vec::new() };
+        let Ok(text) = std::fs::read_to_string(log_file()) else {
+            return Vec::new();
+        };
         let all: Vec<&str> = text.lines().collect();
         let start = all.len().saturating_sub(lines);
         all[start..].iter().map(|line| line.to_string()).collect()
@@ -482,7 +581,10 @@ pub mod tor {
         for line in log_tail(400) {
             if let Some(index) = line.find("Bootstrapped ") {
                 let rest = &line[index + "Bootstrapped ".len()..];
-                let digits: String = rest.chars().take_while(|character| character.is_ascii_digit()).collect();
+                let digits: String = rest
+                    .chars()
+                    .take_while(|character| character.is_ascii_digit())
+                    .collect();
                 if let Ok(value) = digits.parse::<u8>() {
                     percent = value;
                     problem = None;
@@ -499,7 +601,10 @@ pub mod tor {
         let binary = binary();
         let running = running();
         let (percent, problem) = if running { bootstrapped() } else { (0, None) };
-        let country = std::fs::read_to_string(country_file()).unwrap_or_default().trim().to_string();
+        let country = std::fs::read_to_string(country_file())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         Ok(json!({
             "installed": binary.is_some(),
             "binary": binary.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -535,7 +640,11 @@ pub mod tor {
         for piece in index.split("href=\"").skip(1) {
             let Some(end) = piece.find('"') else { continue };
             let name = piece[..end].trim_end_matches('/');
-            if name.is_empty() || !name.chars().all(|character| character.is_ascii_digit() || character == '.') {
+            if name.is_empty()
+                || !name
+                    .chars()
+                    .all(|character| character.is_ascii_digit() || character == '.')
+            {
                 continue;
             }
             let parts: Option<Vec<u32>> = name.split('.').map(|part| part.parse().ok()).collect();
@@ -551,16 +660,34 @@ pub mod tor {
     /// nearly every Linux ship one), which keeps a TLS stack out of noah's
     /// command-line program. Only https, no redirects off it.
     fn fetch(url: &str) -> Result<Vec<u8>> {
-        let target = std::env::temp_dir().join(format!("noah-shield-{}.download", std::process::id()));
+        let target =
+            std::env::temp_dir().join(format!("noah-shield-{}.download", std::process::id()));
         let output = hidden(Command::new("curl"))
-            .args(["--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-time", "900", "--user-agent", "noah-shield-host", "--output"])
+            .args([
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
+                "--max-time",
+                "900",
+                "--user-agent",
+                "noah-shield-host",
+                "--output",
+            ])
             .arg(&target)
             .arg(url)
             .output()
             .context("curl is not on this computer, and noah needs it to fetch Tor")?;
         if !output.status.success() {
             std::fs::remove_file(&target).ok();
-            bail!("could not fetch {url}: {}", String::from_utf8_lossy(&output.stderr).trim());
+            bail!(
+                "could not fetch {url}: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
         }
         let bytes = std::fs::read(&target)?;
         std::fs::remove_file(&target).ok();
@@ -570,15 +697,22 @@ pub mod tor {
     pub fn install() -> Result<Value> {
         let (os, arch) = platform_bundle()?;
         let index = String::from_utf8_lossy(&fetch(TOR_DIST)?).into_owned();
-        let version = latest_version(&index).context("the Tor Project's download list had no release in it")?;
+        let version = latest_version(&index)
+            .context("the Tor Project's download list had no release in it")?;
         let name = format!("tor-expert-bundle-{os}-{arch}-{version}.tar.gz");
         let url = format!("{TOR_DIST}{version}/{name}");
         let bytes = fetch(&url)?;
         let sums = String::from_utf8_lossy(&fetch(&format!("{url}.sha256sum"))?).into_owned();
-        let expected = sums.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
+        let expected = sums
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
         let actual = format!("{:x}", sha2::Sha256::digest(&bytes));
         if expected.len() != 64 || expected != actual {
-            bail!("the downloaded Tor did not match the Tor Project's checksum; nothing was installed");
+            bail!(
+                "the downloaded Tor did not match the Tor Project's checksum; nothing was installed"
+            );
         }
         let target = tor_dir().join("bin");
         if target.exists() {
@@ -596,9 +730,17 @@ pub mod tor {
     }
 
     pub fn start(country: &str) -> Result<Value> {
-        let country: String = country.chars().filter(|character| character.is_ascii_alphabetic()).take(2).collect::<String>().to_ascii_lowercase();
+        let country: String = country
+            .chars()
+            .filter(|character| character.is_ascii_alphabetic())
+            .take(2)
+            .collect::<String>()
+            .to_ascii_lowercase();
         let binary = binary().context("Tor is not installed yet")?;
-        let previous = std::fs::read_to_string(country_file()).unwrap_or_default().trim().to_string();
+        let previous = std::fs::read_to_string(country_file())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         if running() && previous == country {
             return status();
         }
@@ -607,7 +749,9 @@ pub mod tor {
         std::fs::create_dir_all(directory.join("data"))?;
         let geoip = geoip_for(&binary);
         if !country.is_empty() && geoip.is_none() {
-            bail!("this Tor has no country tables, so a location cannot be chosen; the fastest route still works");
+            bail!(
+                "this Tor has no country tables, so a location cannot be chosen; the fastest route still works"
+            );
         }
         let mut torrc = format!(
             "SocksPort 127.0.0.1:{SOCKS_PORT}\nDataDirectory {}\nLog notice file {}\nClientOnly 1\nAvoidDiskWrites 1\n",
@@ -615,7 +759,11 @@ pub mod tor {
             log_file().display(),
         );
         if let Some((v4, v6)) = &geoip {
-            torrc.push_str(&format!("GeoIPFile {}\nGeoIPv6File {}\n", v4.display(), v6.display()));
+            torrc.push_str(&format!(
+                "GeoIPFile {}\nGeoIPv6File {}\n",
+                v4.display(),
+                v6.display()
+            ));
         }
         if !country.is_empty() {
             torrc.push_str(&format!("ExitNodes {{{country}}}\nStrictNodes 1\n"));
@@ -624,7 +772,12 @@ pub mod tor {
         std::fs::write(&torrc_path, torrc)?;
         std::fs::write(log_file(), "")?;
         let mut command = Command::new(&binary);
-        command.arg("-f").arg(&torrc_path).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        command
+            .arg("-f")
+            .arg(&torrc_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         if let Some(folder) = binary.parent() {
             command.current_dir(folder);
         }
@@ -642,7 +795,9 @@ pub mod tor {
             // ends as soon as it has its answer.
             command.process_group(0);
         }
-        let child = command.spawn().with_context(|| format!("{} could not start", binary.display()))?;
+        let child = command
+            .spawn()
+            .with_context(|| format!("{} could not start", binary.display()))?;
         std::fs::write(pid_file(), child.id().to_string())?;
         std::fs::write(country_file(), &country)?;
         // Give it a moment so the first status already says something.
@@ -652,13 +807,23 @@ pub mod tor {
 
     pub fn stop() -> Result<Value> {
         if let Some(pid) = saved_pid() {
+            // The pid file can be stale and the number reused by something
+            // else of the person's; only a tor process is stopped.
+            if !is_tor_process(pid) {
+                std::fs::remove_file(pid_file()).ok();
+                std::fs::remove_file(country_file()).ok();
+                return Ok(json!({ "ok": true, "running": running() }));
+            }
             #[cfg(unix)]
             unsafe {
                 libc::kill(pid as i32, libc::SIGTERM);
             }
             #[cfg(not(unix))]
             {
-                hidden(Command::new("taskkill")).args(["/PID", &pid.to_string(), "/T", "/F"]).output().ok();
+                hidden(Command::new("taskkill"))
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .output()
+                    .ok();
             }
             for _ in 0..20 {
                 if !alive(pid) {

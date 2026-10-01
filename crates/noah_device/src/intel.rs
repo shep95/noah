@@ -151,7 +151,10 @@ pub struct TrafficReport {
 pub fn traffic_report() -> TrafficReport {
     let (connections, note) = match platform::connections() {
         Ok(connections) => (connections, None),
-        Err(error) => (Vec::new(), Some(format!("noah couldn't list connections: {error:#}"))),
+        Err(error) => (
+            Vec::new(),
+            Some(format!("noah couldn't list connections: {error:#}")),
+        ),
     };
     let mut report = traffic_report_from(connections, &reverse_lookup_for);
     if report.note.is_none() {
@@ -178,8 +181,10 @@ fn traffic_report_from(
     addresses.truncate(MOST_DESTINATIONS_SHOWN);
     let hosts = resolve(&addresses);
 
-    let mut by_process: BTreeMap<String, (Option<PathBuf>, Vec<u32>, BTreeMap<(IpAddr, u16), usize>)> =
-        BTreeMap::new();
+    let mut by_process: BTreeMap<
+        String,
+        (Option<PathBuf>, Vec<u32>, BTreeMap<(IpAddr, u16), usize>),
+    > = BTreeMap::new();
     let mut unknown_program = 0usize;
     for connection in &remote {
         let name = match &connection.process {
@@ -254,15 +259,18 @@ fn traffic_report_from(
     for flow in &flows {
         for destination in &flow.destinations {
             if let Some(country) = destination.country {
-                per_country
-                    .entry(country.code)
-                    .or_insert((country, 0))
-                    .1 += destination.connections;
+                per_country.entry(country.code).or_insert((country, 0)).1 +=
+                    destination.connections;
             }
         }
     }
     let mut countries: Vec<(Country, usize)> = per_country.into_values().collect();
-    countries.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.name.cmp(right.0.name)));
+    countries.sort_by(|left, right| {
+        right
+            .1
+            .cmp(&left.1)
+            .then_with(|| left.0.name.cmp(right.0.name))
+    });
 
     let note = (unknown_program > 0).then(|| {
         format!(
@@ -343,8 +351,16 @@ pub fn classify(host: Option<&str>, port: u16) -> (Option<&'static str>, Destina
         // analytics, crash reporting, telemetry
         ("google-analytics.com", "Google Analytics", Telemetry),
         ("analytics.google.com", "Google Analytics", Telemetry),
-        ("app-measurement.com", "Google Firebase analytics", Telemetry),
-        ("firebaseinstallations.googleapis.com", "Google Firebase", Telemetry),
+        (
+            "app-measurement.com",
+            "Google Firebase analytics",
+            Telemetry,
+        ),
+        (
+            "firebaseinstallations.googleapis.com",
+            "Google Firebase",
+            Telemetry,
+        ),
         ("crashlytics.com", "Google Crashlytics", Telemetry),
         ("segment.io", "Segment analytics", Telemetry),
         ("segment.com", "Segment analytics", Telemetry),
@@ -368,10 +384,22 @@ pub fn classify(host: Option<&str>, port: u16) -> (Option<&'static str>, Destina
         ("heap.io", "Heap analytics", Telemetry),
         ("intercom.io", "Intercom", Telemetry),
         ("data.microsoft.com", "Microsoft telemetry", Telemetry),
-        ("events.data.microsoft.com", "Microsoft telemetry", Telemetry),
-        ("vortex.data.microsoft.com", "Microsoft telemetry", Telemetry),
+        (
+            "events.data.microsoft.com",
+            "Microsoft telemetry",
+            Telemetry,
+        ),
+        (
+            "vortex.data.microsoft.com",
+            "Microsoft telemetry",
+            Telemetry,
+        ),
         ("telemetry.mozilla.org", "Mozilla telemetry", Telemetry),
-        ("incoming.telemetry.mozilla.org", "Mozilla telemetry", Telemetry),
+        (
+            "incoming.telemetry.mozilla.org",
+            "Mozilla telemetry",
+            Telemetry,
+        ),
         ("metrics.apple.com", "Apple telemetry", Telemetry),
         ("xp.apple.com", "Apple telemetry", Telemetry),
         ("telemetry.nvidia.com", "NVIDIA telemetry", Telemetry),
@@ -389,7 +417,11 @@ pub fn classify(host: Option<&str>, port: u16) -> (Option<&'static str>, Destina
         ("rustdesk.com", "RustDesk", RemoteAccess),
         ("logmein.com", "LogMeIn", RemoteAccess),
         ("splashtop.com", "Splashtop", RemoteAccess),
-        ("remotedesktop.google.com", "Chrome Remote Desktop", RemoteAccess),
+        (
+            "remotedesktop.google.com",
+            "Chrome Remote Desktop",
+            RemoteAccess,
+        ),
         ("parsec.app", "Parsec", RemoteAccess),
         ("ngrok.io", "ngrok tunnel", RemoteAccess),
         ("ngrok.com", "ngrok tunnel", RemoteAccess),
@@ -680,9 +712,9 @@ pub fn installed_apps() -> AppInventory {
             .cmp(&right.name.to_lowercase())
             .then_with(|| left.source.cmp(&right.source))
     });
-    inventory
-        .apps
-        .dedup_by(|left, right| left.name.eq_ignore_ascii_case(&right.name) && left.source == right.source);
+    inventory.apps.dedup_by(|left, right| {
+        left.name.eq_ignore_ascii_case(&right.name) && left.source == right.source
+    });
     inventory
 }
 
@@ -760,8 +792,14 @@ pub fn wifi_password(ssid: &str) -> anyhow::Result<String> {
 
 /// The modules of the QR code phones scan to join a network: dark cells as
 /// `true`, row by row.
-pub fn wifi_qr(ssid: &str, password: &str, security: Option<&str>) -> anyhow::Result<Vec<Vec<bool>>> {
-    let upper = security.map(|value| value.to_ascii_uppercase()).unwrap_or_default();
+pub fn wifi_qr(
+    ssid: &str,
+    password: &str,
+    security: Option<&str>,
+) -> anyhow::Result<Vec<Vec<bool>>> {
+    let upper = security
+        .map(|value| value.to_ascii_uppercase())
+        .unwrap_or_default();
     let kind = if upper.contains("WEP") {
         "WEP"
     } else if password.is_empty() || upper.contains("OPEN") || upper.contains("NONE") {
@@ -805,11 +843,7 @@ fn locally_administered(mac: &str) -> Option<bool> {
 fn wifi_findings(report: &WifiReport) -> Vec<Finding> {
     let mut findings = Vec::new();
     if let Some(link) = &report.connected {
-        let security = link
-            .security
-            .as_deref()
-            .unwrap_or("")
-            .to_ascii_lowercase();
+        let security = link.security.as_deref().unwrap_or("").to_ascii_lowercase();
         if security.is_empty() || security == "none" || security == "open" || security == "--" {
             findings.push(Finding {
                 status: Status::Bad,
@@ -820,7 +854,8 @@ fn wifi_findings(report: &WifiReport) -> Vec<Finding> {
                     link.ssid
                 ),
             });
-        } else if security.contains("wep") || security.contains("wpa1") || security.contains("tkip") {
+        } else if security.contains("wep") || security.contains("wpa1") || security.contains("tkip")
+        {
             findings.push(Finding {
                 status: Status::Warning,
                 title: "this wifi uses old encryption".into(),
@@ -963,7 +998,9 @@ pub struct Neighbour {
 pub fn neighbours(gateway: Option<IpAddr>) -> Vec<Neighbour> {
     let mut seen: Vec<Neighbour> = platform::neighbours()
         .into_iter()
-        .filter(|(_, mac)| !mac.is_empty() && mac != "00:00:00:00:00:00" && !mac.starts_with("ff:ff"))
+        .filter(|(_, mac)| {
+            !mac.is_empty() && mac != "00:00:00:00:00:00" && !mac.starts_with("ff:ff")
+        })
         .filter(|(address, _)| !address.is_multicast() && !address.is_unspecified())
         .map(|(address, mac)| Neighbour {
             vendor: vendor_of_mac(&mac),
@@ -972,7 +1009,12 @@ pub fn neighbours(gateway: Option<IpAddr>) -> Vec<Neighbour> {
             mac,
         })
         .collect();
-    seen.sort_by(|left, right| right.is_gateway.cmp(&left.is_gateway).then_with(|| left.address.cmp(&right.address)));
+    seen.sort_by(|left, right| {
+        right
+            .is_gateway
+            .cmp(&left.is_gateway)
+            .then_with(|| left.address.cmp(&right.address))
+    });
     seen.dedup_by(|left, right| left.address == right.address);
     seen
 }
@@ -1362,7 +1404,10 @@ pub fn bluetooth_report() -> BluetoothReport {
                     format!("a {tracker} that isn't yours is within reach")
                 },
                 detail: if device.paired {
-                    format!("\"{}\" is paired with this device, so it is expected here.", device.name)
+                    format!(
+                        "\"{}\" is paired with this device, so it is expected here.",
+                        device.name
+                    )
                 } else {
                     format!(
                         "\"{}\" is in Bluetooth range and not paired with this device. Trackers \
@@ -1518,9 +1563,10 @@ pub fn watchers(
             if !destination.kind.is_watching() {
                 continue;
             }
-            let entry = per_owner
-                .entry(destination.name())
-                .or_insert((destination.kind, 0, Vec::new()));
+            let entry =
+                per_owner
+                    .entry(destination.name())
+                    .or_insert((destination.kind, 0, Vec::new()));
             entry.1 += destination.connections;
             if let Some(country) = destination.country
                 && !entry.2.contains(&country.name)
@@ -1608,9 +1654,16 @@ pub fn watchers(
 
     for item in startup {
         let command = item.command.to_ascii_lowercase();
-        let odd_place = ["/tmp/", "\\temp\\", "\\appdata\\local\\temp", "/downloads/", "\\downloads\\", "/.cache/"]
-            .iter()
-            .any(|needle| command.contains(needle));
+        let odd_place = [
+            "/tmp/",
+            "\\temp\\",
+            "\\appdata\\local\\temp",
+            "/downloads/",
+            "\\downloads\\",
+            "/.cache/",
+        ]
+        .iter()
+        .any(|needle| command.contains(needle));
         let hidden = command.contains("-windowstyle hidden")
             || command.contains("-w hidden")
             || command.contains("-enc ")
@@ -1755,16 +1808,34 @@ mod linux {
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     pub(super) fn wifi_password(ssid: &str) -> anyhow::Result<String> {
-        anyhow::ensure!(which::which("nmcli").is_ok(), "NetworkManager (nmcli) isn't here to ask");
+        anyhow::ensure!(
+            which::which("nmcli").is_ok(),
+            "NetworkManager (nmcli) isn't here to ask"
+        );
         let output = run_command(
             "nmcli",
-            &["-s", "-g", "802-11-wireless-security.psk", "connection", "show", ssid],
+            // `id` names the selector, so a network called "uuid" or "--help"
+            // is still looked up by name.
+            &[
+                "-s",
+                "-g",
+                "802-11-wireless-security.psk",
+                "connection",
+                "show",
+                "id",
+                ssid,
+            ],
             COMMAND_TIMEOUT,
         )?;
         anyhow::ensure!(
             output.success(),
             "NetworkManager wouldn't say: {}",
-            output.stderr.trim().lines().next().unwrap_or("no reason given")
+            output
+                .stderr
+                .trim()
+                .lines()
+                .next()
+                .unwrap_or("no reason given")
         );
         Ok(output.stdout.trim().to_string())
     }
@@ -1909,7 +1980,10 @@ mod linux {
         let mut folders: Vec<(PathBuf, &str)> = vec![
             (PathBuf::from("/usr/share/applications"), "system"),
             (PathBuf::from("/usr/local/share/applications"), "system"),
-            (PathBuf::from("/var/lib/flatpak/exports/share/applications"), "flatpak"),
+            (
+                PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+                "flatpak",
+            ),
             (PathBuf::from("/var/lib/snapd/desktop/applications"), "snap"),
         ];
         if let Some(home) = &home {
@@ -1927,13 +2001,17 @@ mod linux {
             };
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().is_none_or(|extension| extension != "desktop") {
+                if path
+                    .extension()
+                    .is_none_or(|extension| extension != "desktop")
+                {
                     continue;
                 }
                 let Ok(text) = fs::read_to_string(&path) else {
                     continue;
                 };
-                let Some(app) = parse_desktop_app(&text, source, &path, &flatpak_versions, &snap_versions)
+                let Some(app) =
+                    parse_desktop_app(&text, source, &path, &flatpak_versions, &snap_versions)
                 else {
                     continue;
                 };
@@ -1974,7 +2052,9 @@ mod linux {
             match key.trim() {
                 "Name" => name = Some(value.trim().to_string()),
                 "Exec" => exec = Some(value.trim().to_string()),
-                "NoDisplay" | "Hidden" if value.trim().eq_ignore_ascii_case("true") => hidden = true,
+                "NoDisplay" | "Hidden" if value.trim().eq_ignore_ascii_case("true") => {
+                    hidden = true
+                }
                 "Type" if value.trim() != "Application" => return None,
                 _ => {}
             }
@@ -1990,7 +2070,11 @@ mod linux {
                 .map(|(version, origin)| (Some(version.clone()), Some(origin.clone())))
                 .unwrap_or((None, None)),
             "snap" => {
-                let snap_name = file_stem.split('_').next().unwrap_or(&file_stem).to_string();
+                let snap_name = file_stem
+                    .split('_')
+                    .next()
+                    .unwrap_or(&file_stem)
+                    .to_string();
                 snap_versions
                     .get(&snap_name)
                     .map(|(version, publisher)| (Some(version.clone()), Some(publisher.clone())))
@@ -2049,16 +2133,39 @@ mod linux {
 
     fn package_count() -> Option<usize> {
         if which::which("dpkg-query").is_ok() {
-            let output = run_command("dpkg-query", &["-f", "${binary:Package}\n", "-W"], COMMAND_TIMEOUT).ok()?;
-            return Some(output.stdout.lines().filter(|line| !line.trim().is_empty()).count());
+            let output = run_command(
+                "dpkg-query",
+                &["-f", "${binary:Package}\n", "-W"],
+                COMMAND_TIMEOUT,
+            )
+            .ok()?;
+            return Some(
+                output
+                    .stdout
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .count(),
+            );
         }
         if which::which("rpm").is_ok() {
             let output = run_command("rpm", &["-qa"], COMMAND_TIMEOUT).ok()?;
-            return Some(output.stdout.lines().filter(|line| !line.trim().is_empty()).count());
+            return Some(
+                output
+                    .stdout
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .count(),
+            );
         }
         if which::which("pacman").is_ok() {
             let output = run_command("pacman", &["-Qq"], COMMAND_TIMEOUT).ok()?;
-            return Some(output.stdout.lines().filter(|line| !line.trim().is_empty()).count());
+            return Some(
+                output
+                    .stdout
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .count(),
+            );
         }
         None
     }
@@ -2072,7 +2179,14 @@ mod linux {
         if which::which("nmcli").is_ok() {
             if let Ok(output) = run_command(
                 "nmcli",
-                &["-t", "-f", "ACTIVE,SSID,BSSID,CHAN,FREQ,RATE,SIGNAL,SECURITY", "dev", "wifi", "list"],
+                &[
+                    "-t",
+                    "-f",
+                    "ACTIVE,SSID,BSSID,CHAN,FREQ,RATE,SIGNAL,SECURITY",
+                    "dev",
+                    "wifi",
+                    "list",
+                ],
                 COMMAND_TIMEOUT,
             ) && output.success()
             {
@@ -2096,7 +2210,8 @@ mod linux {
                         && report.interface == device
                         && let Some(address) = line.strip_prefix("IP4.ADDRESS[1]:")
                     {
-                        report.local_address = address.split('/').next().and_then(|ip| ip.parse().ok());
+                        report.local_address =
+                            address.split('/').next().and_then(|ip| ip.parse().ok());
                     }
                 }
             }
@@ -2121,7 +2236,10 @@ mod linux {
         }
         if report.interface.is_none() {
             report.note = Some("no wifi adapter was found; this device may be on a cable".into());
-        } else if report.connected.is_none() && which::which("nmcli").is_err() && which::which("iw").is_err() {
+        } else if report.connected.is_none()
+            && which::which("nmcli").is_err()
+            && which::which("iw").is_err()
+        {
             report.note = Some("install NetworkManager (nmcli) or iw for the wifi details".into());
         }
         report
@@ -2136,10 +2254,18 @@ mod linux {
     }
 
     fn interface_address(interface: &str) -> Option<IpAddr> {
-        let output = run_command("ip", &["-4", "-o", "addr", "show", "dev", interface], COMMAND_TIMEOUT).ok()?;
-        output.stdout.split_whitespace().skip_while(|word| *word != "inet").nth(1).and_then(|cidr| {
-            cidr.split('/').next()?.parse().ok()
-        })
+        let output = run_command(
+            "ip",
+            &["-4", "-o", "addr", "show", "dev", interface],
+            COMMAND_TIMEOUT,
+        )
+        .ok()?;
+        output
+            .stdout
+            .split_whitespace()
+            .skip_while(|word| *word != "inet")
+            .nth(1)
+            .and_then(|cidr| cidr.split('/').next()?.parse().ok())
     }
 
     /// nmcli's terse output escapes the colons inside BSSIDs, so fields are
@@ -2168,7 +2294,17 @@ mod linux {
         let mut nearby = Vec::new();
         for line in output.lines() {
             let fields = split_terse(line);
-            let [active, ssid, bssid, channel, frequency, rate, signal, security] = fields.as_slice() else {
+            let [
+                active,
+                ssid,
+                bssid,
+                channel,
+                frequency,
+                rate,
+                signal,
+                security,
+            ] = fields.as_slice()
+            else {
                 continue;
             };
             let none_if_empty = |value: &String| (!value.is_empty()).then(|| value.clone());
@@ -2176,7 +2312,11 @@ mod linux {
                 connected = Some(WifiLink {
                     ssid: ssid.clone(),
                     bssid: none_if_empty(bssid),
-                    security: Some(if security.is_empty() { "open".to_string() } else { security.clone() }),
+                    security: Some(if security.is_empty() {
+                        "open".to_string()
+                    } else {
+                        security.clone()
+                    }),
                     channel: none_if_empty(channel),
                     frequency: none_if_empty(frequency),
                     signal: none_if_empty(signal).map(|signal| format!("{signal}%")),
@@ -2184,10 +2324,18 @@ mod linux {
                 });
             } else {
                 nearby.push(NearbyNetwork {
-                    ssid: if ssid.is_empty() { "(hidden network)".to_string() } else { ssid.clone() },
+                    ssid: if ssid.is_empty() {
+                        "(hidden network)".to_string()
+                    } else {
+                        ssid.clone()
+                    },
                     bssid: none_if_empty(bssid),
                     signal: signal.parse().ok(),
-                    security: Some(if security.is_empty() { "open".to_string() } else { security.clone() }),
+                    security: Some(if security.is_empty() {
+                        "open".to_string()
+                    } else {
+                        security.clone()
+                    }),
                     channel: none_if_empty(channel),
                 });
             }
@@ -2240,7 +2388,10 @@ mod linux {
             for line in output.stdout.lines() {
                 let line = line.trim();
                 if let Some(rest) = line.strip_prefix("DNS Servers:") {
-                    servers.extend(rest.split_whitespace().filter_map(|word| word.split('%').next()?.parse::<IpAddr>().ok()));
+                    servers.extend(
+                        rest.split_whitespace()
+                            .filter_map(|word| word.split('%').next()?.parse::<IpAddr>().ok()),
+                    );
                 }
             }
         }
@@ -2249,7 +2400,13 @@ mod linux {
         {
             for line in text.lines() {
                 if let Some(rest) = line.trim().strip_prefix("nameserver") {
-                    if let Ok(address) = rest.trim().split('%').next().unwrap_or("").parse::<IpAddr>() {
+                    if let Ok(address) = rest
+                        .trim()
+                        .split('%')
+                        .next()
+                        .unwrap_or("")
+                        .parse::<IpAddr>()
+                    {
                         // systemd's stub resolver: the real servers were read above.
                         if address == IpAddr::V4(Ipv4Addr::new(127, 0, 0, 53)) {
                             continue;
@@ -2265,7 +2422,10 @@ mod linux {
 
     fn resolved_encryption() -> Option<bool> {
         let output = run_command("resolvectl", &["status"], COMMAND_TIMEOUT).ok()?;
-        let line = output.stdout.lines().find(|line| line.trim().starts_with("DNSOverTLS:"))?;
+        let line = output
+            .stdout
+            .lines()
+            .find(|line| line.trim().starts_with("DNSOverTLS:"))?;
         let value = line.split(':').nth(1)?.trim().to_ascii_lowercase();
         Some(value == "yes" || value == "opportunistic")
     }
@@ -2291,7 +2451,8 @@ mod linux {
     pub(super) fn bluetooth_report() -> BluetoothReport {
         let mut report = BluetoothReport::default();
         if which::which("bluetoothctl").is_err() {
-            report.note = Some("bluetoothctl isn't installed, so Bluetooth can't be listed here".into());
+            report.note =
+                Some("bluetoothctl isn't installed, so Bluetooth can't be listed here".into());
             return report;
         }
         if let Ok(output) = run_command("bluetoothctl", &["show"], COMMAND_TIMEOUT) {
@@ -2309,14 +2470,22 @@ mod linux {
             if words.next() != Some("Device") {
                 continue;
             }
-            let Some(address) = words.next() else { continue };
+            let Some(address) = words.next() else {
+                continue;
+            };
             let name = words.collect::<Vec<_>>().join(" ");
             let mut device = BluetoothDevice {
-                name: if name.is_empty() { address.to_string() } else { name },
+                name: if name.is_empty() {
+                    address.to_string()
+                } else {
+                    name
+                },
                 address: Some(address.to_string()),
                 ..Default::default()
             };
-            if let Ok(info) = run_command("bluetoothctl", &["info", address], Duration::from_secs(3)) {
+            if let Ok(info) =
+                run_command("bluetoothctl", &["info", address], Duration::from_secs(3))
+            {
                 for line in info.stdout.lines() {
                     let line = line.trim();
                     if let Some(value) = line.strip_prefix("Connected:") {
@@ -2367,12 +2536,23 @@ mod windows {
     use crate::run_powershell;
 
     pub(super) fn wifi_password(ssid: &str) -> anyhow::Result<String> {
-        let profile = format!("name={ssid}");
-        let output = run_command("netsh", &["wlan", "show", "profile", &profile, "key=clear"], COMMAND_TIMEOUT)?;
+        // netsh takes the name inside its own quotes; one in the ssid would
+        // end them early.
+        let profile = format!("name={}", ssid.replace('"', ""));
+        let output = run_command(
+            "netsh",
+            &["wlan", "show", "profile", &profile, "key=clear"],
+            COMMAND_TIMEOUT,
+        )?;
         anyhow::ensure!(
             output.success(),
             "Windows wouldn't say: {}",
-            output.stdout.trim().lines().last().unwrap_or("no reason given")
+            output
+                .stdout
+                .trim()
+                .lines()
+                .last()
+                .unwrap_or("no reason given")
         );
         // Windows prints the key on a "Key Content" line, in the system's own language on
         // non-English systems, where the line still ends with the key after a colon inside
@@ -2382,7 +2562,9 @@ mod windows {
                 return Ok(value.to_string());
             }
         }
-        anyhow::bail!("no saved key in this profile (an open network, or one saved by another user)")
+        anyhow::bail!(
+            "no saved key in this profile (an open network, or one saved by another user)"
+        )
     }
 
     /// PowerShell resolves all the names in one process, since starting
@@ -2397,7 +2579,8 @@ mod windows {
             "foreach ($ip in @({list})) {{ try {{ $h = [System.Net.Dns]::GetHostEntry($ip).HostName; \
              if ($h -and $h -ne $ip) {{ Write-Output \"$ip|$h\" }} }} catch {{}} }}"
         );
-        let Ok(output) = run_powershell(&script, REVERSE_LOOKUP_BUDGET + Duration::from_secs(6)) else {
+        let Ok(output) = run_powershell(&script, REVERSE_LOOKUP_BUDGET + Duration::from_secs(6))
+        else {
             return HashMap::new();
         };
         output
@@ -2424,10 +2607,22 @@ mod windows {
             .lines()
             .filter_map(|line| {
                 let columns: Vec<&str> = line.trim().split('|').collect();
-                let [_, local, local_port, remote, remote_port, state, pid, name, path] = columns.as_slice() else {
+                let [
+                    _,
+                    local,
+                    local_port,
+                    remote,
+                    remote_port,
+                    state,
+                    pid,
+                    name,
+                    path,
+                ] = columns.as_slice()
+                else {
                     return None;
                 };
-                let strip = |address: &str| address.split('%').next().unwrap_or(address).to_string();
+                let strip =
+                    |address: &str| address.split('%').next().unwrap_or(address).to_string();
                 Some(Connection {
                     protocol: "tcp",
                     local_address: strip(local).parse().ok()?,
@@ -2446,34 +2641,53 @@ mod windows {
     pub(super) fn installed_apps() -> AppInventory {
         use windows_registry::{CURRENT_USER, Key, LOCAL_MACHINE};
         const UNINSTALL: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
-        const UNINSTALL_32: &str = r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+        const UNINSTALL_32: &str =
+            r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
 
         fn from_key(root: &Key, path: &str, source: &str, apps: &mut Vec<InstalledApp>) {
             let Ok(key) = root.open(path) else { return };
             let Ok(names) = key.keys() else { return };
             for name in names {
                 let Ok(entry) = key.open(&name) else { continue };
-                let Ok(display) = entry.get_string("DisplayName") else { continue };
+                let Ok(display) = entry.get_string("DisplayName") else {
+                    continue;
+                };
                 if display.trim().is_empty() {
                     continue;
                 }
-                let system_component = entry.get_u32("SystemComponent").map(|value| value == 1).unwrap_or(false);
+                let system_component = entry
+                    .get_u32("SystemComponent")
+                    .map(|value| value == 1)
+                    .unwrap_or(false);
                 if system_component {
                     continue;
                 }
                 apps.push(InstalledApp {
                     name: display.trim().to_string(),
-                    version: entry.get_string("DisplayVersion").ok().filter(|value| !value.is_empty()),
-                    publisher: entry.get_string("Publisher").ok().filter(|value| !value.is_empty()),
+                    version: entry
+                        .get_string("DisplayVersion")
+                        .ok()
+                        .filter(|value| !value.is_empty()),
+                    publisher: entry
+                        .get_string("Publisher")
+                        .ok()
+                        .filter(|value| !value.is_empty()),
                     source: source.to_string(),
-                    installed_on: entry.get_string("InstallDate").ok().filter(|value| !value.is_empty()).map(|date| {
-                        if date.len() == 8 {
-                            format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..])
-                        } else {
-                            date
-                        }
-                    }),
-                    location: entry.get_string("InstallLocation").ok().filter(|value| !value.is_empty()),
+                    installed_on: entry
+                        .get_string("InstallDate")
+                        .ok()
+                        .filter(|value| !value.is_empty())
+                        .map(|date| {
+                            if date.len() == 8 {
+                                format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..])
+                            } else {
+                                date
+                            }
+                        }),
+                    location: entry
+                        .get_string("InstallLocation")
+                        .ok()
+                        .filter(|value| !value.is_empty()),
                 });
             }
         }
@@ -2492,10 +2706,16 @@ mod windows {
             Ok(output) => {
                 for line in output.stdout.lines() {
                     let columns: Vec<&str> = line.trim().split('|').collect();
-                    let [name, version, publisher, location] = columns.as_slice() else { continue };
+                    let [name, version, publisher, location] = columns.as_slice() else {
+                        continue;
+                    };
                     let publisher = publisher
                         .split(',')
-                        .find_map(|part| part.trim().strip_prefix("CN=").or_else(|| part.trim().strip_prefix("O=")))
+                        .find_map(|part| {
+                            part.trim()
+                                .strip_prefix("CN=")
+                                .or_else(|| part.trim().strip_prefix("O="))
+                        })
                         .unwrap_or(publisher)
                         .trim_matches('"')
                         .to_string();
@@ -2549,7 +2769,11 @@ mod windows {
         } else {
             report.note = Some("netsh isn't available, so the wifi can't be described".into());
         }
-        if let Ok(output) = run_command("netsh", &["wlan", "show", "networks", "mode=bssid"], COMMAND_TIMEOUT) {
+        if let Ok(output) = run_command(
+            "netsh",
+            &["wlan", "show", "networks", "mode=bssid"],
+            COMMAND_TIMEOUT,
+        ) {
             let mut current: Option<NearbyNetwork> = None;
             for line in output.stdout.lines() {
                 let trimmed = line.trim();
@@ -2557,9 +2781,16 @@ mod windows {
                     if let Some(network) = current.take() {
                         report.nearby.push(network);
                     }
-                    let ssid = trimmed.split_once(':').map(|(_, value)| value.trim()).unwrap_or("");
+                    let ssid = trimmed
+                        .split_once(':')
+                        .map(|(_, value)| value.trim())
+                        .unwrap_or("");
                     current = Some(NearbyNetwork {
-                        ssid: if ssid.is_empty() { "(hidden network)".into() } else { ssid.to_string() },
+                        ssid: if ssid.is_empty() {
+                            "(hidden network)".into()
+                        } else {
+                            ssid.to_string()
+                        },
                         ..Default::default()
                     });
                 } else if let Some(network) = current.as_mut() {
@@ -2567,7 +2798,9 @@ mod windows {
                         network.security = Some(value.to_string());
                     } else if trimmed.starts_with("BSSID") {
                         if network.bssid.is_none() {
-                            network.bssid = trimmed.split_once(':').map(|(_, value)| value.trim().to_string());
+                            network.bssid = trimmed
+                                .split_once(':')
+                                .map(|(_, value)| value.trim().to_string());
                         }
                     } else if let Some(value) = labelled_value(trimmed, "Signal") {
                         if network.signal.is_none() {
@@ -2584,8 +2817,12 @@ mod windows {
                 report.nearby.push(network);
             }
             let connected = report.connected.as_ref().map(|link| link.ssid.clone());
-            report.nearby.retain(|network| Some(&network.ssid) != connected.as_ref());
-            report.nearby.sort_by(|left, right| right.signal.cmp(&left.signal));
+            report
+                .nearby
+                .retain(|network| Some(&network.ssid) != connected.as_ref());
+            report
+                .nearby
+                .sort_by(|left, right| right.signal.cmp(&left.signal));
         }
         if let Ok(output) = run_powershell(
             "$c = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway -ne $null } | Select-Object -First 1; \
@@ -2594,7 +2831,9 @@ mod windows {
             COMMAND_TIMEOUT,
         ) {
             for line in output.stdout.lines() {
-                let Some((key, value)) = line.trim().split_once('|') else { continue };
+                let Some((key, value)) = line.trim().split_once('|') else {
+                    continue;
+                };
                 match key {
                     "gateway" => report.gateway = value.parse().ok(),
                     "address" => report.local_address = value.parse().ok(),
@@ -2620,11 +2859,16 @@ mod windows {
             .lines()
             .filter_map(|line| {
                 let columns: Vec<&str> = line.split_whitespace().collect();
-                let [address, mac, kind] = columns.as_slice() else { return None };
+                let [address, mac, kind] = columns.as_slice() else {
+                    return None;
+                };
                 if !kind.eq_ignore_ascii_case("dynamic") {
                     return None;
                 }
-                Some((address.parse().ok()?, mac.replace('-', ":").to_ascii_lowercase()))
+                Some((
+                    address.parse().ok()?,
+                    mac.replace('-', ":").to_ascii_lowercase(),
+                ))
             })
             .collect()
     }
@@ -2637,7 +2881,9 @@ mod windows {
             Ok(output) => {
                 for line in output.stdout.lines() {
                     let columns: Vec<&str> = line.trim().split('|').collect();
-                    let [name, status, present, instance] = columns.as_slice() else { continue };
+                    let [name, status, present, instance] = columns.as_slice() else {
+                        continue;
+                    };
                     let lower = name.to_ascii_lowercase();
                     let is_radio = lower.contains("adapter")
                         || lower.contains("radio")
@@ -2665,7 +2911,8 @@ mod windows {
                                     .collect::<Vec<_>>()
                                     .join(":")
                             }),
-                        connected: status.eq_ignore_ascii_case("OK") && present.eq_ignore_ascii_case("True"),
+                        connected: status.eq_ignore_ascii_case("OK")
+                            && present.eq_ignore_ascii_case("True"),
                         paired,
                         kind: None,
                     });
@@ -2715,13 +2962,25 @@ mod macos {
         // system's own and cannot be skipped.
         let output = run_command(
             "security",
-            &["find-generic-password", "-D", "AirPort network password", "-a", ssid, "-w"],
+            &[
+                "find-generic-password",
+                "-D",
+                "AirPort network password",
+                "-a",
+                ssid,
+                "-w",
+            ],
             Duration::from_secs(120),
         )?;
         anyhow::ensure!(
             output.success(),
             "the keychain wouldn't say: {}",
-            output.stderr.trim().lines().next().unwrap_or("no reason given")
+            output
+                .stderr
+                .trim()
+                .lines()
+                .next()
+                .unwrap_or("no reason given")
         );
         Ok(output.stdout.trim().to_string())
     }
@@ -2743,18 +3002,36 @@ mod macos {
                 let columns: Vec<&str> = line.split_whitespace().collect();
                 let command = columns.first()?.replace("\\x20", " ");
                 let pid: u32 = columns.get(1)?.parse().ok()?;
-                let protocol_column = columns.iter().position(|column| *column == "TCP" || *column == "UDP")?;
-                let protocol = if columns[protocol_column] == "TCP" { "tcp" } else { "udp" };
+                let protocol_column = columns
+                    .iter()
+                    .position(|column| *column == "TCP" || *column == "UDP")?;
+                let protocol = if columns[protocol_column] == "TCP" {
+                    "tcp"
+                } else {
+                    "udp"
+                };
                 let name = columns.get(protocol_column + 1)?;
                 let state = columns
                     .get(protocol_column + 2)
-                    .map(|state| state.trim_matches(|character| character == '(' || character == ')').to_ascii_lowercase())
+                    .map(|state| {
+                        state
+                            .trim_matches(|character| character == '(' || character == ')')
+                            .to_ascii_lowercase()
+                    })
                     .unwrap_or_else(|| "open".to_string());
                 if state == "listen" {
                     return None;
                 }
                 let (local, remote) = name.split_once("->")?;
-                connection(protocol, local, remote, &state, Some(pid), Some(command), None)
+                connection(
+                    protocol,
+                    local,
+                    remote,
+                    &state,
+                    Some(pid),
+                    Some(command),
+                    None,
+                )
             })
             .collect())
     }
@@ -2769,7 +3046,9 @@ mod macos {
             folders.push((home.join("Applications"), "Applications (this user)"));
         }
         for (folder, source) in folders {
-            let Ok(entries) = std::fs::read_dir(&folder) else { continue };
+            let Ok(entries) = std::fs::read_dir(&folder) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().is_none_or(|extension| extension != "app") {
@@ -2827,7 +3106,13 @@ mod macos {
         let system_packages = if which::which("brew").is_ok() {
             run_command("brew", &["list", "--formula"], COMMAND_TIMEOUT)
                 .ok()
-                .map(|output| output.stdout.lines().filter(|line| !line.trim().is_empty()).count())
+                .map(|output| {
+                    output
+                        .stdout
+                        .lines()
+                        .filter(|line| !line.trim().is_empty())
+                        .count()
+                })
         } else {
             None
         };
@@ -2840,8 +3125,11 @@ mod macos {
 
     pub(super) fn wifi_report() -> WifiReport {
         let mut report = WifiReport::default();
-        if let Ok(output) = run_command("system_profiler", &["SPAirPortDataType", "-json"], Duration::from_secs(20))
-            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&output.stdout)
+        if let Ok(output) = run_command(
+            "system_profiler",
+            &["SPAirPortDataType", "-json"],
+            Duration::from_secs(20),
+        ) && let Ok(json) = serde_json::from_str::<serde_json::Value>(&output.stdout)
         {
             let interfaces = json
                 .get("SPAirPortDataType")
@@ -2851,23 +3139,36 @@ mod macos {
                 .cloned()
                 .unwrap_or_default();
             for interface in interfaces {
-                let name = interface.get("_name").and_then(|name| name.as_str()).unwrap_or("").to_string();
+                let name = interface
+                    .get("_name")
+                    .and_then(|name| name.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if name.is_empty() {
                     continue;
                 }
                 report.interface = Some(name.clone());
                 if let Some(current) = interface.get("spairport_current_network_information") {
-                    let field = |key: &str| current.get(key).and_then(|value| value.as_str()).map(str::to_string);
+                    let field = |key: &str| {
+                        current
+                            .get(key)
+                            .and_then(|value| value.as_str())
+                            .map(str::to_string)
+                    };
                     let ssid = field("_name").unwrap_or_default();
                     if !ssid.is_empty() {
                         report.connected = Some(WifiLink {
                             ssid,
                             bssid: None,
-                            security: field("spairport_security_mode").map(|mode| mode.replace("spairport_security_mode_", "").replace('_', " ")),
+                            security: field("spairport_security_mode").map(|mode| {
+                                mode.replace("spairport_security_mode_", "")
+                                    .replace('_', " ")
+                            }),
                             channel: field("spairport_network_channel"),
                             frequency: None,
                             signal: field("spairport_signal_noise"),
-                            rate: field("spairport_network_rate").map(|rate| format!("{rate} Mbit/s")),
+                            rate: field("spairport_network_rate")
+                                .map(|rate| format!("{rate} Mbit/s")),
                         });
                     }
                 }
@@ -2876,13 +3177,21 @@ mod macos {
                     .and_then(|others| others.as_array())
                 {
                     for other in others {
-                        let field = |key: &str| other.get(key).and_then(|value| value.as_str()).map(str::to_string);
+                        let field = |key: &str| {
+                            other
+                                .get(key)
+                                .and_then(|value| value.as_str())
+                                .map(str::to_string)
+                        };
                         report.nearby.push(NearbyNetwork {
                             ssid: field("_name").unwrap_or_else(|| "(hidden network)".into()),
                             bssid: None,
                             signal: field("spairport_signal_noise")
                                 .and_then(|text| text.split_whitespace().next()?.parse().ok()),
-                            security: field("spairport_security_mode").map(|mode| mode.replace("spairport_security_mode_", "").replace('_', " ")),
+                            security: field("spairport_security_mode").map(|mode| {
+                                mode.replace("spairport_security_mode_", "")
+                                    .replace('_', " ")
+                            }),
                             channel: field("spairport_network_channel"),
                         });
                     }
@@ -2900,7 +3209,10 @@ mod macos {
                 if let Some(rest) = line.strip_prefix("ether ") {
                     report.mac_address = rest.split_whitespace().next().map(str::to_string);
                 } else if let Some(rest) = line.strip_prefix("inet ") {
-                    report.local_address = rest.split_whitespace().next().and_then(|ip| ip.parse().ok());
+                    report.local_address = rest
+                        .split_whitespace()
+                        .next()
+                        .and_then(|ip| ip.parse().ok());
                 }
             }
         }
@@ -2939,14 +3251,23 @@ mod macos {
                 let start = line.find('(')? + 1;
                 let end = line.find(')')?;
                 let address: IpAddr = line.get(start..end)?.parse().ok()?;
-                let mac = line.split_whitespace().skip_while(|word| *word != "at").nth(1)?;
+                let mac = line
+                    .split_whitespace()
+                    .skip_while(|word| *word != "at")
+                    .nth(1)?;
                 if mac == "(incomplete)" {
                     return None;
                 }
                 // macOS drops leading zeros: 0:1a:2b becomes 00:1a:2b here.
                 let mac = mac
                     .split(':')
-                    .map(|part| if part.len() == 1 { format!("0{part}") } else { part.to_string() })
+                    .map(|part| {
+                        if part.len() == 1 {
+                            format!("0{part}")
+                        } else {
+                            part.to_string()
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join(":")
                     .to_ascii_lowercase();
@@ -2957,14 +3278,21 @@ mod macos {
 
     pub(super) fn bluetooth_report() -> BluetoothReport {
         let mut report = BluetoothReport::default();
-        let Ok(output) = run_command("system_profiler", &["SPBluetoothDataType", "-json"], Duration::from_secs(20)) else {
+        let Ok(output) = run_command(
+            "system_profiler",
+            &["SPBluetoothDataType", "-json"],
+            Duration::from_secs(20),
+        ) else {
             report.note = Some("system_profiler couldn't describe Bluetooth".into());
             return report;
         };
         let Ok(json) = serde_json::from_str::<serde_json::Value>(&output.stdout) else {
             return report;
         };
-        let Some(item) = json.get("SPBluetoothDataType").and_then(|items| items.get(0)) else {
+        let Some(item) = json
+            .get("SPBluetoothDataType")
+            .and_then(|items| items.get(0))
+        else {
             return report;
         };
         report.powered = item
@@ -2973,13 +3301,20 @@ mod macos {
             .and_then(|state| state.as_str())
             .map(|state| state.contains("on"));
         for (key, connected) in [("device_connected", true), ("device_not_connected", false)] {
-            let Some(devices) = item.get(key).and_then(|devices| devices.as_array()) else { continue };
+            let Some(devices) = item.get(key).and_then(|devices| devices.as_array()) else {
+                continue;
+            };
             for device in devices {
-                let Some(object) = device.as_object() else { continue };
+                let Some(object) = device.as_object() else {
+                    continue;
+                };
                 for (name, properties) in object {
                     report.devices.push(BluetoothDevice {
                         name: name.clone(),
-                        address: properties.get("device_address").and_then(|value| value.as_str()).map(str::to_string),
+                        address: properties
+                            .get("device_address")
+                            .and_then(|value| value.as_str())
+                            .map(str::to_string),
                         connected,
                         paired: true,
                         kind: properties
@@ -2995,10 +3330,12 @@ mod macos {
 
     pub(super) fn location_report() -> LocationReport {
         let mut report = LocationReport::default();
-        report.timezone = std::fs::read_link("/etc/localtime").ok().and_then(|target| {
-            let target = target.to_string_lossy().into_owned();
-            target.split("zoneinfo/").nth(1).map(str::to_string)
-        });
+        report.timezone = std::fs::read_link("/etc/localtime")
+            .ok()
+            .and_then(|target| {
+                let target = target.to_string_lossy().into_owned();
+                target.split("zoneinfo/").nth(1).map(str::to_string)
+            });
         if let Ok(output) = run_command(
             "defaults",
             &[
@@ -3097,7 +3434,10 @@ mod tests {
             (Some("Amazon Web Services"), DestinationKind::Cloud)
         );
         assert_eq!(classify(None, 5228), (None, DestinationKind::Messaging));
-        assert_eq!(classify(Some("something.example"), 443), (None, DestinationKind::Unknown));
+        assert_eq!(
+            classify(Some("something.example"), 443),
+            (None, DestinationKind::Unknown)
+        );
     }
 
     #[test]
@@ -3123,7 +3463,13 @@ mod tests {
         assert_eq!(firefox.process, "firefox");
         assert_eq!(firefox.destinations.len(), 2);
         assert_eq!(firefox.connection_count(), 3);
-        assert_eq!(report.countries.first().map(|(country, count)| (country.code, *count)), Some(("US", 3)));
+        assert_eq!(
+            report
+                .countries
+                .first()
+                .map(|(country, count)| (country.code, *count)),
+            Some(("US", 3))
+        );
         assert!(report.note.is_none());
     }
 
@@ -3167,8 +3513,16 @@ mod tests {
         };
         let findings = wifi_findings(&report);
         assert!(findings.iter().any(|finding| finding.status == Status::Bad));
-        assert!(findings.iter().any(|finding| finding.title.contains("second network")));
-        assert!(findings.iter().any(|finding| finding.detail.contains("Google")));
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.title.contains("second network"))
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.detail.contains("Google"))
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -3185,7 +3539,8 @@ mod tests {
         assert_eq!(connections[0].remote_port, 443);
         assert_eq!(connections[0].local_address.to_string(), "192.168.0.20");
         assert_eq!(connections[0].process.as_deref(), Some("curl"));
-        let (address, port) = linux::parse_hex_address("0000000000000000FFFF00000100007F:0016", true).unwrap();
+        let (address, port) =
+            linux::parse_hex_address("0000000000000000FFFF00000100007F:0016", true).unwrap();
         assert_eq!(address.to_string(), "::ffff:127.0.0.1");
         assert_eq!(port, 22);
     }

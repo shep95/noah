@@ -25,6 +25,40 @@ use util::archive::extract_zip;
 
 const NODE_CA_CERTS_ENV_VAR: &str = "NODE_EXTRA_CA_CERTS";
 
+/// A Node release archive is under 100 MB; anything larger is not one.
+const MAX_NODE_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// The published SHA-256 of one file in a Node release.
+async fn expected_node_sha256(
+    http: &dyn HttpClient,
+    version: &str,
+    file_name: &str,
+) -> Result<String> {
+    let url = format!("https://nodejs.org/dist/{version}/SHASUMS256.txt");
+    let mut response = http
+        .get(&url, Default::default(), true)
+        .await
+        .context("error downloading the Node checksum list")?;
+    let mut text = String::new();
+    response
+        .body_mut()
+        .take(1024 * 1024)
+        .read_to_string(&mut text)
+        .await
+        .context("error reading the Node checksum list")?;
+    text.lines()
+        .filter_map(|line| line.split_once("  "))
+        .find(|(_, name)| name.trim() == file_name)
+        .map(|(digest, _)| digest.trim().to_ascii_lowercase())
+        .with_context(|| format!("{file_name} is not in {url}"))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    let digest = sha2::Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NodeBinaryOptions {
     pub allow_path_lookup: bool,
@@ -699,17 +733,38 @@ impl ManagedNodeRuntime {
             );
 
             let url = format!("https://nodejs.org/dist/{version}/{file_name}");
+            // nodejs.org publishes a SHASUMS256.txt beside every release; the
+            // archive is checked against it before anything is unpacked, so a
+            // transfer that was cut or altered never becomes the node that
+            // runs language servers.
+            let expected = expected_node_sha256(http.as_ref(), version, &file_name).await?;
             log::info!("Downloading Node.js binary from {url}");
             let mut response = http
                 .get(&url, Default::default(), true)
                 .await
                 .context("error downloading Node binary tarball")?;
-            log::info!("Download of Node.js complete, extracting...");
+            let mut bytes = Vec::new();
+            response
+                .body_mut()
+                .take(MAX_NODE_ARCHIVE_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .await
+                .context("error reading the Node archive")?;
+            anyhow::ensure!(
+                bytes.len() as u64 <= MAX_NODE_ARCHIVE_BYTES,
+                "the Node archive from {url} is larger than expected, so it was not used"
+            );
+            let actual = sha256_hex(&bytes);
+            anyhow::ensure!(
+                actual == expected,
+                "the Node archive from {url} does not match its published checksum ({actual} != {expected})"
+            );
+            log::info!("Download of Node.js complete and verified, extracting...");
 
-            let body = response.body_mut();
+            let body = futures::io::Cursor::new(bytes);
             match archive_type {
                 ArchiveType::TarGz => {
-                    let decompressed_bytes = GzipDecoder::new(BufReader::new(response.body_mut()));
+                    let decompressed_bytes = GzipDecoder::new(BufReader::new(body));
                     let archive = Archive::new(decompressed_bytes);
                     archive.unpack(&node_containing_dir).await?;
                 }

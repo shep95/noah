@@ -10,7 +10,6 @@ use collections::HashMap;
 use futures::future::Shared;
 use futures::{AsyncReadExt as _, FutureExt as _};
 use gpui::{App, AppContext as _, EntityId, Global, Task};
-use settings::Settings as _;
 use http_client::{AsyncBody, HttpClient};
 use language_model::LanguageModelToolResultContent;
 use noah_trust::{
@@ -21,9 +20,13 @@ use noah_trust::{
     project_files, provenance, secrets,
 };
 use serde::{Deserialize, Serialize};
+use settings::Settings as _;
 use util::ResultExt as _;
 
 use crate::AgentTool as _;
+
+/// A package record or advisory answer is a few hundred KB at most.
+const MAX_REGISTRY_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Tools whose results come from outside the project (the web, or servers
 /// the person connected). Instruction-like lines in them are withheld.
@@ -261,7 +264,8 @@ pub fn screen_tool_output(
     cx: &mut App,
 ) -> Vec<LanguageModelToolResultContent> {
     let known_secrets = brokered_secrets(cx);
-    let withhold = EXTERNAL_TOOLS.contains(&tool_name) || !crate::ALL_TOOL_NAMES.contains(&tool_name);
+    let withhold =
+        EXTERNAL_TOOLS.contains(&tool_name) || !crate::ALL_TOOL_NAMES.contains(&tool_name);
     let mut caught = Vec::new();
     let screened = parts
         .into_iter()
@@ -336,7 +340,10 @@ fn append_quarantine(record: &QuarantineRecord) {
         if let Some(directory) = path.parent() {
             std::fs::create_dir_all(directory)?;
         }
-        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
         writeln!(file, "{}", serde_json::to_string(record)?)?;
         Ok(())
     })();
@@ -360,10 +367,8 @@ pub fn month_spend(cx: &mut App) -> f64 {
     match &state.month_spend {
         Some((cached_month, total)) if *cached_month == month => *total,
         _ => {
-            let total = noah_trust::cost::month_total(
-                &noah_trust::cost::read(&spend_log_path()),
-                &month,
-            );
+            let total =
+                noah_trust::cost::month_total(&noah_trust::cost::read(&spend_log_path()), &month);
             state.month_spend = Some((month, total));
             total
         }
@@ -525,7 +530,10 @@ pub struct FileChange {
 pub fn file_change(raw_output: &serde_json::Value) -> Option<FileChange> {
     let success = raw_output.get("Success").unwrap_or(raw_output);
     let path = PathBuf::from(success.get("input_path")?.as_str()?);
-    let diff = success.get("diff").and_then(|diff| diff.as_str()).unwrap_or_default();
+    let diff = success
+        .get("diff")
+        .and_then(|diff| diff.as_str())
+        .unwrap_or_default();
     Some(FileChange {
         path,
         old_text: success
@@ -547,11 +555,16 @@ pub fn changed_lines(diff: &str) -> Vec<(u32, u32)> {
     diff.lines()
         .filter_map(|line| {
             let header = line.strip_prefix("@@ ")?;
-            let new_side = header.split_whitespace().find(|part| part.starts_with('+'))?;
+            let new_side = header
+                .split_whitespace()
+                .find(|part| part.starts_with('+'))?;
             let mut numbers = new_side.trim_start_matches('+').split(',');
             let start: u32 = numbers.next()?.parse().ok()?;
             let count: u32 = numbers.next().map_or(Some(1), |count| count.parse().ok())?;
-            Some((start.max(1), (start + count.saturating_sub(1)).max(start.max(1))))
+            Some((
+                start.max(1),
+                (start + count.saturating_sub(1)).max(start.max(1)),
+            ))
         })
         .collect()
 }
@@ -629,7 +642,11 @@ pub async fn after_file_change(
         .map(|(lines, path)| provenance::Entry {
             time: chrono::Utc::now().to_rfc3339(),
             actor: "shepherd".into(),
-            action: if change.old_text.is_empty() { "write".into() } else { "edit".into() },
+            action: if change.old_text.is_empty() {
+                "write".into()
+            } else {
+                "edit".into()
+            },
             path: Some(path),
             lines,
             model: context.model.clone(),
@@ -682,7 +699,8 @@ pub async fn after_file_change(
     let added = added
         .into_iter()
         .map(|dependency| {
-            let version = packages::pinned_version(&changed_path, &change.new_text, &dependency.name);
+            let version =
+                packages::pinned_version(&changed_path, &change.new_text, &dependency.name);
             (dependency, version)
         })
         .collect();
@@ -722,7 +740,12 @@ pub async fn check_dependency_versions(
         let body = match http_client.get(&url, AsyncBody::default(), true).await {
             Ok(mut response) if response.status().is_success() => {
                 let mut body = String::new();
-                match response.body_mut().read_to_string(&mut body).await {
+                match response
+                    .body_mut()
+                    .take(MAX_REGISTRY_RESPONSE_BYTES)
+                    .read_to_string(&mut body)
+                    .await
+                {
                     Ok(_) => Some(Some(body)),
                     Err(_) => None,
                 }
@@ -776,7 +799,11 @@ async fn query_vulnerabilities(
         response.status()
     );
     let mut body = String::new();
-    response.body_mut().read_to_string(&mut body).await?;
+    response
+        .body_mut()
+        .take(MAX_REGISTRY_RESPONSE_BYTES)
+        .read_to_string(&mut body)
+        .await?;
     Ok(packages::parse_osv_response(&body))
 }
 
@@ -836,7 +863,9 @@ pub fn project_permissions(roots: &[PathBuf], cx: &mut App) -> Result<ProjectPer
             None => {
                 let parsed = std::fs::read_to_string(&path)
                     .map_err(|error| error.to_string())
-                    .and_then(|text| permissions::parse(&text).map_err(|error| format!("{error:#}")))
+                    .and_then(|text| {
+                        permissions::parse(&text).map_err(|error| format!("{error:#}"))
+                    })
                     .map_err(|error| format!("{}: {error}", path.display()));
                 state.permission_files.insert(
                     path.clone(),
@@ -892,12 +921,12 @@ impl ThreadModelInfo {
     pub fn new(model: &dyn language_model::LanguageModel, context_tokens: u64) -> Self {
         Self {
             name: model.name().0.to_string(),
-            pricing: model
-                .price_per_million_tokens()
-                .map(|(input, output)| noah_trust::cost::Pricing {
+            pricing: model.price_per_million_tokens().map(|(input, output)| {
+                noah_trust::cost::Pricing {
                     input_per_million: input,
                     output_per_million: output,
-                }),
+                }
+            }),
             local: LOCAL_PROVIDERS.contains(&model.provider_id().0.to_lowercase().as_str()),
             max_tokens: model.max_token_count(),
             context_tokens,
@@ -971,7 +1000,9 @@ pub fn note_thread<'a>(
         }
         if permissions::HOST_TOOLS.contains(&tool_name) {
             let words = match input {
-                language_model::LanguageModelToolUseInput::Json(json) => json_strings(json).join(" "),
+                language_model::LanguageModelToolUseInput::Json(json) => {
+                    json_strings(json).join(" ")
+                }
                 language_model::LanguageModelToolUseInput::Text(text) => text.clone(),
             };
             if let Some(host) = permissions::host_in(&words) {
@@ -1003,7 +1034,10 @@ pub fn note_tool_result(thread: EntityId, tool_name: &str, is_error: bool, cx: &
 /// Marks a thread as holding content from outside the project.
 pub fn mark_untrusted(thread: EntityId, source: String, cx: &mut App) {
     let state = cx.default_global::<TrustState>();
-    push_unique(&mut state.threads.entry(thread).or_default().sources_seen, source);
+    push_unique(
+        &mut state.threads.entry(thread).or_default().sources_seen,
+        source,
+    );
 }
 
 /// Where the untrusted content in a thread came from; empty when there is
@@ -1071,7 +1105,10 @@ impl ToolGate {
             })
             .unwrap_or_default();
         let permissions = project_permissions(&roots, cx);
-        let stored_secrets = brokered_secrets(cx).into_iter().map(|(name, _)| name).collect();
+        let stored_secrets = brokered_secrets(cx)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
         let sources = thread
             .map(|thread| untrusted_sources(thread, cx))
             .unwrap_or_default();
@@ -1121,7 +1158,9 @@ impl ToolGate {
         if !permissions::HOST_TOOLS.contains(&self.tool_name.as_str()) {
             return None;
         }
-        self.inputs.iter().find_map(|input| permissions::host_in(input))
+        self.inputs
+            .iter()
+            .find_map(|input| permissions::host_in(input))
     }
 
     /// What the capability file says about this call.
@@ -1250,7 +1289,8 @@ mod tests {
             inputs: vec![input.to_string()],
             permissions: permissions::parse(file).map_err(|error| error.to_string()),
             stored_secrets: vec!["STRIPE_TEST_KEY".to_string(), "STRIPE_LIVE_KEY".to_string()],
-            taint: taint.then(|| "noah is asking because this thread has read a web page".to_string()),
+            taint: taint
+                .then(|| "noah is asking because this thread has read a web page".to_string()),
         }
     }
 
@@ -1261,10 +1301,22 @@ mod tests {
         use crate::ToolPermissionDecision::{Allow, Confirm, Deny};
         // The repository's own file can't lift a question the person's
         // settings ask, or a cloned project could grant itself commands.
-        assert_eq!(gate("terminal", "cargo test -p x", FILE, false).decide(Confirm), Confirm);
-        assert_eq!(gate("terminal", "cargo test -p x", FILE, false).decide(Allow), Allow);
-        assert_eq!(gate("terminal", "git push origin", FILE, false).decide(Allow), Confirm);
-        assert!(matches!(gate("terminal", "rm -rf build", FILE, false).decide(Allow), Deny(_)));
+        assert_eq!(
+            gate("terminal", "cargo test -p x", FILE, false).decide(Confirm),
+            Confirm
+        );
+        assert_eq!(
+            gate("terminal", "cargo test -p x", FILE, false).decide(Allow),
+            Allow
+        );
+        assert_eq!(
+            gate("terminal", "git push origin", FILE, false).decide(Allow),
+            Confirm
+        );
+        assert!(matches!(
+            gate("terminal", "rm -rf build", FILE, false).decide(Allow),
+            Deny(_)
+        ));
         assert!(matches!(
             gate("terminal", "cargo test", FILE, false).decide(Deny("settings".into())),
             Deny(reason) if reason == "settings"
@@ -1275,32 +1327,59 @@ mod tests {
         let denial = gate("terminal", "cargo test && rm -rf /tmp/x", FILE, false)
             .denial()
             .expect("denied");
-        assert!(denial.contains(".noah/permissions.yaml") && denial.contains("rm -rf /tmp/x"), "{denial}");
+        assert!(
+            denial.contains(".noah/permissions.yaml") && denial.contains("rm -rf /tmp/x"),
+            "{denial}"
+        );
 
         assert!(matches!(
             gate("terminal", "curl -u $STRIPE_LIVE_KEY: https://api.stripe.com", FILE, false).decide(Allow),
             Deny(reason) if reason.contains("STRIPE_LIVE_KEY")
         ));
-        assert_eq!(gate("fetch", "https://api.github.com/x", FILE, false).decide(Confirm), Confirm);
-        assert!(matches!(gate("fetch", "https://example.com", FILE, false).decide(Allow), Deny(_)));
-        assert_eq!(gate("read_file", "src/main.rs", FILE, false).decide(Allow), Allow);
+        assert_eq!(
+            gate("fetch", "https://api.github.com/x", FILE, false).decide(Confirm),
+            Confirm
+        );
+        assert!(matches!(
+            gate("fetch", "https://example.com", FILE, false).decide(Allow),
+            Deny(_)
+        ));
+        assert_eq!(
+            gate("read_file", "src/main.rs", FILE, false).decide(Allow),
+            Allow
+        );
     }
 
     #[test]
     fn unreadable_capability_files_block_the_tools_they_govern() {
         use crate::ToolPermissionDecision::{Allow, Deny};
         let broken = "terminal: {allow: 'cargo test'}";
-        assert!(matches!(gate("terminal", "cargo test", broken, false).decide(Allow), Deny(_)));
-        assert!(matches!(gate("fetch", "https://docs.rs", broken, false).decide(Allow), Deny(_)));
-        assert_eq!(gate("edit_file", "src/main.rs", broken, false).decide(Allow), Allow);
+        assert!(matches!(
+            gate("terminal", "cargo test", broken, false).decide(Allow),
+            Deny(_)
+        ));
+        assert!(matches!(
+            gate("fetch", "https://docs.rs", broken, false).decide(Allow),
+            Deny(_)
+        ));
+        assert_eq!(
+            gate("edit_file", "src/main.rs", broken, false).decide(Allow),
+            Allow
+        );
     }
 
     #[test]
     fn taint_turns_allows_into_questions() {
         use crate::ToolPermissionDecision::{Allow, Confirm, Deny};
-        assert_eq!(gate("terminal", "cargo test", FILE, true).decide(Allow), Confirm);
+        assert_eq!(
+            gate("terminal", "cargo test", FILE, true).decide(Allow),
+            Confirm
+        );
         assert_eq!(gate("terminal", "ls", "", true).decide(Allow), Confirm);
-        assert!(matches!(gate("terminal", "rm -rf x", FILE, true).decide(Allow), Deny(_)));
+        assert!(matches!(
+            gate("terminal", "rm -rf x", FILE, true).decide(Allow),
+            Deny(_)
+        ));
         let title = gate("terminal", "ls", "", true).title("ls".to_string());
         assert!(title.starts_with("ls\n\nnoah is asking"), "{title}");
         let title = gate("terminal", "git push", FILE, false).title("git push".to_string());
@@ -1309,7 +1388,8 @@ mod tests {
 
     #[test]
     fn reads_changed_lines_from_hunks() {
-        let diff = "--- a/x\n+++ b/x\n@@ -1,3 +1,4 @@\n a\n+b\n@@ -10 +11 @@\n-c\n+d\n@@ -20,2 +22,0 @@\n";
+        let diff =
+            "--- a/x\n+++ b/x\n@@ -1,3 +1,4 @@\n a\n+b\n@@ -10 +11 @@\n-c\n+d\n@@ -20,2 +22,0 @@\n";
         assert_eq!(changed_lines(diff), vec![(1, 4), (11, 11), (22, 22)]);
     }
 
@@ -1322,6 +1402,9 @@ mod tests {
         assert_eq!(change.path, PathBuf::from("/p/src/a.rs"));
         assert_eq!(change.lines, vec![(1, 1)]);
         let roots = vec![PathBuf::from("/p"), PathBuf::from("/p/src")];
-        assert_eq!(project_root_for(&change.path, &roots), Some(PathBuf::from("/p/src")));
+        assert_eq!(
+            project_root_for(&change.path, &roots),
+            Some(PathBuf::from("/p/src"))
+        );
     }
 }
