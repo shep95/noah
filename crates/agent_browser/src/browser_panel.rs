@@ -96,7 +96,47 @@ pub struct BrowserPanel {
     current_url: String,
     /// Reloads the previewed file when its editor saves it.
     preview_subscription: Option<Subscription>,
+    /// The page the person asked noah to watch, when there is one.
+    watch: Option<Watch>,
     _subscriptions: Vec<Subscription>,
+}
+
+/// Watch mode: the room reads one page, the one it was told to, every
+/// little while, and says when its text changes. It reads nothing else: if
+/// the browser is on another page when the clock fires, that round is
+/// skipped. Nothing is sent to shepherd on its own; the toast offers it.
+struct Watch {
+    url: String,
+    last_text: String,
+    changes: usize,
+    _task: Task<()>,
+}
+
+const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+const WATCH_MAX_DIFF_LINES: usize = 12;
+const WATCH_MAX_PROMPT_CHARS: usize = 6000;
+
+/// Lines that appeared or went away, capped, for a toast and a prompt.
+pub(crate) fn text_difference(before: &str, after: &str) -> Vec<String> {
+    let before_lines: Vec<&str> = before.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let after_lines: Vec<&str> = after.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let mut difference = Vec::new();
+    for line in &before_lines {
+        if !after_lines.contains(line) {
+            difference.push(format!("- {line}"));
+        }
+    }
+    for line in &after_lines {
+        if !before_lines.contains(line) {
+            difference.push(format!("+ {line}"));
+        }
+    }
+    if difference.len() > WATCH_MAX_DIFF_LINES {
+        let hidden = difference.len() - WATCH_MAX_DIFF_LINES;
+        difference.truncate(WATCH_MAX_DIFF_LINES);
+        difference.push(format!("… {hidden} more changed lines"));
+    }
+    difference
 }
 
 impl BrowserPanel {
@@ -158,6 +198,7 @@ impl BrowserPanel {
             position: DockPosition::Right,
             zoomed: false,
             page_style,
+            watch: None,
             current_url: String::new(),
             preview_subscription: None,
             _subscriptions: subscriptions,
@@ -240,6 +281,126 @@ impl BrowserPanel {
         let url = self.current_url.trim();
         let is_start_page = crate::start_page_url().is_some_and(|start| start == url);
         (!url.is_empty() && url != "about:blank" && !is_start_page).then(|| url.to_string())
+    }
+
+    /// Starts watching the page that is open now, or stops the watch.
+    fn toggle_watch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.watch.take().is_some() {
+            cx.notify();
+            return;
+        }
+        let Some(url) = self.pinnable_url() else {
+            self.error = Some("open a page first, then watch it".into());
+            cx.notify();
+            return;
+        };
+        let task = cx.spawn_in(window, {
+            let url = url.clone();
+            async move |this, cx| {
+                let first = crate::run_command(vec!["get".into(), "text".into(), "body".into()])
+                    .await
+                    .unwrap_or_default();
+                if this
+                    .update(cx, |this, _| {
+                        if let Some(watch) = this.watch.as_mut() {
+                            watch.last_text = first;
+                        }
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                loop {
+                    cx.background_executor().timer(WATCH_INTERVAL).await;
+                    let still_watching =
+                        this.read_with(cx, |this, _| this.watch.is_some()).unwrap_or(false);
+                    if !still_watching {
+                        return;
+                    }
+                    let current = crate::run_command(vec!["get".into(), "url".into()])
+                        .await
+                        .unwrap_or_default();
+                    if current.trim() != url {
+                        continue;
+                    }
+                    let Ok(text) =
+                        crate::run_command(vec!["get".into(), "text".into(), "body".into()])
+                            .await
+                    else {
+                        continue;
+                    };
+                    let difference = this
+                        .update(cx, |this, cx| {
+                            let watch = this.watch.as_mut()?;
+                            let difference = text_difference(&watch.last_text, &text);
+                            if difference.is_empty() {
+                                return None;
+                            }
+                            watch.last_text = text;
+                            watch.changes += 1;
+                            cx.notify();
+                            Some(difference)
+                        })
+                        .ok()
+                        .flatten();
+                    if let Some(difference) = difference {
+                        this.update_in(cx, |this, window, cx| {
+                            this.announce_change(&url, difference, window, cx)
+                        })
+                        .ok();
+                    }
+                }
+            }
+        });
+        self.watch = Some(Watch {
+            url,
+            last_text: String::new(),
+            changes: 0,
+            _task: task,
+        });
+        cx.notify();
+    }
+
+    fn announce_change(
+        &mut self,
+        url: &str,
+        difference: Vec<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(workspace) = window.root::<Workspace>().flatten() else {
+            return;
+        };
+        let mut prompt = format!(
+            "the page i asked you to watch changed: {url}\n\nwhat changed (lines that appeared or went away):\n{}\n\ntell me what this means, in a few words.",
+            difference.join("\n")
+        );
+        if prompt.chars().count() > WATCH_MAX_PROMPT_CHARS {
+            prompt = prompt.chars().take(WATCH_MAX_PROMPT_CHARS).collect();
+        }
+        let summary = difference
+            .iter()
+            .take(2)
+            .map(|line| line.chars().take(80).collect::<String>())
+            .collect::<Vec<_>>()
+            .join(" · ");
+        workspace.update(cx, |workspace, cx| {
+            workspace.show_toast(
+                workspace::Toast::new(
+                    workspace::notifications::NotificationId::composite::<Watch>("page-watch"),
+                    format!("the page you watch changed: {summary}"),
+                )
+                .on_click("ask shepherd", move |window, cx| {
+                    window.dispatch_action(
+                        Box::new(zed_actions::agent::OpenWithPrompt {
+                            prompt: prompt.clone(),
+                        }),
+                        cx,
+                    );
+                }),
+                cx,
+            );
+        });
     }
 
     fn open_url(&mut self, url: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -604,6 +765,28 @@ impl BrowserPanel {
                     )
                     .child(self.address.clone()),
             )
+            .child({
+                let watching = self.watch.as_ref();
+                IconButton::new(
+                    "browser-watch",
+                    if watching.is_some() {
+                        IconName::EyeOff
+                    } else {
+                        IconName::Eye
+                    },
+                )
+                .icon_size(IconSize::Small)
+                .when(watching.is_some(), |this| this.toggle_state(true))
+                .tooltip(Tooltip::text(match watching {
+                    Some(watch) => format!(
+                        "watching this page; {} change{} so far. click to stop",
+                        watch.changes,
+                        if watch.changes == 1 { "" } else { "s" }
+                    ),
+                    None => "watch this page: noah reads it every minute and says when its text changes".to_string(),
+                }))
+                .on_click(cx.listener(|this, _, window, cx| this.toggle_watch(window, cx)))
+            })
             .when_some(self.pinnable_url(), |this, url| {
                 let pinned = workspace::rail_apps::is_pinned(&url, cx);
                 this.child(
@@ -938,5 +1121,19 @@ impl Panel for BrowserPanel {
 
     fn activation_priority(&self) -> u32 {
         8
+    }
+}
+
+#[cfg(test)]
+mod watch_tests {
+    use super::text_difference;
+
+    #[test]
+    fn differences_are_lines_that_came_or_went() {
+        let before = "build 41\npassing\n";
+        let after = "build 42\nfailing\n";
+        let difference = text_difference(before, after);
+        assert_eq!(difference, vec!["- build 41", "- passing", "+ build 42", "+ failing"]);
+        assert!(text_difference("same\n", "  same  \n").is_empty());
     }
 }

@@ -641,6 +641,12 @@ pub struct ThreadView {
     /// The evidence bundle the last turn ended with, shown as a handoff card
     /// until the person accepts it or asks for revisions.
     handoff: Option<noah_trust::evidence::Bundle>,
+    /// What the last turn actually did, shown under the reply until the
+    /// person sends the next message: commands run and how they ended,
+    /// files touched, and what nobody checked.
+    receipt: Option<Receipt>,
+    /// A model from another family's view of the last reply, when asked.
+    second_opinion: Option<SecondOpinionState>,
     /// The project's tour as a reading path with checkmarks, on an empty
     /// thread; `None` until read, or when the project has no tour.
     tour: Option<Tour>,
@@ -1071,6 +1077,8 @@ impl ThreadView {
             held_up: None,
             _held_up_load: None,
             handoff: None,
+            receipt: None,
+            second_opinion: None,
             tour: None,
             chat_room: Default::default(),
             #[cfg(feature = "audio")]
@@ -1705,6 +1713,8 @@ impl ThreadView {
         let contents = self.resolve_message_contents(&message_editor, cx);
 
         self.thread_error.take();
+        self.receipt.take();
+        self.second_opinion.take();
         self.thread_feedback.clear();
         self.editing_message.take();
         // Sending a message is active engagement: un-freeze the queue if it
@@ -5971,6 +5981,7 @@ impl ThreadView {
     /// tested. Called by the conversation when the thread stops.
     pub(crate) fn show_handoff_if_finished(&mut self, cx: &mut Context<Self>) {
         self.handoff = None;
+        self.receipt = Receipt::from_entries(self.thread.read(cx).entries());
         let thread = self.thread.read(cx);
         let mut bundle_id = None;
         for entry in thread.entries().iter().rev() {
@@ -6135,6 +6146,203 @@ impl ThreadView {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The receipt under a reply that did work: every command and how it
+    /// ended, every file touched, and what was not checked. The handoff card
+    /// carries all of this and more, so the receipt yields to it.
+    fn render_receipt_card(&self, cx: &Context<Self>) -> Option<AnyElement> {
+        if self.handoff.is_some() {
+            return None;
+        }
+        let receipt = self.receipt.as_ref()?;
+        let colors = cx.theme().colors();
+        let line =
+            |text: String, color: Color| Label::new(text).size(LabelSize::Small).color(color);
+        let heading = |text: &str| {
+            Label::new(text.to_string())
+                .size(LabelSize::XSmall)
+                .color(Color::Muted)
+        };
+        let (passed, failed) = receipt.tally();
+        let title = match (passed, failed) {
+            (0, 0) => "receipt: no commands ran".to_string(),
+            (passed, 0) => format!("receipt: {passed} passed, none failed"),
+            (passed, failed) => format!("receipt: {passed} passed, {failed} failed"),
+        };
+        Some(
+            v_flex()
+                .mx_3()
+                .mb_2()
+                .p_3()
+                .gap_2()
+                .border_1()
+                .border_color(colors.border)
+                .rounded_md()
+                .bg(colors.elevated_surface_background)
+                .child(
+                    h_flex()
+                        .justify_between()
+                        .child(Label::new(title).size(LabelSize::Default))
+                        .child(
+                            Button::new("dismiss-receipt", "ok")
+                                .style(ButtonStyle::Subtle)
+                                .label_size(LabelSize::Small)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.receipt = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .when(!receipt.commands.is_empty(), |this| {
+                    this.child(heading("ran"))
+                        .children(receipt.commands.iter().map(|command| {
+                            let (mark, color) = match command.outcome {
+                                CommandOutcome::Passed => ("✓", Color::Success),
+                                CommandOutcome::Failed => ("✗", Color::Error),
+                                CommandOutcome::Unfinished => ("·", Color::Muted),
+                            };
+                            line(format!("{mark} {}", command.text), color)
+                        }))
+                })
+                .when(!receipt.files.is_empty(), |this| {
+                    this.child(heading("touched")).children(
+                        receipt
+                            .files
+                            .iter()
+                            .map(|file| line(file.clone(), Color::Default)),
+                    )
+                })
+                .when(!receipt.not_verified.is_empty(), |this| {
+                    this.child(heading("not checked")).children(
+                        receipt
+                            .not_verified
+                            .iter()
+                            .map(|item| line(item.clone(), Color::Warning)),
+                    )
+                })
+                .into_any_element(),
+        )
+    }
+
+    /// The last exchange: the person's message and the reply after it, as
+    /// text, for a second opinion.
+    fn last_exchange(&self, cx: &App) -> Option<(String, String)> {
+        let entries = self.thread.read(cx).entries();
+        let last_user = entries
+            .iter()
+            .rposition(|entry| matches!(entry, acp_thread::AgentThreadEntry::UserMessage(..)))?;
+        let question = entries.get(last_user)?.to_markdown(cx);
+        let answer: String = entries[last_user + 1..]
+            .iter()
+            .filter(|entry| {
+                matches!(entry, acp_thread::AgentThreadEntry::AssistantMessage(..))
+            })
+            .map(|entry| entry.to_markdown(cx))
+            .collect::<Vec<_>>()
+            .join("\n");
+        (!answer.trim().is_empty()).then_some((question, answer))
+    }
+
+    fn ask_second_opinion(&mut self, cx: &mut Context<Self>) {
+        let Some((question, answer)) = self.last_exchange(cx) else {
+            return;
+        };
+        let author = self
+            .as_native_thread(cx)
+            .and_then(|thread| thread.read(cx).model().cloned());
+        let session = self.session_id.0.to_string();
+        let task = agent::second_opinion(question, answer, author, Some(session), cx);
+        self.second_opinion = Some(SecondOpinionState::Asking);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            this.update(cx, |this, cx| {
+                this.second_opinion = Some(match result {
+                    Ok((reviewer, text)) => SecondOpinionState::Answered { reviewer, text },
+                    Err(error) => SecondOpinionState::Failed(format!("{error:#}")),
+                });
+                cx.notify();
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
+    /// A quiet "second opinion" under a finished reply, and the other
+    /// model's answer once it is in.
+    fn render_second_opinion(&self, cx: &Context<Self>) -> Option<AnyElement> {
+        let thread = self.thread.read(cx);
+        let finished = matches!(thread.status(), acp_thread::ThreadStatus::Idle);
+        let has_reply = thread.entries().last().is_some_and(|entry| {
+            matches!(entry, acp_thread::AgentThreadEntry::AssistantMessage(..))
+        });
+        let colors = cx.theme().colors();
+        match &self.second_opinion {
+            None if finished && has_reply => Some(
+                h_flex()
+                    .mx_3()
+                    .mb_1()
+                    .child(
+                        Button::new("ask-second-opinion", "second opinion")
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::XSmall)
+                            .tooltip(Tooltip::text(
+                                "ask a model from a different family what it makes of this reply",
+                            ))
+                            .on_click(cx.listener(|this, _, _, cx| this.ask_second_opinion(cx))),
+                    )
+                    .into_any_element(),
+            ),
+            None => None,
+            Some(state) => {
+                let (heading, body, color) = match state {
+                    SecondOpinionState::Asking => (
+                        "second opinion".to_string(),
+                        "asking a model from another family…".to_string(),
+                        Color::Muted,
+                    ),
+                    SecondOpinionState::Answered { reviewer, text } => {
+                        (format!("second opinion from {reviewer}"), text.clone(), Color::Default)
+                    }
+                    SecondOpinionState::Failed(error) => (
+                        "second opinion".to_string(),
+                        format!("couldn't get one: {error}"),
+                        Color::Error,
+                    ),
+                };
+                Some(
+                    v_flex()
+                        .mx_3()
+                        .mb_2()
+                        .p_3()
+                        .gap_1()
+                        .border_1()
+                        .border_color(colors.border)
+                        .rounded_md()
+                        .bg(colors.elevated_surface_background)
+                        .child(
+                            h_flex()
+                                .justify_between()
+                                .child(
+                                    Label::new(heading)
+                                        .size(LabelSize::XSmall)
+                                        .color(Color::Muted),
+                                )
+                                .child(
+                                    Button::new("dismiss-second-opinion", "ok")
+                                        .style(ButtonStyle::Subtle)
+                                        .label_size(LabelSize::XSmall)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.second_opinion = None;
+                                            cx.notify();
+                                        })),
+                                ),
+                        )
+                        .child(Label::new(body).size(LabelSize::Small).color(color))
+                        .into_any_element(),
+                )
+            }
+        }
     }
 
     /// The headline number on an empty thread: how shepherd's work in this
@@ -13421,6 +13629,8 @@ impl Render for ThreadView {
             )
             .child(conversation)
             .children(self.render_handoff_card(cx))
+            .children(self.render_receipt_card(cx))
+            .children(self.render_second_opinion(cx))
             .children(self.render_multi_root_callout(cx))
             .children(self.render_activity_bar(window, cx))
             .when(self.show_external_source_prompt_warning, |this| {
@@ -14025,4 +14235,227 @@ struct VoiceState {
     read_aloud: Option<Subscription>,
     speaking: Option<Task<()>>,
     playback: Option<crate::voice::Playback>,
+}
+
+pub(crate) enum SecondOpinionState {
+    Asking,
+    Answered { reviewer: String, text: String },
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommandOutcome {
+    Passed,
+    Failed,
+    Unfinished,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReceiptCommand {
+    pub text: String,
+    pub outcome: CommandOutcome,
+}
+
+/// What a turn did, read back from its own tool calls rather than from the
+/// reply, so the card cannot claim more than the tools recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct Receipt {
+    pub commands: Vec<ReceiptCommand>,
+    pub files: Vec<String>,
+    pub not_verified: Vec<String>,
+}
+
+const RECEIPT_MAX_LINES: usize = 12;
+const RECEIPT_MAX_COMMAND_CHARS: usize = 120;
+
+impl Receipt {
+    /// The receipt for the entries since the last user message, or `None`
+    /// when the turn ran no command and touched no file (a chat reply needs
+    /// no receipt).
+    pub(crate) fn from_entries(entries: &[acp_thread::AgentThreadEntry]) -> Option<Self> {
+        let mut turn = Vec::new();
+        for entry in entries.iter().rev() {
+            match entry {
+                acp_thread::AgentThreadEntry::UserMessage(..) => break,
+                acp_thread::AgentThreadEntry::ToolCall(call) => turn.push(call),
+                _ => {}
+            }
+        }
+        turn.reverse();
+        let mut receipt = Receipt::default();
+        let mut ran_a_test = false;
+        for call in turn {
+            let name = call.tool_name.as_deref().unwrap_or("");
+            let input = call.raw_input.as_ref();
+            let string_field = |field: &str| {
+                input
+                    .and_then(|input| input.get(field))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+            };
+            match name {
+                "terminal" | "sandboxed_terminal" => {
+                    let Some(command) = string_field("command") else {
+                        continue;
+                    };
+                    let output = call
+                        .raw_output
+                        .as_ref()
+                        .map(|output| output.to_string())
+                        .unwrap_or_default();
+                    let outcome = match call.status {
+                        acp_thread::ToolCallStatus::Completed
+                            if !output.contains("failed with exit code") =>
+                        {
+                            CommandOutcome::Passed
+                        }
+                        acp_thread::ToolCallStatus::Completed
+                        | acp_thread::ToolCallStatus::Failed => CommandOutcome::Failed,
+                        _ => CommandOutcome::Unfinished,
+                    };
+                    ran_a_test |= looks_like_a_test(&command);
+                    receipt.commands.push(ReceiptCommand {
+                        text: clip_receipt_line(&command),
+                        outcome,
+                    });
+                }
+                "edit_file" | "write_file" | "delete_path" | "create_directory" => {
+                    if let Some(path) = string_field("path") {
+                        push_unique(&mut receipt.files, path);
+                    }
+                }
+                "move_path" => {
+                    if let Some(path) = string_field("source_path") {
+                        push_unique(&mut receipt.files, path);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if receipt.commands.is_empty() && receipt.files.is_empty() {
+            return None;
+        }
+        if !receipt.files.is_empty() && receipt.commands.is_empty() {
+            receipt
+                .not_verified
+                .push("files changed and no command ran afterwards".to_string());
+        } else if !receipt.files.is_empty() && !ran_a_test {
+            receipt
+                .not_verified
+                .push("files changed and no test command ran".to_string());
+        }
+        let unfinished = receipt
+            .commands
+            .iter()
+            .filter(|command| command.outcome == CommandOutcome::Unfinished)
+            .count();
+        if unfinished > 0 {
+            receipt.not_verified.push(format!(
+                "{unfinished} command{} never finished (rejected, cancelled or still running)",
+                if unfinished == 1 { "" } else { "s" }
+            ));
+        }
+        if receipt.commands.len() > RECEIPT_MAX_LINES {
+            let hidden = receipt.commands.len() - RECEIPT_MAX_LINES;
+            receipt.commands.truncate(RECEIPT_MAX_LINES);
+            receipt.commands.push(ReceiptCommand {
+                text: format!("… and {hidden} more"),
+                outcome: CommandOutcome::Unfinished,
+            });
+        }
+        if receipt.files.len() > RECEIPT_MAX_LINES {
+            let hidden = receipt.files.len() - RECEIPT_MAX_LINES;
+            receipt.files.truncate(RECEIPT_MAX_LINES);
+            receipt.files.push(format!("… and {hidden} more"));
+        }
+        Some(receipt)
+    }
+
+    pub(crate) fn tally(&self) -> (usize, usize) {
+        let passed = self
+            .commands
+            .iter()
+            .filter(|command| command.outcome == CommandOutcome::Passed)
+            .count();
+        let failed = self
+            .commands
+            .iter()
+            .filter(|command| command.outcome == CommandOutcome::Failed)
+            .count();
+        (passed, failed)
+    }
+}
+
+fn push_unique(list: &mut Vec<String>, item: String) {
+    if !list.contains(&item) {
+        list.push(item);
+    }
+}
+
+fn clip_receipt_line(text: &str) -> String {
+    let text = text.lines().next().unwrap_or("").trim();
+    if text.chars().count() <= RECEIPT_MAX_COMMAND_CHARS {
+        return text.to_string();
+    }
+    let mut clipped: String = text.chars().take(RECEIPT_MAX_COMMAND_CHARS).collect();
+    clipped.push('…');
+    clipped
+}
+
+/// A command counts as a test when its name says so; a build or a lint is
+/// not a test and the receipt says that.
+fn looks_like_a_test(command: &str) -> bool {
+    let lower = command.to_ascii_lowercase();
+    [
+        "cargo test",
+        "cargo nextest",
+        "npm test",
+        "npm run test",
+        "pnpm test",
+        "yarn test",
+        "bun test",
+        "pytest",
+        "python -m pytest",
+        "python -m unittest",
+        "go test",
+        "mvn test",
+        "gradle test",
+        "./gradlew test",
+        "dotnet test",
+        "mix test",
+        "rspec",
+        "phpunit",
+        "vitest",
+        "jest",
+        "ctest",
+        "make test",
+        "make check",
+        "swift test",
+        "zig build test",
+        "deno test",
+        "elixir",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
+#[cfg(test)]
+mod receipt_tests {
+    use super::*;
+
+    #[test]
+    fn test_markers_cover_builds_but_not_lint() {
+        assert!(looks_like_a_test("cargo test -p agent"));
+        assert!(looks_like_a_test("CI=1 npm run test -- --watch=false"));
+        assert!(!looks_like_a_test("cargo build --release"));
+        assert!(!looks_like_a_test("eslint ."));
+    }
+
+    #[test]
+    fn long_commands_are_clipped_on_a_char_boundary() {
+        let long = "é".repeat(RECEIPT_MAX_COMMAND_CHARS + 5);
+        let clipped = clip_receipt_line(&long);
+        assert_eq!(clipped.chars().count(), RECEIPT_MAX_COMMAND_CHARS + 1);
+        assert_eq!(clip_receipt_line("ls\nmore"), "ls");
+    }
 }

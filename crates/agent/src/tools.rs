@@ -2,6 +2,9 @@ mod addon_tool;
 mod apply_code_action_tool;
 mod ask_user_tool;
 mod brain_tool;
+mod cost_of_tool;
+mod explain_diff_tool;
+mod footprint_tool;
 mod browser_tool;
 mod codebase_tool;
 mod context_server_registry;
@@ -82,6 +85,9 @@ pub use addon_tool::*;
 pub use apply_code_action_tool::*;
 pub use ask_user_tool::*;
 pub use brain_tool::*;
+pub use cost_of_tool::*;
+pub use explain_diff_tool::*;
+pub use footprint_tool::*;
 pub use browser_tool::*;
 pub use codebase_tool::*;
 pub use context_server_registry::*;
@@ -216,6 +222,9 @@ tools! {
     ApplyCodeActionTool,
     AskUserTool,
     BrainTool,
+    CostOfTool,
+    ExplainDiffTool,
+    FootprintTool,
     BrowserTool,
     CodebaseTool,
     CopyPathTool,

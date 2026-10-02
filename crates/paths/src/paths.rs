@@ -170,6 +170,17 @@ pub fn board_directory() -> PathBuf {
     home_dir().join(".noah").join("board")
 }
 
+/// asherin.ledger's home: receipts, subscriptions and the month's spend.
+pub fn ledger_directory() -> PathBuf {
+    home_dir().join(".noah").join("ledger")
+}
+
+/// The reading room's home: documents the person reads with shepherd, and
+/// the notes both of them keep in the margins.
+pub fn reading_directory() -> PathBuf {
+    home_dir().join(".noah").join("reading")
+}
+
 /// The notepad's text, plain markdown the person can open anywhere.
 pub fn notes_file() -> PathBuf {
     home_dir().join(".noah").join("notes.md")
@@ -184,6 +195,15 @@ pub fn prompt_projects_directory() -> PathBuf {
 /// the native host when the person presses "tell noah about this site".
 pub fn shield_sites_directory() -> PathBuf {
     home_dir().join(".noah").join("shield").join("sites")
+}
+
+/// Salted fingerprints of the person's stored secrets, for the shield's
+/// one-way clipboard: names and hashes only, never the values.
+pub fn shield_secret_fingerprints_file() -> PathBuf {
+    home_dir()
+        .join(".noah")
+        .join("shield")
+        .join("secret_fingerprints.json")
 }
 
 /// asherin.chat's home: the folder chat threads run in when they aren't tied

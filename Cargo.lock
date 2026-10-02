@@ -5163,6 +5163,7 @@ name = "device_room"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "fs",
  "futures 0.3.34",
  "gpui",
@@ -11637,6 +11638,7 @@ dependencies = [
  "libc",
  "log",
  "qrcode",
+ "serde",
  "serde_json",
  "sha2",
  "sysinfo 0.39.6",
@@ -11685,6 +11687,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "paths",
+ "rand 0.9.4",
  "regex",
  "serde",
  "serde_json",

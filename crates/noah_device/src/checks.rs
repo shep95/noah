@@ -105,6 +105,7 @@ pub(crate) fn sort_worst_first(checks: &mut [Check]) {
 pub fn run_security_checks() -> Vec<Check> {
     let mut jobs = platform::check_jobs();
     jobs.push(|| vec![exposed_ports_check(try_listening_ports())]);
+    jobs.push(|| vec![crate::backup::backup_check()]);
 
     // The checks are dominated by process start-up time (PowerShell in particular), so they run
     // concurrently rather than one after another.

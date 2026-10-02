@@ -14,8 +14,8 @@ use agent_settings::AgentSettings;
 use anyhow::Context as _;
 use editor::Editor;
 use gpui::{
-    Action, App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    SharedString, Subscription, Task, WeakEntity, Window, actions, px,
+    Action, AnyElement, App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement as _, Pixels, SharedString, Subscription, Task, WeakEntity, Window, actions, px,
 };
 use language_model::LanguageModelRegistry;
 use noah_trust::{
@@ -107,6 +107,9 @@ pub(crate) fn record_review_outcome(
     .detach();
 }
 
+/// Timeline moments opened at once; "more" adds another page.
+const TIMELINE_PAGE: usize = 40;
+
 fn latest_bundles(root: &Path, count: usize) -> Vec<(PathBuf, Bundle)> {
     let evidence_directory = project_files::path(root, project_files::EVIDENCE);
     let mut bundles: Vec<(PathBuf, Bundle)> = std::fs::read_dir(&evidence_directory)
@@ -189,6 +192,8 @@ struct Snapshot {
     calibration: Option<calibration::Calibration>,
     rules_findings: Option<usize>,
     month_by_model: Vec<(String, f64)>,
+    /// The project as time: edits, evidence and commits, newest first.
+    timeline: Vec<noah_trust::timeline::Moment>,
 }
 
 pub struct MissionControlPanel {
@@ -203,6 +208,8 @@ pub struct MissionControlPanel {
     secret_value: Entity<Editor>,
     secret_names: Vec<String>,
     message: Option<SharedString>,
+    /// How many timeline moments are open; "more" extends it.
+    timeline_shown: usize,
     _ticker: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -267,6 +274,7 @@ impl MissionControlPanel {
             secret_value,
             secret_names: read_secret_names(),
             message: None,
+            timeline_shown: TIMELINE_PAGE,
             _ticker: ticker,
             _subscriptions: Vec::new(),
         };
@@ -898,6 +906,116 @@ impl MissionControlPanel {
             )
     }
 
+    /// The project as a scrollable timeline, grouped by day: every edit
+    /// (who, which files), every evidence bundle (how much of it was
+    /// backed), every commit (and whether it held, was fixed soon after, or
+    /// was reverted).
+    fn render_timeline(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        use noah_trust::timeline::{HeldUp, MomentKind, clock_of, day_of};
+        let total = self.snapshot.timeline.len();
+        let shown = self.timeline_shown.min(total);
+        let mut rows: Vec<AnyElement> = Vec::new();
+        let mut last_day = String::new();
+        for (index, moment) in self.snapshot.timeline.iter().take(shown).enumerate() {
+            let day = day_of(moment);
+            if day != last_day {
+                rows.push(
+                    Label::new(day.clone())
+                        .size(LabelSize::XSmall)
+                        .color(Color::Muted)
+                        .into_any_element(),
+                );
+                last_day = day;
+            }
+            let (mark, color) = match (moment.kind, &moment.held) {
+                (MomentKind::Commit, Some(HeldUp::Reverted)) => ("✗", Color::Error),
+                (MomentKind::Commit, Some(HeldUp::FixedSoonAfter)) => ("~", Color::Warning),
+                (MomentKind::Commit, Some(HeldUp::Held)) => ("✓", Color::Success),
+                (MomentKind::Commit, None) => ("·", Color::Default),
+                (MomentKind::Evidence, _) => ("▣", Color::Accent),
+                (MomentKind::Edits, _) => ("✎", Color::Default),
+            };
+            let held_text = match &moment.held {
+                Some(HeldUp::Reverted) => " (reverted)",
+                Some(HeldUp::FixedSoonAfter) => " (fixed within a week)",
+                Some(HeldUp::Held) => " (held)",
+                None => "",
+            };
+            let evidence = moment.evidence.clone();
+            rows.push(
+                v_flex()
+                    .id(("timeline-moment", index))
+                    .pl_1()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Label::new(clock_of(moment))
+                                    .size(LabelSize::XSmall)
+                                    .color(Color::Muted),
+                            )
+                            .child(Label::new(mark).size(LabelSize::Small).color(color))
+                            .child(
+                                Label::new(format!("{}{held_text}", moment.title))
+                                    .size(LabelSize::Small),
+                            )
+                            .child(
+                                Label::new(moment.actor.clone())
+                                    .size(LabelSize::XSmall)
+                                    .color(Color::Muted),
+                            )
+                            .when_some(evidence, |this, evidence| {
+                                this.child(
+                                    Button::new(("timeline-evidence", index), "evidence")
+                                        .style(ButtonStyle::Subtle)
+                                        .label_size(LabelSize::XSmall)
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            if let Some(root) = this.project_root(cx) {
+                                                let path = project_files::path(
+                                                    &root,
+                                                    project_files::EVIDENCE,
+                                                )
+                                                .join(format!("{evidence}.md"));
+                                                this.open_file(path, window, cx);
+                                            }
+                                        })),
+                                )
+                            }),
+                    )
+                    .children(moment.lines.iter().map(|line| {
+                        Label::new(format!("    {line}"))
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted)
+                    }))
+                    .into_any_element(),
+            );
+        }
+        v_flex()
+            .child(Self::render_section_title(
+                "timeline",
+                Some("what changed, who did it, with what evidence, and how it held up".into()),
+            ))
+            .when(total == 0, |this| {
+                this.child(
+                    Label::new("nothing recorded yet: edits, evidence and commits land here")
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+            })
+            .children(rows)
+            .when(shown < total, |this| {
+                this.child(
+                    Button::new("timeline-more", format!("more ({} of {total})", shown))
+                        .style(ButtonStyle::Subtle)
+                        .label_size(LabelSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.timeline_shown += TIMELINE_PAGE;
+                            cx.notify();
+                        })),
+                )
+            })
+    }
+
     fn render_outcomes(&self) -> impl IntoElement {
         let mut lines = Vec::new();
         if let Some(outcomes) = &self.snapshot.outcomes {
@@ -1020,9 +1138,24 @@ async fn load_snapshot(root: Option<PathBuf>, cx: &mut AsyncApp) -> Snapshot {
         snapshot.integrity = Some(provenance::verify(&provenance_log).map_err(|error| format!("{error:#}")));
         snapshot.provenance_entries = provenance::read(&provenance_log).map(|entries| entries.len()).unwrap_or(0);
 
-        if let Some(log) = git_log {
-            snapshot.outcomes = Some(outcomes::measure(&outcomes::parse_git_log(&log)));
+        let commits = git_log
+            .as_deref()
+            .map(outcomes::parse_git_log)
+            .unwrap_or_default();
+        if git_log.is_some() {
+            snapshot.outcomes = Some(outcomes::measure(&commits));
         }
+        let entries = provenance::read(&provenance_log).unwrap_or_default();
+        let bundles_for_timeline: Vec<Bundle> = latest_bundles(&root, 200)
+            .into_iter()
+            .map(|(_, bundle)| bundle)
+            .collect();
+        snapshot.timeline = noah_trust::timeline::build(
+            &entries,
+            &bundles_for_timeline,
+            &commits,
+            chrono::Utc::now().timestamp(),
+        );
         let outcomes_log = calibration::read(&project_files::path(&root, project_files::CALIBRATION));
         if !outcomes_log.is_empty() {
             snapshot.calibration = Some(calibration::calibrate(&outcomes_log));
@@ -1324,6 +1457,8 @@ impl Render for MissionControlPanel {
             .child(self.render_provenance(cx))
             .child(Divider::horizontal())
             .child(self.render_outcomes())
+            .child(Divider::horizontal())
+            .child(self.render_timeline(cx))
     }
 }
 

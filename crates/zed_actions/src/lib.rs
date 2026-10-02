@@ -66,6 +66,15 @@ actions!(
         OpenAsherinEye,
         /// Opens asherin.board, a whiteboard you and shepherd draw on.
         OpenAsherinBoard,
+        /// Opens asherin.ledger, the money room: ai spend, receipts and
+        /// subscriptions for the month, kept by shepherd on this machine.
+        OpenAsherinLedger,
+        /// Opens the reading room: books and papers you read with shepherd,
+        /// with margin notes from both of you.
+        OpenReadingRoom,
+        /// Asks shepherd to write or update the project's user manual in
+        /// `.noah/manual/`, from the spec and what the evidence shows works.
+        WriteProjectManual,
         /// Shows or hides the notepad: a pad that floats over noah's window,
         /// which you can drag anywhere and size as you like. It saves itself.
         ToggleNotes,
@@ -712,6 +721,14 @@ pub mod agent {
     pub struct ResolveConflictedFilesWithAgent {
         /// File paths with unresolved conflicts (for project-wide resolution).
         pub conflicted_file_paths: Vec<String>,
+    }
+    /// Opens a new shepherd thread with this text waiting in the composer,
+    /// the way a `zed://agent?prompt=` link does; the person still sends it.
+    #[derive(Clone, Default, Deserialize, PartialEq, JsonSchema, Action)]
+    #[action(namespace = agent)]
+    #[serde(deny_unknown_fields)]
+    pub struct OpenWithPrompt {
+        pub prompt: String,
     }
 }
 

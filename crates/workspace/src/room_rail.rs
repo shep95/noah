@@ -596,6 +596,8 @@ impl Workspace {
         let pages_here = is_this_room(paths::pages_directory());
         let search_here = is_this_room(paths::search_directory());
         let board_here = is_this_room(paths::board_directory());
+        let ledger_here = is_this_room(paths::ledger_directory());
+        let reading_here = is_this_room(paths::reading_directory());
         let eye_here = is_this_room(paths::home_dir().join("noah-lab").join("asherin.eye"));
         let colors = cx.theme().colors();
         let status = cx.theme().status();
@@ -782,6 +784,34 @@ impl Workspace {
                         })
                         .on_click(|_, window, cx| {
                             window.dispatch_action(Box::new(zed_actions::OpenAsherinBoard), cx)
+                        }),
+                ),
+            ))
+            .when(!focus, |this| this.child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("asherin-ledger", IconName::Hash)
+                        .icon_size(IconSize::Small)
+                        .icon_color(if ledger_here { Color::Default } else { Color::Muted })
+                        .toggle_state(ledger_here)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("asherin.ledger", &zed_actions::OpenAsherinLedger, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenAsherinLedger), cx)
+                        }),
+                ),
+            ))
+            .when(!focus, |this| this.child(
+                h_flex().w_full().justify_center().child(
+                    IconButton::new("reading-room", IconName::Book)
+                        .icon_size(IconSize::Small)
+                        .icon_color(if reading_here { Color::Default } else { Color::Muted })
+                        .toggle_state(reading_here)
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("reading room", &zed_actions::OpenReadingRoom, cx)
+                        })
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(zed_actions::OpenReadingRoom), cx)
                         }),
                 ),
             ))

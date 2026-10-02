@@ -39,6 +39,9 @@ use crate::{AgentInitialContent, AgentPanel, ConversationView};
 const PAGES_GUIDE: &str = include_str!("../../../assets/shepherd/pages_guide.md");
 const SEARCH_GUIDE: &str = include_str!("../../../assets/shepherd/search_guide.md");
 const BOARD_GUIDE: &str = include_str!("../../../assets/shepherd/board_guide.md");
+const LEDGER_GUIDE: &str = include_str!("../../../assets/shepherd/ledger_guide.md");
+const READING_GUIDE: &str = include_str!("../../../assets/shepherd/reading_guide.md");
+const MANUAL_PROMPT: &str = include_str!("../../../assets/shepherd/manual_prompt.md");
 const PROMPT_PROJECT_GUIDE: &str =
     include_str!("../../../assets/shepherd/prompt_project_guide.md");
 
@@ -93,6 +96,16 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &zed_actions::OpenAsherinSearch, cx| {
         open_room(paths::search_directory(), Some(SEARCH_GUIDE), None, cx)
     });
+    cx.on_action(|_: &zed_actions::OpenAsherinLedger, cx| {
+        let folder = paths::ledger_directory();
+        if let Err(error) = std::fs::create_dir_all(folder.join("receipts")) {
+            log::error!("couldn't create {}: {error}", folder.display());
+        }
+        open_room(folder, Some(LEDGER_GUIDE), None, cx)
+    });
+    cx.on_action(|_: &zed_actions::OpenReadingRoom, cx| {
+        open_room(paths::reading_directory(), Some(READING_GUIDE), None, cx)
+    });
     cx.on_action(|_: &zed_actions::OpenAsherinBoard, cx| {
         open_room(
             paths::board_directory(),
@@ -110,6 +123,14 @@ pub fn init(cx: &mut App) {
         };
         workspace.register_action(|workspace, _: &zed_actions::StartProjectFromPrompt, window, cx| {
             start_project_from_prompt(workspace, window, cx);
+        });
+        workspace.register_action(|_workspace, _: &zed_actions::WriteProjectManual, window, cx| {
+            window.dispatch_action(
+                Box::new(zed_actions::agent::OpenWithPrompt {
+                    prompt: MANUAL_PROMPT.to_string(),
+                }),
+                cx,
+            );
         });
         workspace.register_action(|workspace, _: &ToggleTree, window, cx| {
             toggle_tree(workspace, window, cx);

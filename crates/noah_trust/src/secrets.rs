@@ -533,3 +533,101 @@ mod tests {
         assert!(!is_valid_secret_name("1KEY"));
     }
 }
+
+/// What the browser shield may know about the person's stored secrets: for
+/// each, its name, its length and a salted SHA-256 of its value. The shield
+/// hashes the words of a paste the same way and puts `$NAME` in place of a
+/// match, so a secret pasted into a chat never leaves, and the values
+/// themselves never leave noah.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Fingerprints {
+    pub salt: String,
+    pub secrets: Vec<Fingerprint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Fingerprint {
+    pub name: String,
+    pub length: usize,
+    pub sha256: String,
+}
+
+fn salted_sha256(salt: &str, value: &str) -> String {
+    use sha2::{Digest as _, Sha256};
+    let digest = Sha256::digest(format!("{salt}{value}").as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// The fingerprints for `secrets`, keeping the salt already on disk so the
+/// shield's cache stays valid; values shorter than eight characters are left
+/// out, since a short value is too easy to find by guessing its hash.
+pub fn fingerprints(salt: &str, secrets: &[(String, String)]) -> Fingerprints {
+    Fingerprints {
+        salt: salt.to_string(),
+        secrets: secrets
+            .iter()
+            .filter(|(_, value)| value.chars().count() >= 8)
+            .map(|(name, value)| Fingerprint {
+                name: name.clone(),
+                length: value.chars().count(),
+                sha256: salted_sha256(salt, value),
+            })
+            .collect(),
+    }
+}
+
+/// Writes the fingerprint file atomically, creating a salt on first write.
+pub fn write_fingerprints(path: &std::path::Path, secrets: &[(String, String)]) -> anyhow::Result<()> {
+    let existing: Option<Fingerprints> = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok());
+    let salt = match existing {
+        Some(existing) if existing.salt.len() >= 32 => existing.salt,
+        _ => {
+            let bytes: [u8; 24] = rand::random();
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        }
+    };
+    let fingerprints = fingerprints(&salt, secrets);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let partial = path.with_extension("partial");
+    std::fs::write(&partial, serde_json::to_vec_pretty(&fingerprints)?)?;
+    std::fs::rename(&partial, path)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::*;
+
+    #[test]
+    fn short_values_are_left_out_and_hashes_are_salted() {
+        let secrets = vec![
+            ("API_KEY".to_string(), "sk-live-1234567890".to_string()),
+            ("PIN".to_string(), "1234".to_string()),
+        ];
+        let one = fingerprints("salt-a", &secrets);
+        let two = fingerprints("salt-b", &secrets);
+        assert_eq!(one.secrets.len(), 1);
+        assert_eq!(one.secrets[0].name, "API_KEY");
+        assert_eq!(one.secrets[0].length, 18);
+        assert_ne!(one.secrets[0].sha256, two.secrets[0].sha256);
+        assert_eq!(one.secrets[0].sha256, salted_sha256("salt-a", "sk-live-1234567890"));
+    }
+
+    #[test]
+    fn the_salt_survives_a_rewrite() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("fingerprints.json");
+        write_fingerprints(&path, &[("A".into(), "abcdefghij".into())]).expect("write");
+        let first: Fingerprints =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("json");
+        write_fingerprints(&path, &[]).expect("write");
+        let second: Fingerprints =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("json");
+        assert_eq!(first.salt, second.salt);
+        assert!(second.secrets.is_empty());
+    }
+}

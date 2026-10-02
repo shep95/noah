@@ -442,6 +442,23 @@ pub fn init(cx: &mut App) {
                 .register_action(|workspace, _: &OpenGlobalAgentsMdRules, window, cx| {
                     open_global_rules(workspace, window, cx);
                 })
+                .register_action(
+                    |workspace, action: &zed_actions::agent::OpenWithPrompt, window, cx| {
+                        let Some(prompt) = ExternalSourcePrompt::new(&action.prompt) else {
+                            return;
+                        };
+                        if let Some(panel) = workspace.panel::<AgentPanel>(cx) {
+                            workspace.focus_panel::<AgentPanel>(window, cx);
+                            panel.update(cx, |panel, cx| {
+                                panel.new_agent_thread_with_external_source_prompt(
+                                    Some(prompt),
+                                    window,
+                                    cx,
+                                );
+                            });
+                        }
+                    },
+                )
                 .register_action(|workspace, _: &OpenProjectAgentsMdRules, window, cx| {
                     open_project_rules(workspace, window, cx);
                 })

@@ -297,7 +297,7 @@ const ELEVATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10
 
 #[cfg(windows)]
 fn copy_elevated(source: &Path, destination: &Path) -> Result<()> {
-    use crate::{encode_powershell_command, powershell_quote, run_powershell};
+    use crate::powershell_quote;
 
     let inner = format!(
         "$ErrorActionPreference = 'Stop'\n\
@@ -306,6 +306,15 @@ fn copy_elevated(source: &Path, destination: &Path) -> Result<()> {
         powershell_quote(&source.display().to_string()),
         powershell_quote(&destination.display().to_string()),
     );
+    run_elevated_powershell(&inner, &format!("update {}", destination.display()))
+}
+
+/// Runs `inner` in a PowerShell started through a UAC prompt. Declining the
+/// prompt comes back as [`CANCELLED_MESSAGE`].
+#[cfg(target_os = "windows")]
+pub(crate) fn run_elevated_powershell(inner: &str, what: &str) -> Result<()> {
+    use crate::{encode_powershell_command, powershell_quote, run_powershell};
+
     // Declining the UAC prompt surfaces as ERROR_CANCELLED (1223), either directly or wrapped
     // depending on the PowerShell version.
     // The elevated PowerShell gets its script via -EncodedCommand because Start-Process joins
@@ -323,7 +332,7 @@ fn copy_elevated(source: &Path, destination: &Path) -> Result<()> {
            Write-Output $_.Exception.Message\n\
            exit 1\n\
          }}",
-        powershell_quote(&encode_powershell_command(&inner)),
+        powershell_quote(&encode_powershell_command(inner)),
     );
     let output = run_powershell(&outer, ELEVATION_TIMEOUT)?;
     if output.success() {
@@ -332,11 +341,7 @@ fn copy_elevated(source: &Path, destination: &Path) -> Result<()> {
     if output.exit_code == Some(1223) || output.stdout.contains("noah-cancelled") {
         return Err(anyhow!(CANCELLED_MESSAGE));
     }
-    bail!(
-        "could not update {}: {}",
-        destination.display(),
-        output.error_summary()
-    )
+    bail!("could not {what}: {}", output.error_summary())
 }
 
 #[cfg(target_os = "linux")]

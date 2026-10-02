@@ -1,9 +1,12 @@
 pub mod adblock;
+pub mod backup;
 pub mod checks;
+pub mod drawer;
 pub mod duplicates;
 pub mod geo;
 pub mod health;
 pub mod intel;
+pub mod leash;
 pub mod startup;
 
 use anyhow::{Context as _, Result, bail};

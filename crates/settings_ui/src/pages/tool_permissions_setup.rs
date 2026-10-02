@@ -1433,6 +1433,9 @@ mod tests {
             "ask_user",
             // Reads shepherd's own brain; nothing to permit.
             "brain",
+            "cost_of",
+            "explain_diff",
+            "footprint",
             // Writes its maps and notes under .noah/ and reads git; its
             // registry checks follow the offline switch, not a permission.
             "codebase",

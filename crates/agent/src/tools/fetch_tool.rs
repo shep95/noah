@@ -174,7 +174,7 @@ impl FetchTool {
 /// DNS resolution blocks, so callers should run this off the foreground thread.
 /// See the caller for why this is a gate rather than a full resolve-to-connect
 /// pin.
-fn verify_host_not_forbidden(url: &str) -> Result<()> {
+pub(crate) fn verify_host_not_forbidden(url: &str) -> Result<()> {
     let normalized = normalize_url(url);
     let parsed =
         url::Url::parse(&normalized).with_context(|| format!("could not parse URL {url:?}"))?;
@@ -194,7 +194,7 @@ fn verify_host_not_forbidden(url: &str) -> Result<()> {
 /// Extracts the host from a fetch URL as a [`http_proxy::HostPattern`] so it can
 /// be matched against the shared network grants. Mirrors the scheme handling in
 /// [`normalize_url`] (defaulting to `https://` when none is given).
-fn host_pattern_for_url(url: &str) -> Result<http_proxy::HostPattern> {
+pub(crate) fn host_pattern_for_url(url: &str) -> Result<http_proxy::HostPattern> {
     let normalized = normalize_url(url);
     let parsed =
         url::Url::parse(&normalized).with_context(|| format!("could not parse URL {url:?}"))?;

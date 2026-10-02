@@ -223,6 +223,71 @@ impl AgentTool for VerifyTool {
     }
 }
 
+const SECOND_OPINION_INSTRUCTIONS: &str = "You are a second opinion. Another AI model answered the person's question below. Read the question and the answer, then say plainly, in under 200 words: what in the answer is right, what is wrong or missing (be specific), and what you would answer differently. If the answer is sound, say so in one line. Don't flatter and don't invent problems.";
+
+/// A second opinion on any reply: the question and the answer go to a model
+/// from a different family than the one that answered, and its view comes
+/// back with its name. Returns the reviewer's name and its reply.
+pub fn second_opinion(
+    question: String,
+    answer: String,
+    author: Option<Arc<dyn LanguageModel>>,
+    thread: Option<String>,
+    cx: &mut App,
+) -> Task<anyhow::Result<(String, String)>> {
+    let reviewer = choose_reviewer(author.as_ref(), cx);
+    let same_family = match (&author, &reviewer) {
+        (Some(author), Some(reviewer)) => family(&author.id().0) == family(&reviewer.id().0),
+        _ => false,
+    };
+    let Some(reviewer) = reviewer else {
+        return Task::ready(Err(anyhow::anyhow!("no other model is available")));
+    };
+    if let Err(error) = crate::trust::check_model_allowed(reviewer.as_ref(), cx) {
+        return Task::ready(Err(error));
+    }
+    const MAX_CHARS: usize = 40_000;
+    let clip = |text: String| -> String {
+        if text.chars().count() <= MAX_CHARS {
+            text
+        } else {
+            text.chars().take(MAX_CHARS).collect::<String>() + "\n[cut]"
+        }
+    };
+    let prompt = format!(
+        "# the question\n\n{}\n\n# the answer\n\n{}",
+        clip(question),
+        clip(answer)
+    );
+    let request = LanguageModelRequest {
+        intent: Some(CompletionIntent::Subagent),
+        messages: vec![
+            LanguageModelRequestMessage {
+                role: Role::System,
+                content: vec![SECOND_OPINION_INSTRUCTIONS.into()],
+                cache: false,
+                reasoning_details: None,
+            },
+            LanguageModelRequestMessage {
+                role: Role::User,
+                content: vec![prompt.into()],
+                cache: false,
+                reasoning_details: None,
+            },
+        ],
+        thinking_allowed: false,
+        ..Default::default()
+    };
+    cx.spawn(async move |cx| {
+        let text = review_with(&reviewer, request, thread, cx).await?;
+        let mut name = reviewer.name().0.to_string();
+        if same_family {
+            name.push_str(" (same family as the answer: no other family is available)");
+        }
+        Ok((name, text.trim().to_string()))
+    })
+}
+
 async fn review_with(
     model: &Arc<dyn LanguageModel>,
     request: LanguageModelRequest,

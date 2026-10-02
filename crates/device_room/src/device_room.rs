@@ -96,13 +96,40 @@ struct Intel {
     startup: Vec<StartupItem>,
     ports: Vec<ListeningPort>,
     watchers: Vec<Watcher>,
+    extensions: Vec<noah_device::drawer::Extension>,
+}
+
+/// The drawer as the room shows it: the machine now, and what differs from
+/// the baseline the person last accepted.
+struct DrawerState {
+    now: noah_device::drawer::Snapshot,
+    drawer: noah_device::drawer::Drawer,
+    baseline_exists: bool,
+}
+
+impl DrawerState {
+    fn from_intel(intel: &Intel) -> Self {
+        let now = noah_device::drawer::snapshot(
+            &intel.apps,
+            &intel.startup,
+            &intel.ports,
+            &intel.extensions,
+        );
+        let baseline = noah_device::drawer::load(&noah_device::drawer::path());
+        let drawer = noah_device::drawer::compare(baseline.as_ref(), &now);
+        Self {
+            now,
+            drawer,
+            baseline_exists: baseline.is_some(),
+        }
+    }
 }
 
 impl Intel {
     fn gather() -> Self {
         // Each source is its own set of commands; together they take a
         // while, so they run side by side.
-        let (traffic, apps, wifi, bluetooth, location, startup, ports) =
+        let (traffic, apps, wifi, bluetooth, location, startup, ports, extensions) =
             std::thread::scope(|scope| {
                 let traffic = scope.spawn(intel::traffic_report);
                 let apps = scope.spawn(intel::installed_apps);
@@ -111,6 +138,7 @@ impl Intel {
                 let location = scope.spawn(intel::location_report);
                 let startup = scope.spawn(noah_device::startup::startup_items);
                 let ports = scope.spawn(noah_device::checks::listening_ports);
+                let extensions = scope.spawn(noah_device::drawer::browser_extensions);
                 (
                     traffic.join().unwrap_or_default(),
                     apps.join().unwrap_or_default(),
@@ -119,6 +147,7 @@ impl Intel {
                     location.join().unwrap_or_default(),
                     startup.join().unwrap_or_default(),
                     ports.join().unwrap_or_default(),
+                    extensions.join().unwrap_or_default(),
                 )
             });
         let neighbours = intel::neighbours(wifi.gateway);
@@ -133,6 +162,7 @@ impl Intel {
             startup,
             ports,
             watchers,
+            extensions,
         }
     }
 
@@ -175,6 +205,13 @@ pub struct DevicePanel {
     message: Option<SharedString>,
     show_all_startup: bool,
     intel: Option<Intel>,
+    /// What arrived on the machine since the person last said "that's all
+    /// mine": `None` until the desk has been gathered.
+    drawer: Option<DrawerState>,
+    /// Programs whose network the person has cut off with the leash.
+    leashed: Vec<PathBuf>,
+    /// The program a leash change is waiting on, while the prompt is up.
+    leash_busy: Option<PathBuf>,
     expanded_flows: HashSet<String>,
     show_all_flows: bool,
     show_all_apps: bool,
@@ -214,6 +251,9 @@ impl DevicePanel {
                 message: None,
                 show_all_startup: false,
                 intel: None,
+                drawer: None,
+                leashed: Vec::new(),
+                leash_busy: None,
                 expanded_flows: HashSet::new(),
                 show_all_flows: false,
                 show_all_apps: false,
@@ -259,9 +299,16 @@ impl DevicePanel {
     /// stays open, reads the live connections again every so often.
     fn gather_intel(&mut self, cx: &mut Context<Self>) {
         self._intel_task = Some(cx.spawn(async move |this, cx| {
-            let intel = cx.background_spawn(async { Intel::gather() }).await;
+            let (intel, drawer) = cx
+                .background_spawn(async {
+                    let intel = Intel::gather();
+                    let drawer = DrawerState::from_intel(&intel);
+                    (intel, drawer)
+                })
+                .await;
             this.update(cx, |this, cx| {
                 this.intel = Some(intel);
+                this.drawer = Some(drawer);
                 cx.notify();
                 this.start_traffic_monitor(cx);
             })
@@ -366,12 +413,13 @@ impl DevicePanel {
         self.gather_intel(cx);
         self.refresh_ad_blocker(cx);
         self._checks_task = Some(cx.spawn(async move |this, cx| {
-            let (checks, ports, startup) = cx
+            let (checks, ports, startup, leashed) = cx
                 .background_spawn(async {
                     (
                         noah_device::checks::run_security_checks(),
                         noah_device::checks::listening_ports(),
                         noah_device::startup::startup_items(),
+                        noah_device::leash::leashed(),
                     )
                 })
                 .await;
@@ -379,6 +427,7 @@ impl DevicePanel {
                 this.checks = Some(checks);
                 this.ports = ports;
                 this.startup = startup;
+                this.leashed = leashed;
                 cx.notify();
             })
             .log_err();
@@ -1044,7 +1093,35 @@ impl DevicePanel {
         );
         if expanded {
             if let Some(exe) = &flow.exe {
-                entry = entry.child(muted(exe.display().to_string()));
+                let on_leash = self.leashed.contains(exe);
+                let busy = self.leash_busy.as_ref() == Some(exe);
+                let exe_for_click = exe.clone();
+                entry = entry.child(
+                    h_flex()
+                        .gap_2()
+                        .child(muted(exe.display().to_string()))
+                        .child(div().flex_1())
+                        .child(if noah_device::leash::supported() {
+                            Button::new(
+                                ("device-leash", index),
+                                if busy {
+                                    "waiting for the prompt…"
+                                } else if on_leash {
+                                    "let it go"
+                                } else {
+                                    "leash: block its network"
+                                },
+                            )
+                            .label_size(LabelSize::XSmall)
+                            .disabled(busy)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.toggle_leash(exe_for_click.clone(), cx)
+                            }))
+                            .into_any_element()
+                        } else {
+                            muted(noah_device::leash::unsupported_reason()).into_any_element()
+                        }),
+                );
             }
             for destination in &flow.destinations {
                 let kind_color = match destination.kind {
@@ -1601,6 +1678,126 @@ impl DevicePanel {
         section
     }
 
+    /// Puts a program on the leash, or lets it go, through the system's
+    /// administrator prompt; the list is read back from the firewall after.
+    fn toggle_leash(&mut self, exe: PathBuf, cx: &mut Context<Self>) {
+        if self.leash_busy.is_some() {
+            return;
+        }
+        let on_leash = self.leashed.contains(&exe);
+        self.leash_busy = Some(exe.clone());
+        self.message = None;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn({
+                    let exe = exe.clone();
+                    async move {
+                        let result = if on_leash {
+                            noah_device::leash::unleash(&exe)
+                        } else {
+                            noah_device::leash::leash(&exe)
+                        };
+                        (result, noah_device::leash::leashed())
+                    }
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                let (result, leashed) = result;
+                this.leash_busy = None;
+                this.leashed = leashed;
+                this.message = Some(match result {
+                    Ok(()) if on_leash => format!("{} can reach the network again", exe.display()).into(),
+                    Ok(()) => format!("{} is cut off from the network until you let it go", exe.display()).into(),
+                    Err(error) => format!("{error:#}").into(),
+                });
+                cx.notify();
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
+    /// "That's all mine": the machine as it is now becomes the baseline the
+    /// drawer compares against from here on.
+    fn accept_drawer(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.drawer.as_mut() else {
+            return;
+        };
+        let mut baseline = state.now.clone();
+        baseline.taken = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        match noah_device::drawer::save(&noah_device::drawer::path(), &baseline) {
+            Ok(()) => {
+                state.drawer = noah_device::drawer::compare(Some(&baseline), &state.now);
+                state.baseline_exists = true;
+                self.message = None;
+            }
+            Err(error) => {
+                self.message = Some(format!("couldn't keep the baseline: {error:#}").into());
+            }
+        }
+        cx.notify();
+    }
+
+    fn render_drawer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut section = section("the drawer: what is here that you did not put here");
+        let Some(state) = &self.drawer else {
+            return section.child(muted("looking…"));
+        };
+        let accept = |label: &'static str| {
+            Button::new("device-drawer-accept", label)
+                .label_size(LabelSize::Small)
+                .on_click(cx.listener(|this, _, _, cx| this.accept_drawer(cx)))
+        };
+        if !state.baseline_exists {
+            return section
+                .child(muted(format!(
+                    "{} programs, {} startup items, {} open ports and {} browser extensions right now. press the button once you have looked them over; from then on the drawer shows only what arrives.",
+                    state.now.apps.len(),
+                    state.now.startup.len(),
+                    state.now.ports.len(),
+                    state.now.extensions.len()
+                )))
+                .child(accept("that's all mine"));
+        }
+        let since = state
+            .drawer
+            .since
+            .as_deref()
+            .map(|taken| taken.chars().take(10).collect::<String>())
+            .unwrap_or_default();
+        if state.drawer.is_empty() {
+            return section.child(muted(format!("nothing new since {since}")));
+        }
+        section = section.child(muted(format!(
+            "{} change{} since {since}",
+            state.drawer.count(),
+            if state.drawer.count() == 1 { "" } else { "s" }
+        )));
+        let groups: [(&str, &Vec<String>, Color); 7] = [
+            ("new program", &state.drawer.new_apps, Color::Warning),
+            ("program gone", &state.drawer.gone_apps, Color::Muted),
+            ("now starts with the device", &state.drawer.new_startup, Color::Warning),
+            ("no longer starts with the device", &state.drawer.gone_startup, Color::Muted),
+            ("new open port", &state.drawer.new_ports, Color::Warning),
+            ("new browser extension", &state.drawer.new_extensions, Color::Warning),
+            ("browser extension gone", &state.drawer.gone_extensions, Color::Muted),
+        ];
+        for (label, items, color) in groups {
+            for item in items.iter().take(20) {
+                section = section.child(
+                    h_flex()
+                        .gap_2()
+                        .child(Label::new(label).size(LabelSize::XSmall).color(color))
+                        .child(Label::new(item.clone()).size(LabelSize::Small)),
+                );
+            }
+            if items.len() > 20 {
+                section = section.child(muted(format!("… and {} more", items.len() - 20)));
+            }
+        }
+        section.child(accept("that's all mine: start again from now"))
+    }
+
     fn render_startup(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut section = section("starts with the device");
         if self.checks.is_none() {
@@ -2137,6 +2334,8 @@ impl Render for DevicePanel {
             .child(self.render_ports())
             .child(Divider::horizontal())
             .child(self.render_startup(cx))
+            .child(Divider::horizontal())
+            .child(self.render_drawer(cx))
             .child(Divider::horizontal())
             .child(self.render_ad_blocker(cx))
             .child(Divider::horizontal())

@@ -114,6 +114,20 @@ pub fn brokered_secrets(cx: &App) -> Vec<(String, String)> {
 }
 
 pub fn set_brokered_secrets(secrets: Vec<(String, String)>, cx: &mut App) {
+    // The shield's one-way clipboard swaps a pasted secret for its `$NAME`;
+    // it learns only salted hashes, written here whenever the store changes.
+    cx.background_spawn({
+        let secrets = secrets.clone();
+        async move {
+            if let Err(error) = noah_trust::secrets::write_fingerprints(
+                &paths::shield_secret_fingerprints_file(),
+                &secrets,
+            ) {
+                log::error!("couldn't write the shield's secret fingerprints: {error:#}");
+            }
+        }
+    })
+    .detach();
     cx.default_global::<TrustState>().secrets = secrets;
 }
 
@@ -1059,6 +1073,15 @@ pub fn untrusted_sources(thread: EntityId, cx: &App) -> Vec<String> {
 fn record_host(thread: EntityId, host: String, cx: &mut App) {
     let state = cx.default_global::<TrustState>();
     push_unique(&mut state.threads.entry(thread).or_default().hosts, host);
+}
+
+/// The model a thread runs on, as last recorded, for the cost tool.
+pub fn thread_model(thread: EntityId, cx: &App) -> Option<ThreadModelInfo> {
+    cx.try_global::<TrustState>()?
+        .threads
+        .get(&thread)?
+        .model
+        .clone()
 }
 
 /// "this plan will likely cost $0.40–$1.10 on <model>", for a plan of

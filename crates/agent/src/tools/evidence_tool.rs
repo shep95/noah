@@ -43,6 +43,16 @@ use crate::{AgentTool, ToolCallEventStream, ToolInput};
 ///   at a time, and run the tests after each. A bug the tests don't catch
 ///   shows behavior no test checks; add a test for it. The file is always
 ///   restored.
+/// - `replay`: run every command a saved bundle recorded, in the same
+///   folders, and compare each exit code and output tail with what was
+///   recorded then: one call answers "did this stay true". Give `bundle`
+///   (an id from `.noah/evidence/`, or `latest`).
+/// - `contract`: turns the spec's invariants (`INV-n` in `.noah/spec.md`)
+///   into executable truth. It returns each invariant with what to do: write
+///   one property-based test per invariant (proptest, hypothesis,
+///   fast-check, or the project's own), named after its id, run them, then
+///   `mutate` the code each one guards to show the test catches a break.
+///   Cite the runs for each `INV-n` in `finish`.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EvidenceToolInput {
     pub action: EvidenceAction,
@@ -88,6 +98,10 @@ pub struct EvidenceToolInput {
     /// For `mutate`: most mutants to try (default 8, at most 30).
     #[serde(default)]
     pub limit: Option<usize>,
+    /// For `replay`: the bundle id (the file name under `.noah/evidence/`
+    /// without `.json`), or `latest`.
+    #[serde(default)]
+    pub bundle: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -96,6 +110,8 @@ pub enum EvidenceAction {
     Finish,
     Repeat,
     Mutate,
+    Replay,
+    Contract,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -161,6 +177,12 @@ impl AgentTool for EvidenceTool {
                     MarkdownInlineCode(input.path.as_deref().unwrap_or(""))
                 )
                 .into(),
+                EvidenceAction::Contract => "evidence: the spec's invariants as tests".into(),
+                EvidenceAction::Replay => format!(
+                    "evidence: replay {}",
+                    MarkdownInlineCode(input.bundle.as_deref().unwrap_or("latest"))
+                )
+                .into(),
             },
             Err(_) => "evidence".into(),
         }
@@ -182,6 +204,8 @@ impl AgentTool for EvidenceTool {
                 EvidenceAction::Finish => finish(input, root, &event_stream, cx).await,
                 EvidenceAction::Repeat => repeat(input, root, &event_stream, cx).await,
                 EvidenceAction::Mutate => mutate(input, root, &event_stream, cx).await,
+                EvidenceAction::Replay => replay(input, root, &event_stream, cx).await,
+                EvidenceAction::Contract => contract(&root),
             }
         })
     }
@@ -541,6 +565,228 @@ async fn repeat(
     ))
 }
 
+/// What the spec promises always holds, with the instructions to make each
+/// promise a test that runs.
+fn contract(root: &Path) -> Result<String, String> {
+    let path = project_files::path(root, project_files::SPEC);
+    let text = std::fs::read_to_string(&path).map_err(|_| {
+        "this project has no spec yet (.noah/spec.md); write its invariants first".to_string()
+    })?;
+    let spec = Spec::parse(&text);
+    let invariants: Vec<_> = spec
+        .clauses
+        .iter()
+        .filter(|clause| clause.kind == noah_trust::spec::ClauseKind::Invariant)
+        .collect();
+    if invariants.is_empty() {
+        return Err(
+            "the spec lists no invariants (`INV-n` under an \"invariants\" heading); add the things that must always hold, then ask again"
+                .to_string(),
+        );
+    }
+    let mut out = format!(
+        "{} invariant{} to turn into tests:\n",
+        invariants.len(),
+        if invariants.len() == 1 { "" } else { "s" }
+    );
+    for clause in &invariants {
+        out.push_str(&format!("\n- {}: {}", clause.id, clause.text));
+    }
+    out.push_str(
+        "\n\nfor each one: write a property-based test named after its id (for example `inv_1_...`) that generates many inputs and asserts the invariant, using the project's property-testing library or adding one; run it in the terminal; then `mutate` the code it guards to show the test fails when the invariant breaks. an invariant you can't express as a test goes under not_verified in `finish`, with why.",
+    );
+    Ok(out)
+}
+
+/// A bundle by id, or the newest one; the id is a file name, so it must be
+/// a plain name and nothing that walks out of the evidence folder.
+fn load_bundle(root: &Path, wanted: &str) -> Result<Bundle, String> {
+    let directory = project_files::path(root, project_files::EVIDENCE);
+    let wanted = wanted.trim().trim_end_matches(".json").trim_end_matches(".md");
+    let path = if wanted.is_empty() || wanted == "latest" {
+        let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+        let entries = std::fs::read_dir(&directory)
+            .map_err(|_| "no evidence has been saved in this project yet".to_string())?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|extension| extension == "json")
+                && let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified())
+                && newest.as_ref().is_none_or(|(when, _)| modified > *when)
+            {
+                newest = Some((modified, path));
+            }
+        }
+        newest
+            .map(|(_, path)| path)
+            .ok_or_else(|| "no evidence has been saved in this project yet".to_string())?
+    } else {
+        if wanted
+            .chars()
+            .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+            || wanted.contains("..")
+        {
+            return Err(format!("`{wanted}` is not a bundle id"));
+        }
+        directory.join(format!("{wanted}.json"))
+    };
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("couldn't read {}: {error}", path.display()))?;
+    serde_json::from_str(&text).map_err(|error| format!("{} is not a bundle: {error}", path.display()))
+}
+
+/// The folder a recorded check ran in, when it is still inside the project;
+/// anything else replays from the root.
+fn replay_directory(root: &Path, recorded: Option<&str>) -> PathBuf {
+    let Some(recorded) = recorded else {
+        return root.to_path_buf();
+    };
+    let recorded = PathBuf::from(recorded);
+    if recorded.is_dir() && recorded.starts_with(root) {
+        recorded
+    } else {
+        root.to_path_buf()
+    }
+}
+
+/// Lines in `then` that are not in `now` and the reverse, ignoring the
+/// "earlier lines not shown" marker and timing-looking noise (durations,
+/// timestamps), capped so a changed log doesn't flood the reply.
+pub(crate) fn tail_difference(then: &str, now: &str) -> Vec<String> {
+    const MAX_LINES: usize = 20;
+    fn normalise(line: &str) -> Option<String> {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('…') {
+            return None;
+        }
+        let mut out = String::with_capacity(line.len());
+        let mut in_number = false;
+        for c in line.chars() {
+            if c.is_ascii_digit() || (in_number && c == '.') {
+                if !in_number {
+                    out.push('#');
+                    in_number = true;
+                }
+            } else {
+                in_number = false;
+                out.push(c);
+            }
+        }
+        Some(out)
+    }
+    let then_lines: Vec<String> = then.lines().filter_map(normalise).collect();
+    let now_lines: Vec<String> = now.lines().filter_map(normalise).collect();
+    let mut difference = Vec::new();
+    for line in &then_lines {
+        if !now_lines.contains(line) {
+            difference.push(format!("- {line}"));
+        }
+    }
+    for line in &now_lines {
+        if !then_lines.contains(line) {
+            difference.push(format!("+ {line}"));
+        }
+    }
+    if difference.len() > MAX_LINES {
+        let hidden = difference.len() - MAX_LINES;
+        difference.truncate(MAX_LINES);
+        difference.push(format!("… {hidden} more changed lines"));
+    }
+    difference
+}
+
+async fn replay(
+    input: EvidenceToolInput,
+    root: PathBuf,
+    event_stream: &ToolCallEventStream,
+    cx: &mut AsyncApp,
+) -> Result<String, String> {
+    let bundle = load_bundle(&root, input.bundle.as_deref().unwrap_or("latest"))?;
+    if bundle.checks.is_empty() {
+        return Err(format!("bundle {} recorded no commands to replay", bundle.id));
+    }
+    let known_secrets = cx.update(|cx| crate::trust::brokered_secrets(cx));
+    let total = bundle.checks.len();
+    let mut held = 0usize;
+    let mut lines: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
+    for (index, recorded) in bundle.checks.iter().enumerate() {
+        if event_stream.was_cancelled_by_user() {
+            return Err("cancelled".to_string());
+        }
+        event_stream.update_fields(acp::ToolCallUpdateFields::new().title(format!(
+            "evidence: replay {} ({} of {total}, {held} held)",
+            bundle.id,
+            index + 1
+        )));
+        if let Err(reason) =
+            authorize_command(&recorded.command, "replay", event_stream, cx).await
+        {
+            lines.push(format!(
+                "· `{}` ({}): skipped, {reason}",
+                recorded.command, recorded.id
+            ));
+            continue;
+        }
+        let directory = replay_directory(&root, recorded.working_directory.as_deref());
+        let (code, output, elapsed) = run_shell(&recorded.command, &directory, cx).await;
+        let output = noah_trust::secrets::redact(&output, &known_secrets).text;
+        let now_tail = evidence::tail(&output, 40);
+        let same_exit = code == recorded.exit_code;
+        let difference = tail_difference(&recorded.output_tail, &now_tail);
+        let stayed = same_exit && difference.is_empty();
+        if stayed {
+            held += 1;
+        }
+        let id = cx.update(|cx| {
+            event_stream.thread_entity_id().map(|thread| {
+                crate::trust::record_check(
+                    thread,
+                    Check {
+                        id: String::new(),
+                        command: noah_trust::secrets::redact(&recorded.command, &known_secrets)
+                            .text,
+                        exit_code: code,
+                        duration_ms: elapsed.as_millis() as u64,
+                        output_tail: now_tail.clone(),
+                        working_directory: Some(directory.display().to_string()),
+                        repeat: None,
+                    },
+                    cx,
+                )
+            })
+        });
+        if let Some(id) = &id {
+            ids.push(id.clone());
+        }
+        let exit_text = |code: Option<i32>| code.map_or("none".to_string(), |code| code.to_string());
+        let mut line = format!(
+            "{} `{}` ({} → {}): exit {} then, {} now",
+            if stayed { "✓" } else { "✗" },
+            recorded.command,
+            recorded.id,
+            id.as_deref().unwrap_or("not recorded"),
+            exit_text(recorded.exit_code),
+            exit_text(code)
+        );
+        if !difference.is_empty() {
+            line.push_str("\n  output changed:\n  ");
+            line.push_str(&difference.join("\n  "));
+        }
+        lines.push(line);
+    }
+    let verdict = if held == total {
+        format!("every one of the {total} recorded commands still ends the same way")
+    } else {
+        format!("{held} of {total} recorded commands still end the same way; the rest changed")
+    };
+    Ok(format!(
+        "replayed bundle {} ({}): {verdict}\n\n{}",
+        bundle.id,
+        bundle.title,
+        lines.join("\n")
+    ))
+}
+
 /// Puts the original file back when dropped, so a crash or cancellation in
 /// the middle of mutation testing never leaves a bug behind.
 struct RestoreOnDrop {
@@ -679,4 +925,36 @@ async fn mutate(
         id.map(|id| format!("\n\n[evidence {id}]"))
             .unwrap_or_default()
     ))
+}
+
+#[cfg(test)]
+mod replay_tests {
+    use super::*;
+
+    #[test]
+    fn tail_difference_ignores_numbers_and_the_elided_marker() {
+        let then = "… 3 earlier lines not shown\ntest result: ok. 12 passed in 0.31s\n";
+        let now = "test result: ok. 14 passed in 1.02s\n";
+        assert!(tail_difference(then, now).is_empty());
+        let broken = "test result: FAILED. 1 failed\n";
+        let difference = tail_difference(then, broken);
+        assert_eq!(difference.len(), 2, "{difference:?}");
+    }
+
+    #[test]
+    fn bundle_ids_are_file_names_only() {
+        let root = tempfile::tempdir().expect("tempdir");
+        assert!(load_bundle(root.path(), "../outside").is_err());
+        assert!(load_bundle(root.path(), "latest").is_err());
+    }
+
+    #[test]
+    fn recorded_folders_outside_the_project_replay_from_the_root() {
+        let root = tempfile::tempdir().expect("tempdir");
+        assert_eq!(replay_directory(root.path(), Some("/")), root.path());
+        assert_eq!(replay_directory(root.path(), None), root.path());
+        let inside = root.path().join("sub");
+        std::fs::create_dir(&inside).expect("mkdir");
+        assert_eq!(replay_directory(root.path(), inside.to_str()), inside);
+    }
 }

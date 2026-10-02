@@ -20,3 +20,4 @@ pub mod rules_check;
 pub mod secrets;
 pub mod shield_reports;
 pub mod spec;
+pub mod timeline;

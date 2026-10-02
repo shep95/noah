@@ -121,6 +121,23 @@ fn handle(message: &Value) -> Result<Value> {
                 .with_context(|| format!("couldn't place {}", target.display()))?;
             Ok(json!({ "ok": true, "path": target.display().to_string() }))
         }
+        // The one-way clipboard: names and salted hashes of the person's
+        // stored secrets, so the shield can put `$NAME` where a secret was
+        // pasted. The values never leave noah.
+        "secrets.fingerprints" => {
+            let path = paths::shield_secret_fingerprints_file();
+            let text = match std::fs::metadata(&path) {
+                Ok(metadata) if metadata.len() <= MAX_REPORT_BYTES as u64 => {
+                    std::fs::read_to_string(&path)
+                        .with_context(|| format!("couldn't read {}", path.display()))?
+                }
+                Ok(_) => anyhow::bail!("the fingerprint file is too large"),
+                Err(_) => return Ok(json!({ "salt": "", "secrets": [] })),
+            };
+            let fingerprints: Value =
+                serde_json::from_str(&text).context("the fingerprint file is not json")?;
+            Ok(fingerprints)
+        }
         "agent.prompt" => {
             let prompt = message
                 .get("prompt")

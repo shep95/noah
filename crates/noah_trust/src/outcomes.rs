@@ -37,7 +37,7 @@ impl Commit {
         })
     }
 
-    fn reverted_hash(&self) -> Option<&str> {
+    pub fn reverted_hash(&self) -> Option<&str> {
         let marker = "This reverts commit ";
         let start = self.body.find(marker)? + marker.len();
         let hash = self.body[start..].split(|c: char| !c.is_ascii_hexdigit()).next()?;

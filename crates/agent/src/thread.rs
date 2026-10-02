@@ -2179,6 +2179,7 @@ impl Thread {
             language_registry,
         ));
         self.add_tool(FetchTool::new(self.project.read(cx).client().http_client()));
+        self.add_tool(crate::FootprintTool::new(self.project.read(cx).client().http_client()));
         self.add_tool(FindPathTool::new(self.project.clone()));
         self.add_tool(GrepTool::new(self.project.clone()));
         self.add_tool(ListDirectoryTool::new(self.project.clone()));
@@ -2205,6 +2206,8 @@ impl Thread {
         self.add_tool(RunAddonTool::new(self.project.clone()));
         self.add_tool(ListAddonsTool::new(self.project.clone()));
         self.add_tool(crate::BrainTool);
+        self.add_tool(crate::CostOfTool);
+        self.add_tool(crate::ExplainDiffTool::new(self.project.clone()));
         self.add_tool(CodebaseTool::new(self.project.clone()));
 
         self.add_tool(AskUserTool);
