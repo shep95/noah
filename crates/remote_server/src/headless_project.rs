@@ -330,7 +330,7 @@ impl HeadlessProject {
 
         BufferStore::init(&session);
         WorktreeStore::init(&session);
-        SettingsObserver::init(&session);
+        SettingsObserver::init_for_remote_server(&session);
         LspStore::init(&session);
         TaskStore::init(Some(&session));
         ToolchainStore::init(&session);

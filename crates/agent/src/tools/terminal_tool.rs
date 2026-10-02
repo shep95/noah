@@ -413,7 +413,10 @@ async fn run_terminal_tool(
     // Irreversible commands always ask, even when the terminal is allowed,
     // and say what they would destroy.
     let irreversible = noah_trust::blast_radius::classify(&input.command);
-    let deletion_preview = match (&irreversible, cx.update(|cx| working_dir(&input.cd, &project, cx))) {
+    let deletion_preview = match (
+        &irreversible,
+        cx.update(|cx| working_dir(&input.cd, &project, cx)),
+    ) {
         (Some(found), Ok(Some(directory))) if found.kind == "recursive delete" => {
             let command = input.command.clone();
             cx.background_spawn(async move {
@@ -440,10 +443,7 @@ async fn run_terminal_tool(
                     if let crate::ToolPermissionDecision::Deny(reason) = decision {
                         Task::ready(Err(anyhow::anyhow!(reason)))
                     } else {
-                        let mut title = format!(
-                            "irreversible {}: {}",
-                            found.kind, found.effect
-                        );
+                        let mut title = format!("irreversible {}: {}", found.kind, found.effect);
                         if let Some(preview) = &deletion_preview {
                             title.push_str(&format!(". this deletes {preview}"));
                         }
@@ -1070,7 +1070,10 @@ async fn run_terminal_tool(
 
     let output = terminal.current_output(cx).map_err(|e| e.to_string())?;
 
-    let exit_code = output.exit_status.as_ref().and_then(|status| status.exit_code);
+    let exit_code = output
+        .exit_status
+        .as_ref()
+        .and_then(|status| status.exit_code);
     let check_output = output.output.clone();
     let check_id = cx.update(|cx| {
         let thread = event_stream.thread_entity_id()?;

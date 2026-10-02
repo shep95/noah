@@ -8,7 +8,8 @@ use futures::FutureExt as _;
 use gpui::{App, AppContext as _, AsyncApp, Entity, Task};
 use noah_trust::{
     evidence::{self, Bundle, Check, Claim, FileConfidence, RepeatResult, RunFingerprint},
-    mutation, project_files, provenance, spec::Spec,
+    mutation, project_files, provenance,
+    spec::Spec,
 };
 use project::Project;
 use schemars::JsonSchema;
@@ -146,11 +147,9 @@ impl AgentTool for EvidenceTool {
     ) -> SharedString {
         match input {
             Ok(input) => match input.action {
-                EvidenceAction::Finish => format!(
-                    "evidence: {}",
-                    input.title.as_deref().unwrap_or("finish")
-                )
-                .into(),
+                EvidenceAction::Finish => {
+                    format!("evidence: {}", input.title.as_deref().unwrap_or("finish")).into()
+                }
                 EvidenceAction::Repeat => format!(
                     "evidence: run {} ×{}",
                     MarkdownInlineCode(input.command.as_deref().unwrap_or("")),
@@ -288,14 +287,15 @@ async fn finish(
             if let Ok(spec_text) = std::fs::read_to_string(&spec_path) {
                 let spec = Spec::parse(&spec_text);
                 for unknown in spec.unknown_ids(&bundle.spec_clauses) {
-                    bundle
-                        .warnings
-                        .push(format!("cites spec clause {unknown}, which the spec doesn't have"));
+                    bundle.warnings.push(format!(
+                        "cites spec clause {unknown}, which the spec doesn't have"
+                    ));
                 }
             }
             if bundle.checks.is_empty() {
                 bundle.warnings.push(
-                    "no commands ran in this conversation, so nothing here was executed".to_string(),
+                    "no commands ran in this conversation, so nothing here was executed"
+                        .to_string(),
                 );
             }
             if bundle.not_verified.is_empty() {
@@ -536,7 +536,8 @@ async fn repeat(
     };
     Ok(format!(
         "`{command}` ×{times}: {verdict}\n\n```\n{output_tail}\n```{}",
-        id.map(|id| format!("\n\n[evidence {id}]")).unwrap_or_default()
+        id.map(|id| format!("\n\n[evidence {id}]"))
+            .unwrap_or_default()
     ))
 }
 
@@ -675,6 +676,7 @@ async fn mutate(
     });
     Ok(format!(
         "{report}{}",
-        id.map(|id| format!("\n\n[evidence {id}]")).unwrap_or_default()
+        id.map(|id| format!("\n\n[evidence {id}]"))
+            .unwrap_or_default()
     ))
 }

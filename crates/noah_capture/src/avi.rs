@@ -37,7 +37,8 @@ const MOVI_SIZE_AT: u64 = 216;
 
 impl AviWriter {
     pub fn create(path: &Path, width: u32, height: u32) -> Result<Self> {
-        let file = File::create(path).with_context(|| format!("couldn't create {}", path.display()))?;
+        let file =
+            File::create(path).with_context(|| format!("couldn't create {}", path.display()))?;
         let mut file = BufWriter::new(file);
         let mut header = Vec::with_capacity(224);
         header.extend_from_slice(b"RIFF");
@@ -81,14 +82,14 @@ impl AviWriter {
         header.extend_from_slice(&0u16.to_le_bytes()); // priority
         header.extend_from_slice(&0u16.to_le_bytes()); // language
         for value in [
-            0u32, // initial frames
-            1,    // scale, patched
-            10,   // rate, patched
-            0,    // start
-            0,    // length, patched
-            0,    // suggested buffer size, patched
+            0u32,     // initial frames
+            1,        // scale, patched
+            10,       // rate, patched
+            0,        // start
+            0,        // length, patched
+            0,        // suggested buffer size, patched
             u32::MAX, // quality: default
-            0,    // sample size
+            0,        // sample size
         ] {
             header.extend_from_slice(&value.to_le_bytes());
         }
@@ -203,8 +204,12 @@ mod tests {
         let directory = tempfile::tempdir().expect("tempdir");
         let path = directory.path().join("clip.avi");
         let mut writer = AviWriter::create(&path, 64, 48).expect("create");
-        writer.write_frame(&[0xFF, 0xD8, 1, 0xFF, 0xD9]).expect("frame");
-        writer.write_frame(&[0xFF, 0xD8, 2, 2, 0xFF, 0xD9]).expect("frame");
+        writer
+            .write_frame(&[0xFF, 0xD8, 1, 0xFF, 0xD9])
+            .expect("frame");
+        writer
+            .write_frame(&[0xFF, 0xD8, 2, 2, 0xFF, 0xD9])
+            .expect("frame");
         writer.finish(Duration::from_millis(200)).expect("finish");
 
         let bytes = std::fs::read(&path).expect("read");

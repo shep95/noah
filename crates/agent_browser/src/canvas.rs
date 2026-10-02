@@ -121,7 +121,7 @@ fn serve_static(root: PathBuf) -> Result<u16> {
                     .iter()
                     .find(|header| header.field.equiv("Host"))
                     .map(|header| host_is_local(header.value.as_str()))
-                    .unwrap_or(false);
+                    .unwrap_or(true);
                 let raw = request
                     .url()
                     .split(['?', '#'])
@@ -197,8 +197,15 @@ fn serve_static(root: PathBuf) -> Result<u16> {
 const MAX_SERVED_BYTES: u64 = 64 * 1024 * 1024;
 
 fn host_is_local(host: &str) -> bool {
-    let name = host.rsplit_once(':').map(|(name, _)| name).unwrap_or(host);
-    matches!(name, "127.0.0.1" | "localhost" | "[::1]")
+    let host = host.trim().to_ascii_lowercase();
+    let name = if let Some(rest) = host.strip_prefix('[') {
+        // An IPv6 literal, with or without a port: `[::1]` or `[::1]:8080`.
+        rest.split(']').next().unwrap_or("")
+    } else {
+        host.rsplit_once(':').map(|(name, _)| name).unwrap_or(&host)
+    };
+    let name = name.trim_end_matches('.');
+    name == "localhost" || name == "::1" || name.starts_with("127.")
 }
 
 fn percent_decode(text: &str) -> String {

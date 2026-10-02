@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use agent_client_protocol::schema::v1 as acp;
 use gpui::{App, AppContext as _, AsyncApp, Entity, Task};
-use settings::Settings as _;
 use noah_trust::{
     calibration, outcomes,
     packages::{Dependency, Ecosystem},
@@ -13,6 +12,7 @@ use noah_trust::{
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use settings::Settings as _;
 use ui::SharedString;
 
 use crate::{AgentTool, ToolCallEventStream, ToolInput};
@@ -164,7 +164,9 @@ impl AgentTool for CodebaseTool {
                 }
                 CodebaseAction::Packages => {
                     if offline {
-                        return Err("noah is in offline mode, so registries can't be checked".to_string());
+                        return Err(
+                            "noah is in offline mode, so registries can't be checked".to_string()
+                        );
                     }
                     let ecosystem = input
                         .ecosystem
@@ -176,7 +178,8 @@ impl AgentTool for CodebaseTool {
                         .into_iter()
                         .map(|name| Dependency { ecosystem, name })
                         .collect();
-                    let assessments = crate::trust::check_dependencies(http_client, dependencies).await;
+                    let assessments =
+                        crate::trust::check_dependencies(http_client, dependencies).await;
                     Ok(assessments
                         .iter()
                         .map(|assessment| {
@@ -207,8 +210,17 @@ async fn git(arguments: &str, root: &Path, cx: &mut AsyncApp) -> Option<String> 
 }
 
 const SKIPPED_FOLDERS: &[&str] = &[
-    ".git", "node_modules", "target", "dist", "build", ".next", "vendor", "__pycache__", ".venv",
-    "venv", ".noah",
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    "vendor",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".noah",
 ];
 
 fn walk_files(root: &Path) -> Vec<String> {
@@ -267,28 +279,53 @@ fn language_of(path: &str) -> Option<&'static str> {
 }
 
 const MANIFESTS: &[&str] = &[
-    "Cargo.toml", "package.json", "pyproject.toml", "requirements.txt", "go.mod", "pom.xml",
-    "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "mix.exs", "pubspec.yaml",
-    "Package.swift", "CMakeLists.txt", "Makefile", "Dockerfile", "docker-compose.yml",
+    "Cargo.toml",
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "Gemfile",
+    "composer.json",
+    "mix.exs",
+    "pubspec.yaml",
+    "Package.swift",
+    "CMakeLists.txt",
+    "Makefile",
+    "Dockerfile",
+    "docker-compose.yml",
 ];
 
 const ENTRY_POINTS: &[&str] = &[
-    "main.rs", "lib.rs", "main.go", "main.py", "__main__.py", "app.py", "index.ts", "index.tsx",
-    "index.js", "main.ts", "main.tsx", "server.ts", "server.js", "App.tsx", "Program.cs",
-    "Main.java", "main.c", "main.cpp",
+    "main.rs",
+    "lib.rs",
+    "main.go",
+    "main.py",
+    "__main__.py",
+    "app.py",
+    "index.ts",
+    "index.tsx",
+    "index.js",
+    "main.ts",
+    "main.tsx",
+    "server.ts",
+    "server.js",
+    "App.tsx",
+    "Program.cs",
+    "Main.java",
+    "main.c",
+    "main.cpp",
 ];
 
 const NOTES_HEADING: &str = "## notes (kept when the map is refreshed)";
 
 async fn map(root: PathBuf, cx: &mut AsyncApp) -> Result<String, String> {
     let commit = git("rev-parse --short HEAD", &root, cx).await;
-    let history = git(
-        "log -n 400 --name-only --format=%x1e",
-        &root,
-        cx,
-    )
-    .await
-    .unwrap_or_default();
+    let history = git("log -n 400 --name-only --format=%x1e", &root, cx)
+        .await
+        .unwrap_or_default();
     let tracked = git("ls-files", &root, cx).await;
     cx.background_spawn(async move {
         let files: Vec<String> = match tracked {
@@ -433,11 +470,17 @@ async fn why(input: CodebaseToolInput, root: PathBuf, cx: &mut AsyncApp) -> Resu
     cx.background_spawn(async move {
         let mut out = format!("# why `{path}:{line}`\n\n");
         match blame {
-            Some(blame) => out.push_str(&format!("## last written\n\n```\n{}\n```\n\n", blame.trim())),
+            Some(blame) => out.push_str(&format!(
+                "## last written\n\n```\n{}\n```\n\n",
+                blame.trim()
+            )),
             None => out.push_str("## last written\n\nnot in git, or not committed yet.\n\n"),
         }
         if let Some(history) = history.filter(|history| !history.trim().is_empty()) {
-            out.push_str(&format!("## commits that touched it\n\n{}\n\n", history.trim()));
+            out.push_str(&format!(
+                "## commits that touched it\n\n{}\n\n",
+                history.trim()
+            ));
         }
         let entries = provenance::read(&project_files::path(&root, project_files::PROVENANCE))
             .unwrap_or_default();
@@ -460,7 +503,8 @@ async fn why(input: CodebaseToolInput, root: PathBuf, cx: &mut AsyncApp) -> Resu
             out.push('\n');
         }
         let file_name = path.rsplit('/').next().unwrap_or(&path).to_string();
-        if let Ok(why_log) = std::fs::read_to_string(project_files::path(&root, project_files::WHY)) {
+        if let Ok(why_log) = std::fs::read_to_string(project_files::path(&root, project_files::WHY))
+        {
             let mentions: Vec<&str> = why_log
                 .lines()
                 .filter(|entry| entry.contains(&path) || entry.contains(&file_name))
@@ -560,7 +604,8 @@ pub(crate) fn rules(root: &Path) -> String {
         }
     }
     if files.is_empty() {
-        return "no agent instruction files (AGENTS.md, CLAUDE.md, .rules, ...) in this project".to_string();
+        return "no agent instruction files (AGENTS.md, CLAUDE.md, .rules, ...) in this project"
+            .to_string();
     }
     let rule_count: usize = files
         .iter()
@@ -570,7 +615,11 @@ pub(crate) fn rules(root: &Path) -> String {
     rules_check::report(&findings, files.len(), rule_count)
 }
 
-async fn plan(input: CodebaseToolInput, root: PathBuf, cx: &mut AsyncApp) -> Result<String, String> {
+async fn plan(
+    input: CodebaseToolInput,
+    root: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<String, String> {
     if input.tasks.len() < 2 {
         return Err("give at least two `tasks` with the paths each will touch".to_string());
     }
@@ -593,7 +642,11 @@ async fn plan(input: CodebaseToolInput, root: PathBuf, cx: &mut AsyncApp) -> Res
             "wave {}: {}{}\n",
             index + 1,
             wave.join(", "),
-            if wave.len() > 1 { " (can run at the same time)" } else { "" }
+            if wave.len() > 1 {
+                " (can run at the same time)"
+            } else {
+                ""
+            }
         ));
     }
     if plan.conflicts.is_empty() {

@@ -104,17 +104,29 @@ fn contained_target(root: &Path, target: &Path) -> Result<PathBuf> {
     let root = root
         .canonicalize()
         .with_context(|| format!("couldn't resolve {}", root.display()))?;
+    // Walk up without following links: a symlink anywhere on the path, a
+    // dangling one included, could carry the write elsewhere, so none is
+    // allowed on the part that exists.
     let mut existing = target.to_path_buf();
     let mut tail = Vec::new();
-    while !existing.exists() {
-        let Some(name) = existing.file_name().map(|name| name.to_owned()) else {
-            anyhow::bail!(
-                "the path `{}` has no parent inside the project",
+    loop {
+        match std::fs::symlink_metadata(&existing) {
+            Ok(metadata) if metadata.file_type().is_symlink() => anyhow::bail!(
+                "the path `{}` goes through a symlink, which noah does not write through",
                 target.display()
-            );
-        };
-        tail.push(name);
-        existing.pop();
+            ),
+            Ok(_) => break,
+            Err(_) => {
+                let Some(name) = existing.file_name().map(|name| name.to_owned()) else {
+                    anyhow::bail!(
+                        "the path `{}` has no parent inside the project",
+                        target.display()
+                    );
+                };
+                tail.push(name);
+                existing.pop();
+            }
+        }
     }
     let resolved = existing
         .canonicalize()

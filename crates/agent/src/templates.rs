@@ -113,6 +113,19 @@ impl Template for SystemPromptTemplate<'_> {
 /// source of behavioral rules, so replacing this one file replaces the agent.
 const BRAIN: &str = include_str!("../../../assets/shepherd/shepherd_brain.txt");
 
+/// The whole brain: what the prompt carries and the sections beyond it,
+/// read on demand by the `brain` tool.
+const BRAIN_FULL: &str = include_str!("../../../assets/shepherd/shepherd_brain_full.txt");
+
+/// The full brain for the `brain` tool: the person's own file when there is
+/// one (it then is the whole of it), otherwise the one built into noah.
+pub fn brain_full_text() -> std::borrow::Cow<'static, str> {
+    match std::fs::read_to_string(paths::shepherd_brain_file()) {
+        Ok(text) if !text.trim().is_empty() => std::borrow::Cow::Owned(text),
+        _ => std::borrow::Cow::Borrowed(BRAIN_FULL),
+    }
+}
+
 /// The brain shepherd thinks with: the person's own file when they have put
 /// one at [`paths::shepherd_brain_file`], otherwise the one built into noah.
 /// The built-in text never leaves the binary, so replacing it is the only way

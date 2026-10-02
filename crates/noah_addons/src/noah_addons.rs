@@ -817,10 +817,6 @@ pub fn discover(roots: &AddonRoots) -> Registry {
         None => (Vec::new(), Vec::new()),
     };
     registry.problems.extend(project_problems);
-    let project_names: HashSet<String> = project
-        .iter()
-        .map(|addon| addon.manifest.name.clone())
-        .collect();
     let global_names: HashSet<String> = global
         .iter()
         .map(|addon| addon.manifest.name.clone())
@@ -846,7 +842,6 @@ pub fn discover(roots: &AddonRoots) -> Registry {
             ..addon
         });
     }
-    let _ = project_names;
     registry
         .addons
         .sort_by(|left, right| left.manifest.name.cmp(&right.manifest.name));

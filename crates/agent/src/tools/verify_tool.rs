@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use agent_client_protocol::schema::v1 as acp;
 use gpui::{App, AppContext as _, AsyncApp, Entity, Task};
-use settings::Settings as _;
 use language_model::{
     CompletionIntent, LanguageModel, LanguageModelRegistry, LanguageModelRequest,
     LanguageModelRequestMessage, Role,
@@ -12,6 +11,7 @@ use noah_trust::project_files;
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use settings::Settings as _;
 use ui::SharedString;
 
 use crate::{AgentTool, ToolCallEventStream, ToolInput};
@@ -67,15 +67,25 @@ Up to five tests that would catch the most likely remaining bugs: property-based
 /// `qwen-2.5-72b` count as the same family and a reviewer from another one is
 /// preferred.
 fn family(model_id: &str) -> String {
-    let name = model_id.rsplit('/').next().unwrap_or(model_id).to_lowercase();
-    let letters: String = name.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+    let name = model_id
+        .rsplit('/')
+        .next()
+        .unwrap_or(model_id)
+        .to_lowercase();
+    let letters: String = name
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
     if letters.is_empty() { name } else { letters }
 }
 
 /// Picks the reviewer: the configured verifier model when set, otherwise a
 /// model from a different family than the author, preferring the same
 /// provider (already authenticated) and larger, stronger models.
-fn choose_reviewer(author: Option<&Arc<dyn LanguageModel>>, cx: &App) -> Option<Arc<dyn LanguageModel>> {
+fn choose_reviewer(
+    author: Option<&Arc<dyn LanguageModel>>,
+    cx: &App,
+) -> Option<Arc<dyn LanguageModel>> {
     let registry = LanguageModelRegistry::read_global(cx);
     let configured = agent_settings::AgentSettings::get_global(cx)
         .verifier_model
@@ -112,7 +122,11 @@ fn choose_reviewer(author: Option<&Arc<dyn LanguageModel>>, cx: &App) -> Option<
     candidates
         .first()
         .map(|model| (*model).clone())
-        .or_else(|| author.filter(|author| available.iter().any(|model| model.id() == author.id())).cloned())
+        .or_else(|| {
+            author
+                .filter(|author| available.iter().any(|model| model.id() == author.id()))
+                .cloned()
+        })
 }
 
 impl AgentTool for VerifyTool {
@@ -266,7 +280,10 @@ async fn gather_material(root: PathBuf, cx: &mut AsyncApp) -> Result<String, Str
         }
         let mut material = format!("# the change\n\n```diff\n{diff}\n```\n\n");
         if let Ok(spec) = std::fs::read_to_string(project_files::path(&root, project_files::SPEC)) {
-            material.push_str(&format!("# the project's spec\n\n{}\n\n", project_files::clip(&spec)));
+            material.push_str(&format!(
+                "# the project's spec\n\n{}\n\n",
+                project_files::clip(&spec)
+            ));
         }
         let evidence_directory = project_files::path(&root, project_files::EVIDENCE);
         let latest = std::fs::read_dir(&evidence_directory)

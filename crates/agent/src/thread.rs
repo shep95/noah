@@ -2204,6 +2204,7 @@ impl Thread {
         self.add_tool(SaveAddonTool::new(self.project.clone()));
         self.add_tool(RunAddonTool::new(self.project.clone()));
         self.add_tool(ListAddonsTool::new(self.project.clone()));
+        self.add_tool(crate::BrainTool);
         self.add_tool(CodebaseTool::new(self.project.clone()));
 
         self.add_tool(AskUserTool);

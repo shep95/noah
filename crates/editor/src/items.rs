@@ -2520,8 +2520,22 @@ pub(crate) fn handle_lsp_show_document(
 ) -> Task<()> {
     let request = request.clone();
     if request.external {
-        cx.open_url(request.uri.as_str());
-        request.respond(true);
+        // The request comes from a language server, or over SSH from the
+        // remote host; a scheme the operating system hands to a program
+        // (`file://host/share`, a custom handler) stays closed.
+        let scheme = request
+            .uri
+            .as_str()
+            .split_once(':')
+            .map(|(scheme, _)| scheme.to_ascii_lowercase())
+            .unwrap_or_default();
+        if matches!(scheme.as_str(), "http" | "https" | "mailto") {
+            cx.open_url(request.uri.as_str());
+            request.respond(true);
+        } else {
+            log::warn!("refusing to open a {scheme}: link a language server asked for");
+            request.respond(false);
+        }
         return Task::ready(());
     }
     let Ok(abs_path) = request.uri.to_file_path_ext(workspace.path_style(cx)) else {

@@ -118,12 +118,19 @@ fn handle(message: &Value) -> Result<Value> {
 
 /// A removal plan lists a few dozen forms with the person's details; far
 /// more than this is not one.
-const MAX_AGENT_PROMPT_BYTES: usize = 64 * 1024;
+const MAX_AGENT_PROMPT_BYTES: usize = 24 * 1024;
+/// The encoded prompt travels as one argument; Windows takes about 32 K
+/// characters on a command line.
+const MAX_ENCODED_PROMPT_CHARS: usize = 30_000;
 
 /// Opens noah (or reaches the running copy) with the prompt waiting in
 /// shepherd's composer, the same way a `zed://agent?prompt=` link does.
 fn open_agent_prompt(prompt: &str) -> Result<()> {
     let url = format!("zed://agent?prompt={}", urlencoding::encode(prompt));
+    anyhow::ensure!(
+        url.len() <= MAX_ENCODED_PROMPT_CHARS,
+        "the prompt is too long to hand over; copy it instead"
+    );
     let cli = std::env::current_exe().context("could not find noah's command-line program")?;
     Command::new(cli)
         .arg(url)
@@ -548,7 +555,9 @@ pub mod tor {
         match output {
             Ok(output) => String::from_utf8_lossy(&output.stdout)
                 .trim()
-                .ends_with("tor"),
+                .rsplit('/')
+                .next()
+                .is_some_and(|name| name == "tor"),
             Err(_) => false,
         }
     }
@@ -821,7 +830,7 @@ pub mod tor {
             #[cfg(not(unix))]
             {
                 hidden(Command::new("taskkill"))
-                    .args(["/PID", &pid.to_string(), "/F"])
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
                     .output()
                     .ok();
             }

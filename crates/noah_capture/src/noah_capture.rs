@@ -21,6 +21,8 @@ actions!(
         /// Saves a zip of the open project (what git would track: no
         /// node_modules, build output or ignored files) to your Downloads folder.
         DownloadProjectZip,
+        /// Saves a copy of the file you are looking at to your Downloads folder.
+        DownloadFile,
         /// Saves a screenshot of the noah window and copies it to the clipboard.
         TakeScreenshot,
         /// Starts or stops recording the noah window.
@@ -53,7 +55,12 @@ impl CropRect {
         let y = self.y.min(frame_height);
         let width = self.width.min(frame_width - x) & !1;
         let height = self.height.min(frame_height - y) & !1;
-        (width >= 2 && height >= 2).then_some(Self { x, y, width, height })
+        (width >= 2 && height >= 2).then_some(Self {
+            x,
+            y,
+            width,
+            height,
+        })
     }
 }
 
@@ -186,14 +193,15 @@ pub fn take_screenshot(window: &Window, cx: &mut App) -> Task<Result<PathBuf>> {
     };
     #[cfg(target_os = "windows")]
     let capture = platform::screenshot(
-            path.clone(),
-            window_rect(window, cx),
-            window_display(window, cx),
-            cx,
-        );
+        path.clone(),
+        window_rect(window, cx),
+        window_display(window, cx),
+        cx,
+    );
     cx.spawn(async move |cx| {
         capture.await?;
-        let bytes = std::fs::read(&path).with_context(|| format!("couldn't read {}", path.display()))?;
+        let bytes =
+            std::fs::read(&path).with_context(|| format!("couldn't read {}", path.display()))?;
         cx.update(|cx| {
             cx.write_to_clipboard(gpui::ClipboardItem::new_image(&gpui::Image::from_bytes(
                 gpui::ImageFormat::Png,
@@ -250,11 +258,9 @@ pub fn toggle_recording(window: &Window, cx: &mut App) -> Task<Result<Option<Pat
         let camera_frames = camera.as_ref().map(|feed| feed.latest());
         #[cfg(target_os = "linux")]
         let start = match x11::window_id(window) {
-            Some(window_id) => Task::ready(x11::start_recording(
-                path.clone(),
-                window_id,
-                camera_frames,
-            )),
+            Some(window_id) => {
+                Task::ready(x11::start_recording(path.clone(), window_id, camera_frames))
+            }
             None => {
                 let start = platform::start_recording(
                     path.clone(),
@@ -382,7 +388,15 @@ mod camera {
         #[cfg(target_os = "windows")]
         {
             let output = gpui_util::new_std_command(ffmpeg)
-                .args(["-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"])
+                .args([
+                    "-hide_banner",
+                    "-list_devices",
+                    "true",
+                    "-f",
+                    "dshow",
+                    "-i",
+                    "dummy",
+                ])
                 .output()
                 .context("couldn't ask ffmpeg for the cameras")?;
             let listing = String::from_utf8_lossy(&output.stderr);
@@ -395,7 +409,12 @@ mod camera {
                     Some(line[start..end].to_string())
                 })
                 .ok_or_else(|| anyhow!("no camera was found"))?;
-            Ok(vec!["-f".into(), "dshow".into(), "-i".into(), format!("video={name}")])
+            Ok(vec![
+                "-f".into(),
+                "dshow".into(),
+                "-i".into(),
+                format!("video={name}"),
+            ])
         }
     }
 
@@ -539,7 +558,13 @@ mod camera {
 
     /// How much of a pixel centred at (x, y) lies inside a rounded rectangle
     /// of the given size: 1 inside, 0 outside, in between along the corner.
-    pub(super) fn rounded_rect_coverage(x: f32, y: f32, width: f32, height: f32, radius: f32) -> f32 {
+    pub(super) fn rounded_rect_coverage(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        radius: f32,
+    ) -> f32 {
         let corner_x = if x < radius {
             radius - x
         } else if x > width - radius {
@@ -591,7 +616,14 @@ fn convert_to_mp4(path: &Path) -> Option<PathBuf> {
     let status = gpui_util::new_std_command(ffmpeg)
         .args(["-y", "-loglevel", "error", "-i"])
         .arg(path)
-        .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"])
+        .args([
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+        ])
         .arg(&output)
         .status()
         .ok()?;
@@ -719,7 +751,9 @@ mod platform {
                 })
                 .await
                 .context("screen capture stopped unexpectedly")??;
-            let image = receiver.await.context("no frame arrived from the screen")??;
+            let image = receiver
+                .await
+                .context("no frame arrived from the screen")??;
             drop(stream);
             cx.background_spawn(async move {
                 image
@@ -805,23 +839,27 @@ mod platform {
                             let written = (|| -> Result<()> {
                                 let image = frame_to_rgb(&frame, rect)?;
                                 if encoder.writer.is_none() {
-                                    encoder.writer =
-                                        Some(AviWriter::create(&path, image.width(), image.height())?);
+                                    encoder.writer = Some(AviWriter::create(
+                                        &path,
+                                        image.width(),
+                                        image.height(),
+                                    )?);
                                 }
                                 let Some(writer) = encoder.writer.as_mut() else {
                                     return Ok(());
                                 };
                                 let (width, height) = writer.dimensions();
-                                let mut image = if (image.width(), image.height()) == (width, height) {
-                                    image
-                                } else {
-                                    image::imageops::resize(
-                                        &image,
-                                        width,
-                                        height,
-                                        image::imageops::FilterType::Triangle,
-                                    )
-                                };
+                                let mut image =
+                                    if (image.width(), image.height()) == (width, height) {
+                                        image
+                                    } else {
+                                        image::imageops::resize(
+                                            &image,
+                                            width,
+                                            height,
+                                            image::imageops::FilterType::Triangle,
+                                        )
+                                    };
                                 if let Some(camera) = &camera
                                     && let Ok(latest) = camera.lock()
                                     && let Some(picture) = latest.as_ref()
@@ -876,8 +914,8 @@ mod x11 {
 
     impl Grabber {
         fn connect(window: u32) -> Result<Self> {
-            let (connection, _) =
-                x11rb::connect(None).context("couldn't reach the X server to capture the window")?;
+            let (connection, _) = x11rb::connect(None)
+                .context("couldn't reach the X server to capture the window")?;
             Ok(Self { connection, window })
         }
 
@@ -915,7 +953,12 @@ mod x11 {
                 height,
                 bytes_per_pixel,
                 layout,
-                CropRect { x: 0, y: 0, width, height },
+                CropRect {
+                    x: 0,
+                    y: 0,
+                    width,
+                    height,
+                },
             )
         }
     }
@@ -988,7 +1031,8 @@ mod x11 {
                         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 82)
                             .encode_image(&image)?;
                         writer.write_frame(&jpeg)?;
-                        if let Some(rest) = RECORDING_FRAME_INTERVAL.checked_sub(started.elapsed()) {
+                        if let Some(rest) = RECORDING_FRAME_INTERVAL.checked_sub(started.elapsed())
+                        {
                             std::thread::sleep(rest);
                         }
                     }
@@ -1015,7 +1059,11 @@ mod platform_mac {
         )
     }
 
-    pub(super) fn screenshot(path: &Path, bounds: Bounds<Pixels>, cx: &mut App) -> Task<Result<()>> {
+    pub(super) fn screenshot(
+        path: &Path,
+        bounds: Bounds<Pixels>,
+        cx: &mut App,
+    ) -> Task<Result<()>> {
         let path = path.to_path_buf();
         cx.background_spawn(async move {
             let status = std::process::Command::new("/usr/sbin/screencapture")
@@ -1033,7 +1081,10 @@ mod platform_mac {
         })
     }
 
-    pub(super) fn start_recording(path: &Path, bounds: Bounds<Pixels>) -> Result<std::process::Child> {
+    pub(super) fn start_recording(
+        path: &Path,
+        bounds: Bounds<Pixels>,
+    ) -> Result<std::process::Child> {
         std::process::Command::new("/usr/sbin/screencapture")
             .arg("-v")
             .arg("-x")
@@ -1073,7 +1124,12 @@ mod tests {
         for index in 0..6u8 {
             data.extend_from_slice(&[index, 10, 20, 255]);
         }
-        let rect = CropRect { x: 1, y: 0, width: 2, height: 2 };
+        let rect = CropRect {
+            x: 1,
+            y: 0,
+            width: 2,
+            height: 2,
+        };
         let image = crop_to_rgb(&data, 3, 2, 4, [2, 1, 0], rect).expect("crop");
         assert_eq!(image.dimensions(), (2, 2));
         assert_eq!(image.get_pixel(0, 0).0, [20, 10, 1]);
@@ -1084,11 +1140,17 @@ mod tests {
     #[test]
     fn splits_jpegs_out_of_the_camera_stream() {
         let mut buffer = vec![0x00, 0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9, 0xFF, 0xD8, 4];
-        assert_eq!(camera::take_jpeg(&mut buffer), Some(vec![0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9]));
+        assert_eq!(
+            camera::take_jpeg(&mut buffer),
+            Some(vec![0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9])
+        );
         assert_eq!(camera::take_jpeg(&mut buffer), None);
         assert_eq!(buffer, vec![0xFF, 0xD8, 4]);
         buffer.extend_from_slice(&[0xFF, 0xD9]);
-        assert_eq!(camera::take_jpeg(&mut buffer), Some(vec![0xFF, 0xD8, 4, 0xFF, 0xD9]));
+        assert_eq!(
+            camera::take_jpeg(&mut buffer),
+            Some(vec![0xFF, 0xD8, 4, 0xFF, 0xD9])
+        );
         assert!(buffer.is_empty());
     }
 
@@ -1101,30 +1163,112 @@ mod tests {
         // 24% of 400 is 96 wide, 72 tall, 8px in from the lower right.
         let (left, top) = (400 - 96 - 8, 300 - 72 - 8);
         assert_eq!(frame.get_pixel(left + 48, top + 36).0, [255, 255, 255]);
-        assert_eq!(frame.get_pixel(left, top).0, [0, 0, 0], "the corner is cut round");
-        assert_eq!(frame.get_pixel(left + 48, top).0, [255, 255, 255], "the edge is square");
+        assert_eq!(
+            frame.get_pixel(left, top).0,
+            [0, 0, 0],
+            "the corner is cut round"
+        );
+        assert_eq!(
+            frame.get_pixel(left + 48, top).0,
+            [255, 255, 255],
+            "the edge is square"
+        );
         assert_eq!(frame.get_pixel(10, 10).0, [0, 0, 0]);
-        assert_eq!(camera::rounded_rect_coverage(50.0, 50.0, 100.0, 100.0, 10.0), 1.0);
-        assert_eq!(camera::rounded_rect_coverage(0.5, 0.5, 100.0, 100.0, 10.0), 0.0);
+        assert_eq!(
+            camera::rounded_rect_coverage(50.0, 50.0, 100.0, 100.0, 10.0),
+            1.0
+        );
+        assert_eq!(
+            camera::rounded_rect_coverage(0.5, 0.5, 100.0, 100.0, 10.0),
+            0.0
+        );
     }
 
     #[test]
     fn keeps_crops_inside_the_frame() {
-        let rect = CropRect { x: 100, y: 50, width: 5000, height: 5000 };
+        let rect = CropRect {
+            x: 100,
+            y: 50,
+            width: 5000,
+            height: 5000,
+        };
         assert_eq!(
             rect.clamped(1920, 1080),
-            Some(CropRect { x: 100, y: 50, width: 1820, height: 1030 })
+            Some(CropRect {
+                x: 100,
+                y: 50,
+                width: 1820,
+                height: 1030
+            })
         );
-        assert_eq!(CropRect { x: 3000, y: 0, width: 10, height: 10 }.clamped(1920, 1080), None);
+        assert_eq!(
+            CropRect {
+                x: 3000,
+                y: 0,
+                width: 10,
+                height: 10
+            }
+            .clamped(1920, 1080),
+            None
+        );
     }
 }
 
 /// The folders a zip never needs: dependency and build output that any
 /// checkout regenerates, whether or not the project ignores them.
 const ZIP_SKIP: &[&str] = &[
-    ".git", "node_modules", "target", "dist", "build", ".next", ".nuxt", ".svelte-kit", "__pycache__",
-    ".venv", "venv", ".mypy_cache", ".pytest_cache", ".gradle", ".idea", ".DS_Store", "coverage", ".turbo", ".cache",
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".gradle",
+    ".idea",
+    ".DS_Store",
+    "coverage",
+    ".turbo",
+    ".cache",
 ];
+
+/// Copies one file into the Downloads folder under its own name, with a
+/// counter when that name is taken, and returns where it landed.
+pub fn download_file(source: PathBuf, cx: &App) -> Task<Result<PathBuf>> {
+    cx.background_spawn(async move {
+        let metadata = std::fs::metadata(&source)
+            .with_context(|| format!("couldn't read {}", source.display()))?;
+        anyhow::ensure!(metadata.is_file(), "{} is not a file", source.display());
+        let directory = downloads_directory()?;
+        let name = source
+            .file_name()
+            .map(|name| name.to_os_string())
+            .context("the file has no name")?;
+        let stem = std::path::Path::new(&name)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "file".to_string());
+        let extension = std::path::Path::new(&name)
+            .extension()
+            .map(|extension| format!(".{}", extension.to_string_lossy()))
+            .unwrap_or_default();
+        let mut target = directory.join(&name);
+        let mut counter = 2;
+        while target.exists() {
+            target = directory.join(format!("{stem} ({counter}){extension}"));
+            counter += 1;
+        }
+        std::fs::copy(&source, &target)
+            .with_context(|| format!("couldn't copy to {}", target.display()))?;
+        Ok(target)
+    })
+}
 
 /// Zips the project's roots into one file in the Downloads folder, honoring
 /// each root's .gitignore, and returns where it landed.
@@ -1133,11 +1277,17 @@ pub fn zip_project(roots: Vec<(String, PathBuf)>, cx: &App) -> Task<Result<PathB
         use std::io::Write as _;
         anyhow::ensure!(!roots.is_empty(), "there is no project open to zip");
         let directory = downloads_directory()?;
-        let name = if roots.len() == 1 { roots[0].0.clone() } else { "project".to_string() };
+        let name = if roots.len() == 1 {
+            roots[0].0.clone()
+        } else {
+            "project".to_string()
+        };
         let path = directory.join(format!("{name} {}.zip", timestamp()));
-        let file = std::fs::File::create(&path).with_context(|| format!("couldn't create {}", path.display()))?;
+        let file = std::fs::File::create(&path)
+            .with_context(|| format!("couldn't create {}", path.display()))?;
         let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
-        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let options =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         let mut count = 0usize;
         for (root_name, root) in &roots {
             let walker = ignore::WalkBuilder::new(root)
@@ -1154,13 +1304,19 @@ pub fn zip_project(roots: Vec<(String, PathBuf)>, cx: &App) -> Task<Result<PathB
                 .build();
             for entry in walker {
                 let entry = entry?;
-                let Ok(relative) = entry.path().strip_prefix(root) else { continue };
+                let Ok(relative) = entry.path().strip_prefix(root) else {
+                    continue;
+                };
                 if relative.as_os_str().is_empty() {
                     continue;
                 }
                 let inside = format!(
                     "{}/{}",
-                    if roots.len() == 1 { name.as_str() } else { root_name.as_str() },
+                    if roots.len() == 1 {
+                        name.as_str()
+                    } else {
+                        root_name.as_str()
+                    },
                     relative.to_string_lossy().replace('\\', "/")
                 );
                 if entry.file_type().is_some_and(|kind| kind.is_dir()) {

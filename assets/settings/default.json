@@ -594,8 +594,8 @@
   },
   // Settings related to calls in Zed
   "calls": {
-    // Join calls with the microphone live by default
-    "mute_on_join": false,
+    // Join calls with the microphone off until you turn it on
+    "mute_on_join": true,
     // Share your project when you are the first to join a channel
     "share_on_join": false,
   },
@@ -1355,6 +1355,7 @@
           "grep": true,
           "run_addon": true,
           "save_addon": true,
+          "brain": true,
           "skill": true,
           "spawn_agent": true,
           "terminal": true,
@@ -1383,6 +1384,7 @@
           "read_file": true,
           "grep": true,
           "run_addon": true,
+          "brain": true,
           "skill": true,
           "spawn_agent": true,
           "search_web": true,
@@ -1405,6 +1407,7 @@
           "list_directory": true,
           "find_path": true,
           "grep": true,
+          "brain": true,
           "skill": true,
           "project_memory": true,
           // Add-ons compute in noah's sandbox and are saved to ~/.noah/addons

@@ -1,6 +1,7 @@
 mod addon_tool;
 mod apply_code_action_tool;
 mod ask_user_tool;
+mod brain_tool;
 mod browser_tool;
 mod codebase_tool;
 mod context_server_registry;
@@ -11,9 +12,9 @@ mod delete_path_tool;
 mod diagnostics_tool;
 mod edit_file_tool;
 mod edit_session;
-mod evidence_tool;
 #[cfg(all(test, feature = "unit-eval"))]
 mod evals;
+mod evidence_tool;
 mod fetch_tool;
 mod find_path_tool;
 mod find_references_tool;
@@ -31,8 +32,8 @@ mod skill_tool;
 mod spawn_agent_tool;
 mod symbol_locator;
 mod terminal_tool;
-mod verify_tool;
 mod tool_permissions;
+mod verify_tool;
 mod web_search_tool;
 mod write_file_tool;
 
@@ -80,6 +81,7 @@ where
 pub use addon_tool::*;
 pub use apply_code_action_tool::*;
 pub use ask_user_tool::*;
+pub use brain_tool::*;
 pub use browser_tool::*;
 pub use codebase_tool::*;
 pub use context_server_registry::*;
@@ -108,8 +110,8 @@ pub use spawn_agent_tool::*;
 pub use symbol_locator::*;
 
 pub use terminal_tool::*;
-pub use verify_tool::*;
 pub use tool_permissions::*;
+pub use verify_tool::*;
 pub use web_search_tool::*;
 pub use write_file_tool::*;
 
@@ -213,6 +215,7 @@ macro_rules! tools {
 tools! {
     ApplyCodeActionTool,
     AskUserTool,
+    BrainTool,
     BrowserTool,
     CodebaseTool,
     CopyPathTool,

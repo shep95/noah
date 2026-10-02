@@ -1431,6 +1431,15 @@ mod tests {
             // Interactive prompt: always asks the user via prompt_for_decision,
             // so it has no settings-driven permission rules.
             "ask_user",
+            // Reads shepherd's own brain; nothing to permit.
+            "brain",
+            // Writes its maps and notes under .noah/ and reads git; its
+            // registry checks follow the offline switch, not a permission.
+            "codebase",
+            // The sandboxed terminal shares the terminal's rules.
+            "sandboxed_terminal",
+            // Reads the diff and asks another model; nothing to permit.
+            "verify",
             "diagnostics",
             "find_path",
             "find_references",

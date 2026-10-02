@@ -87,7 +87,9 @@ impl MemoryFile {
 
     fn heading(self) -> &'static str {
         match self {
-            Self::Memory => "# memory\n\nWhat shepherd keeps in mind for this project. Edit freely.\n",
+            Self::Memory => {
+                "# memory\n\nWhat shepherd keeps in mind for this project. Edit freely.\n"
+            }
             Self::Intent => "# intent\n",
             Self::Spec => "# spec\n",
             Self::Why => "# why\n\nDecisions, incidents and their lessons.\n",
@@ -155,9 +157,8 @@ impl AgentTool for ProjectMemoryTool {
                 .ok_or_else(|| "open a project folder first".to_string())?;
             let path = project_files::path(&root, input.file.file_name());
             if input.action == MemoryAction::Read {
-                return Ok(std::fs::read_to_string(&path).unwrap_or_else(|_| {
-                    format!(".noah/{} is empty", input.file.file_name())
-                }));
+                return Ok(std::fs::read_to_string(&path)
+                    .unwrap_or_else(|_| format!(".noah/{} is empty", input.file.file_name())));
             }
             let text = input
                 .text
@@ -165,7 +166,9 @@ impl AgentTool for ProjectMemoryTool {
                 .filter(|text| !text.trim().is_empty())
                 .ok_or_else(|| "give the `text`".to_string())?;
             let description = match input.action {
-                MemoryAction::Add => format!("remember in .noah/{}: {text}", input.file.file_name()),
+                MemoryAction::Add => {
+                    format!("remember in .noah/{}: {text}", input.file.file_name())
+                }
                 MemoryAction::Remove => format!(
                     "forget from .noah/{} entries containing: {text}",
                     input.file.file_name()
@@ -173,7 +176,8 @@ impl AgentTool for ProjectMemoryTool {
                 _ => format!("rewrite .noah/{}", input.file.file_name()),
             };
             let authorize = cx.update(|cx| {
-                let context = crate::ToolPermissionContext::new(Self::NAME, vec![description.clone()]);
+                let context =
+                    crate::ToolPermissionContext::new(Self::NAME, vec![description.clone()]);
                 event_stream.authorize(description.clone(), context, cx)
             });
             futures::select! {
@@ -224,14 +228,22 @@ fn apply(input: &ProjectMemoryToolInput, path: &Path, text: String) -> anyhow::R
             let needle = text.trim().to_lowercase();
             let kept: Vec<&str> = existing
                 .lines()
-                .filter(|line| !(line.trim_start().starts_with("- ") && line.to_lowercase().contains(&needle)))
+                .filter(|line| {
+                    !(line.trim_start().starts_with("- ") && line.to_lowercase().contains(&needle))
+                })
                 .collect();
             let removed = existing.lines().count() - kept.len();
             if removed == 0 {
-                return Ok(format!("nothing in .noah/{} contains that", input.file.file_name()));
+                return Ok(format!(
+                    "nothing in .noah/{} contains that",
+                    input.file.file_name()
+                ));
             }
             std::fs::write(path, kept.join("\n") + "\n")?;
-            return Ok(format!("removed {removed} entr{}", if removed == 1 { "y" } else { "ies" }));
+            return Ok(format!(
+                "removed {removed} entr{}",
+                if removed == 1 { "y" } else { "ies" }
+            ));
         }
         (MemoryAction::Read, _) => existing.clone(),
     };

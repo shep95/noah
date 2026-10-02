@@ -843,6 +843,13 @@ pub struct SettingsObserver {
 impl SettingsObserver {
     pub fn init(client: &AnyProtoClient) {
         client.add_entity_message_handler(Self::handle_update_worktree_settings);
+    }
+
+    /// The headless server also takes the person's user settings, which the
+    /// editor sends it. The editor never takes them back: a remote host
+    /// must not be able to rewrite the local settings.
+    pub fn init_for_remote_server(client: &AnyProtoClient) {
+        Self::init(client);
         client.add_entity_message_handler(Self::handle_update_user_settings);
     }
 

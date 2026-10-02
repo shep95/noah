@@ -1,8 +1,8 @@
+use gpui::Entity;
 use gpui::{
     Action, App, Context, Div, InteractiveElement, IntoElement, ParentElement, Styled, Window,
     actions, div, px,
 };
-use gpui::Entity;
 use settings::Settings as _;
 use ui::{
     ContextMenu, IconButton, IconName, IconPosition, IconSize, PopoverMenu, Tooltip, prelude::*,
@@ -142,37 +142,50 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     .on_action(cx.listener(|workspace, _: &EnterDeviceRoom, window, cx| {
         workspace.enter_room(Room::Device, window, cx)
     }))
-    .on_action(
-        cx.listener(|workspace, _: &zed_actions::ToggleBackgroundColors, _window, cx| {
+    .on_action(cx.listener(
+        |workspace, _: &zed_actions::ToggleBackgroundColors, _window, cx| {
             let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
             let fs = workspace.app_state().fs.clone();
             settings::update_settings_file(fs, cx, move |settings, _| {
                 settings.workspace.wallpaper_adapts_theme = Some(!adapts);
             });
+        },
+    ))
+    .on_action(
+        cx.listener(|workspace, _: &zed_actions::ToggleFocusMode, _window, cx| {
+            workspace.toggle_quiet_mode(QuietMode::Focus, cx)
         }),
     )
-    .on_action(cx.listener(|workspace, _: &zed_actions::ToggleFocusMode, _window, cx| {
-        workspace.toggle_quiet_mode(QuietMode::Focus, cx)
-    }))
-    .on_action(cx.listener(|workspace, _: &zed_actions::ToggleSilentMode, _window, cx| {
-        workspace.toggle_quiet_mode(QuietMode::Silent, cx)
-    }))
-    .on_action(cx.listener(|workspace, _: &noah_capture::TakeScreenshot, window, cx| {
-        workspace.take_screenshot(window, cx)
-    }))
-    .on_action(cx.listener(|workspace, _: &noah_capture::DownloadProjectZip, _window, cx| {
-        workspace.download_project_zip(cx)
-    }))
+    .on_action(cx.listener(
+        |workspace, _: &zed_actions::ToggleSilentMode, _window, cx| {
+            workspace.toggle_quiet_mode(QuietMode::Silent, cx)
+        },
+    ))
     .on_action(
-        cx.listener(|workspace, _: &noah_capture::ToggleScreenRecording, window, cx| {
+        cx.listener(|workspace, _: &noah_capture::TakeScreenshot, window, cx| {
+            workspace.take_screenshot(window, cx)
+        }),
+    )
+    .on_action(cx.listener(
+        |workspace, _: &noah_capture::DownloadProjectZip, _window, cx| {
+            workspace.download_project_zip(cx)
+        },
+    ))
+    .on_action(
+        cx.listener(|workspace, _: &noah_capture::DownloadFile, _window, cx| {
+            workspace.download_active_file(cx)
+        }),
+    )
+    .on_action(cx.listener(
+        |workspace, _: &noah_capture::ToggleScreenRecording, window, cx| {
             workspace.toggle_screen_recording(window, cx)
-        }),
-    )
-    .on_action(
-        cx.listener(|workspace, _: &noah_capture::ToggleCameraInRecordings, _window, cx| {
+        },
+    ))
+    .on_action(cx.listener(
+        |workspace, _: &noah_capture::ToggleCameraInRecordings, _window, cx| {
             workspace.toggle_camera_in_recordings(cx)
-        }),
-    )
+        },
+    ))
 }
 
 struct CaptureNotification;
@@ -195,7 +208,9 @@ fn bundled_backgrounds(cx: &App) -> Vec<(String, String)> {
             if !is_image || name.contains('/') {
                 return None;
             }
-            let stem = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
+            let stem = name
+                .rsplit_once('.')
+                .map_or(name.as_str(), |(stem, _)| stem);
             let label = stem.replace(['-', '_'], " ");
             Some((label, name))
         })
@@ -214,10 +229,13 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
         let check_for_updates = cx.build_action("auto_update::Check", None).ok();
         let menu = menu
             .header("look")
-            .action("appearance, theme and fonts", Box::new(zed_actions::OpenSettingsPage {
-                page: "Appearance".into(),
-                target: None,
-            }))
+            .action(
+                "appearance, theme and fonts",
+                Box::new(zed_actions::OpenSettingsPage {
+                    page: "Appearance".into(),
+                    target: None,
+                }),
+            )
             .header("background")
             .action(
                 "noah default",
@@ -225,11 +243,16 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                     name: String::new(),
                 }),
             );
-        let menu = bundled_backgrounds(cx).into_iter().fold(menu, |menu, (label, name)| {
-            menu.action(label, Box::new(zed_actions::UseBundledBackground { name }))
-        });
+        let menu = bundled_backgrounds(cx)
+            .into_iter()
+            .fold(menu, |menu, (label, name)| {
+                menu.action(label, Box::new(zed_actions::UseBundledBackground { name }))
+            });
         let menu = menu
-            .action("upload your own…", Box::new(zed_actions::ChooseBackgroundImage))
+            .action(
+                "upload your own…",
+                Box::new(zed_actions::ChooseBackgroundImage),
+            )
             .toggleable_entry(
                 "colors follow the background",
                 adapts,
@@ -239,20 +262,29 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                     window.dispatch_action(Box::new(zed_actions::ToggleBackgroundColors), cx)
                 },
             )
-            .action("language", Box::new(zed_actions::OpenSettingsAt {
-                path: "language".into(),
-                target: None,
-            }))
+            .action(
+                "language",
+                Box::new(zed_actions::OpenSettingsAt {
+                    path: "language".into(),
+                    target: None,
+                }),
+            )
             .separator()
             .header("shepherd")
-            .action("API keys and models", Box::new(zed_actions::OpenSettingsAt {
-                path: "llm_providers".into(),
-                target: None,
-            }))
-            .action("shepherd settings", Box::new(zed_actions::OpenSettingsPage {
-                page: "AI".into(),
-                target: None,
-            }))
+            .action(
+                "API keys and models",
+                Box::new(zed_actions::OpenSettingsAt {
+                    path: "llm_providers".into(),
+                    target: None,
+                }),
+            )
+            .action(
+                "shepherd settings",
+                Box::new(zed_actions::OpenSettingsPage {
+                    page: "AI".into(),
+                    target: None,
+                }),
+            )
             .action("mission control", Box::new(EnterMissionRoom))
             .action("device security", Box::new(EnterDeviceRoom))
             .separator()
@@ -262,9 +294,17 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
                 Box::new(zed_actions::PreviewFileInBrowser),
             )
             .action("screenshot", Box::new(noah_capture::TakeScreenshot))
-            .action("download project as zip", Box::new(noah_capture::DownloadProjectZip))
+            .action("download this file", Box::new(noah_capture::DownloadFile))
             .action(
-                if recording { "stop recording" } else { "record the screen" },
+                "download project as zip",
+                Box::new(noah_capture::DownloadProjectZip),
+            )
+            .action(
+                if recording {
+                    "stop recording"
+                } else {
+                    "record the screen"
+                },
                 Box::new(noah_capture::ToggleScreenRecording),
             )
             .toggleable_entry(
@@ -280,7 +320,10 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
             .action("view logs", Box::new(crate::OpenLog))
             .separator()
             .action("all settings", Box::new(zed_actions::OpenSettings))
-            .action("settings file (JSON)", Box::new(zed_actions::OpenSettingsFile));
+            .action(
+                "settings file (JSON)",
+                Box::new(zed_actions::OpenSettingsFile),
+            );
         let menu = match check_for_updates {
             Some(action) => menu.action("check for updates", action),
             None => menu,
@@ -302,12 +345,47 @@ impl Workspace {
         self.show_capture_toast(message, None, cx);
     }
 
+    fn download_active_file(&mut self, cx: &mut Context<Self>) {
+        let source = self
+            .active_item(cx)
+            .and_then(|item| item.project_path(cx))
+            .and_then(|path| self.project().read(cx).absolute_path(&path, cx));
+        let Some(source) = source else {
+            self.show_capture_toast(
+                "open a file first; this saves a copy of the one you are looking at".to_string(),
+                None,
+                cx,
+            );
+            return;
+        };
+        let task = noah_capture::download_file(source, cx);
+        cx.spawn(async move |workspace, cx| {
+            let result = task.await;
+            workspace.update(cx, |workspace, cx| match result {
+                Ok(path) => workspace.show_capture_toast(
+                    format!("saved to {}", path.display()),
+                    Some(path),
+                    cx,
+                ),
+                Err(error) => workspace.show_capture_toast(
+                    format!("couldn't save the file: {error:#}"),
+                    None,
+                    cx,
+                ),
+            })
+        })
+        .detach();
+    }
+
     fn download_project_zip(&mut self, cx: &mut Context<Self>) {
         let roots: Vec<(String, std::path::PathBuf)> = self
             .visible_worktrees(cx)
             .map(|worktree| {
                 let worktree = worktree.read(cx);
-                (worktree.root_name().to_string(), worktree.abs_path().to_path_buf())
+                (
+                    worktree.root_name().to_string(),
+                    worktree.abs_path().to_path_buf(),
+                )
             })
             .collect();
         let task = noah_capture::zip_project(roots, cx);
@@ -374,7 +452,12 @@ impl Workspace {
         .detach_and_log_err(cx);
     }
 
-    fn show_capture_toast(&mut self, message: String, path: Option<std::path::PathBuf>, cx: &mut Context<Self>) {
+    fn show_capture_toast(
+        &mut self,
+        message: String,
+        path: Option<std::path::PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
         let mut toast = crate::Toast::new(
             crate::notifications::NotificationId::unique::<CaptureNotification>(),
             message,
@@ -423,12 +506,13 @@ impl Workspace {
             // This workspace is mid-update, so it is skipped by handle rather
             // than read; it is a room anyway, never the project.
             let this_workspace = cx.entity_id();
-            let project = multi_workspace
-                .read(cx)
-                .most_recent_workspace_where(cx, |workspace, cx| {
-                    workspace.entity_id() != this_workspace
-                        && workspace.read(cx).noah_room_folder(cx).is_none()
-                });
+            let project =
+                multi_workspace
+                    .read(cx)
+                    .most_recent_workspace_where(cx, |workspace, cx| {
+                        workspace.entity_id() != this_workspace
+                            && workspace.read(cx).noah_room_folder(cx).is_none()
+                    });
             if let Some(project) = project {
                 // Activating reads this workspace, which is mid-update here,
                 // so the switch waits for the update to finish.
@@ -449,7 +533,9 @@ impl Workspace {
         };
 
         for dock in self.all_docks() {
-            let Some(panel_index) = dock.read(cx).panel_index_for_persistent_name(panel_name, cx)
+            let Some(panel_index) = dock
+                .read(cx)
+                .panel_index_for_persistent_name(panel_name, cx)
             else {
                 continue;
             };
@@ -479,7 +565,11 @@ impl Workspace {
     /// Switches `mode` on, or off again when it is already the one in force.
     pub fn toggle_quiet_mode(&mut self, mode: QuietMode, cx: &mut Context<Self>) {
         let current = crate::WorkspaceSettings::get_global(cx).quiet;
-        let next = if current == mode { QuietMode::Off } else { mode };
+        let next = if current == mode {
+            QuietMode::Off
+        } else {
+            mode
+        };
         let fs = self.app_state().fs.clone();
         settings::update_settings_file(fs, cx, move |settings, _| {
             settings.workspace.quiet = Some(next);
@@ -500,7 +590,8 @@ impl Workspace {
         let active_room = self.active_room(cx);
         let room_folder = self.noah_room_folder(cx);
         let in_noah_room = room_folder.is_some();
-        let is_this_room = |folder: std::path::PathBuf| room_folder.as_deref() == Some(folder.as_path());
+        let is_this_room =
+            |folder: std::path::PathBuf| room_folder.as_deref() == Some(folder.as_path());
         let chat_here = is_this_room(paths::chat_directory());
         let pages_here = is_this_room(paths::pages_directory());
         let search_here = is_this_room(paths::search_directory());

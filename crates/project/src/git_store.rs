@@ -3473,11 +3473,29 @@ impl GitStore {
         cx: AsyncApp,
     ) -> Result<proto::Ack> {
         let path: Arc<Path> = PathBuf::from(envelope.payload.abs_path).into();
+        Self::ensure_inside_worktrees(&this, &path, &cx)?;
         let name = envelope.payload.fallback_branch_name;
         cx.update(|cx| this.read(cx).git_init(path, name, cx))
             .await?;
 
         Ok(proto::Ack {})
+    }
+
+    /// A path a collaborator or a remote editor names must sit inside a
+    /// shared worktree; the request is theirs, the disk is this machine's.
+    fn ensure_inside_worktrees(this: &Entity<Self>, path: &Path, cx: &AsyncApp) -> Result<()> {
+        let inside = cx.update(|cx| {
+            let worktree_store = this.read(cx).worktree_store.read(cx);
+            worktree_store
+                .visible_worktrees(cx)
+                .any(|worktree| path.starts_with(worktree.read(cx).abs_path()))
+        });
+        anyhow::ensure!(
+            inside,
+            "the path {} is outside the shared project",
+            path.display()
+        );
+        Ok(())
     }
 
     async fn handle_git_clone(
@@ -3904,6 +3922,7 @@ impl GitStore {
         let repository_id = RepositoryId::from_proto(envelope.payload.repository_id);
         let repository_handle = Self::repository_for_request(&this, repository_id, &mut cx)?;
         let directory = PathBuf::from(envelope.payload.directory);
+        Self::ensure_inside_worktrees(&this, &directory, &cx)?;
         let name = envelope.payload.name;
         let commit = envelope.payload.commit;
         let use_existing_branch = envelope.payload.use_existing_branch;

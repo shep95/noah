@@ -1362,12 +1362,16 @@ fn link_scheme_is_safe(url: &str) -> bool {
     let lower = url.trim().to_ascii_lowercase();
     match lower.split_once(':') {
         None => true,
-        Some((scheme, _)) => {
-            matches!(scheme, "http" | "https" | "mailto" | "file")
+        Some((scheme, rest)) => {
+            matches!(scheme, "http" | "https" | "mailto")
+                // A local file only: `file://host/share` would reach out to
+                // that host, and on Windows send a credential to it.
+                || (scheme == "file" && rest.starts_with("///"))
                 // A Windows drive letter is a path, not a scheme.
                 || (scheme.len() == 1 && scheme.chars().all(|c| c.is_ascii_alphabetic()))
-                // `main.rs:12` and similar path:line links.
-                || scheme.contains(['/', '.', '\\'])
+                // A relative path whose later segment holds a colon is a path
+                // (`src/main.rs:12`); a dotted scheme (`com.vendor.app:`) is not.
+                || scheme.contains(['/', '\\'])
         }
     }
 }

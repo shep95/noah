@@ -109,11 +109,18 @@ pub fn init(cx: &mut App) {
             cx.defer_in(window, |editor, _window, cx| {
                 let project = editor.project().cloned();
 
+                // Finding kernels runs each interpreter it finds, a
+                // repository's own `.venv` included, so it waits for the
+                // repository to be trusted.
                 let is_valid_project = project
                     .as_ref()
                     .map(|project| {
                         let p = project.read(cx);
                         !p.is_via_collab()
+                            && !project::trusted_worktrees::TrustedWorktrees::has_restricted_worktrees(
+                                &p.worktree_store(),
+                                cx,
+                            )
                     })
                     .unwrap_or(false);
 
@@ -253,11 +260,7 @@ impl Render for ReplSessionsPage {
                             .size(ButtonSize::Large)
                             .layer(ElevationIndex::ModalSurface)
                             .child(Label::new("Install Kernels"))
-                            .on_click(move |_, _, cx| {
-                                cx.open_url(
-                                    "https://noah.asherin.com/faq",
-                                )
-                            }),
+                            .on_click(move |_, _, cx| cx.open_url("https://noah.asherin.com/faq")),
                     ),
                 );
         }
