@@ -828,6 +828,35 @@ const handlers = {
     if (text.length > 64 * 1024) return { error: "the report is too large" };
     return Shield.host({ type: "page.report", report });
   },
+  // The one-way clipboard's two halves. Lengths go to the page's content
+  // script so it knows when to hold a paste back; the salted hashes stay
+  // here, and so does the matching.
+  async "paste.secretLengths"() {
+    const fingerprints = await secretFingerprints();
+    return { lengths: [...new Set(fingerprints.secrets.map((secret) => secret.length))] };
+  },
+  async "paste.secrets"(message) {
+    const text = String(message.text || "");
+    if (!text || text.length > 20000) return { text, names: [] };
+    const fingerprints = await secretFingerprints();
+    if (!fingerprints.secrets.length) return { text, names: [] };
+    const lengths = new Set(fingerprints.secrets.map((secret) => secret.length));
+    const pieces = text.split(/[\s"'`=:,;()<>\[\]{}]+/).filter(Boolean);
+    // A secret at the end of a sentence carries the full stop with it.
+    const candidates = pieces.flatMap((word) => [word, word.replace(/[.!?]+$/, "")]);
+    const words = [...new Set(candidates.filter((word) => lengths.has([...word].length)))].slice(0, 400);
+    let replaced = text;
+    const names = [];
+    for (const word of words) {
+      const digest = await sha256Hex(fingerprints.salt + word);
+      const match = fingerprints.secrets.find((secret) => secret.sha256 === digest);
+      if (!match) continue;
+      replaced = replaced.split(word).join("$" + match.name);
+      if (!names.includes(match.name)) names.push(match.name);
+    }
+    if (names.length) await Shield.count("pastes", 1);
+    return { text: replaced, names };
+  },
   async "site.trust"(message) {
     const url = String(message.url || "");
     const host = Shield.hostOf(url);
@@ -870,6 +899,29 @@ const handlers = {
       return { error: String(error.message || error), identity };
     }
     return { identity };
+  },
+  // The form filler: the person's own details, kept in this browser only,
+  // into the form on the open tab. Nothing is submitted; the popup lists
+  // what went where so the person checks it first.
+  async "details.fill"(message) {
+    const stored = await api.storage.local.get("myDetails");
+    const details = stored.myDetails || {};
+    if (!Object.values(details).some((value) => typeof value === "string" && value.trim())) {
+      return { error: "add your details under settings first; they stay in this browser" };
+    }
+    const identity = {
+      firstName: String(details.firstName || ""), lastName: String(details.lastName || ""),
+      fullName: String(details.fullName || [details.firstName, details.lastName].filter(Boolean).join(" ")),
+      email: String(details.email || ""), username: String(details.username || ""), password: "",
+      phone: String(details.phone || ""), street: String(details.street || ""), city: String(details.city || ""),
+      postal: String(details.postal || ""), birthday: String(details.birthday || ""),
+    };
+    try {
+      const [result] = await api.scripting.executeScript({ target: { tabId: Number(message.tabId) }, func: fillDecoy, args: [identity] });
+      return { filled: (result && Array.isArray(result.result)) ? result.result : [] };
+    } catch (error) {
+      return { error: String(error.message || error) };
+    }
   },
   async "fingerprint.rotate"() {
     await Shield.rotateFingerprint();
@@ -1367,26 +1419,47 @@ async function elementTag(settings) {
   return tag;
 }
 
-// Runs inside the page: fills the visible sign-up fields with the decoy.
+// noah's salted fingerprints of the person's stored secrets, asked of the
+// native host at most every ten minutes. Without noah there are none.
+let fingerprintCache = { at: 0, value: { salt: "", secrets: [] } };
+async function secretFingerprints() {
+  if (Date.now() - fingerprintCache.at < 10 * 60 * 1000) return fingerprintCache.value;
+  const answer = await Shield.host({ type: "secrets.fingerprints" });
+  const value = answer && !answer.error && typeof answer.salt === "string" && Array.isArray(answer.secrets)
+    ? { salt: answer.salt, secrets: answer.secrets.filter((secret) => secret && typeof secret.sha256 === "string" && Number.isInteger(secret.length) && typeof secret.name === "string" && /^[A-Za-z0-9_]{1,64}$/.test(secret.name)) }
+    : { salt: "", secrets: [] };
+  fingerprintCache = { at: Date.now(), value };
+  return value;
+}
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// Runs inside the page: fills the visible form fields from `identity` (the
+// decoy, or the person's own details) and returns what went where, so the
+// popup can show a receipt before anything is sent. It never submits.
 function fillDecoy(identity) {
   const map = [
     [/first.?name|given/i, identity.firstName], [/last.?name|family|surname/i, identity.lastName], [/full.?name|^name$|your name/i, identity.fullName],
     [/e-?mail/i, identity.email], [/user.?name|login|handle/i, identity.username], [/pass/i, identity.password], [/phone|tel|mobile/i, identity.phone],
     [/street|address(?!.*email)/i, identity.street], [/city|town/i, identity.city], [/zip|postal/i, identity.postal], [/birth|dob/i, identity.birthday],
   ];
+  const kinds = ["first name", "last name", "full name", "email", "username", "password", "phone", "street", "city", "postal code", "birthday"];
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  let filled = 0;
+  const filled = [];
   for (const input of document.querySelectorAll("input")) {
     if (!/^(text|email|tel|password|search|url|date|)$/.test(input.type || "") || input.disabled || input.readOnly) continue;
     const box = input.getBoundingClientRect();
     if (box.width < 10 || box.height < 10) continue;
     const words = [input.name, input.id, input.placeholder, input.getAttribute("aria-label"), input.getAttribute("autocomplete"), input.labels && input.labels[0] && input.labels[0].textContent].filter(Boolean).join(" ");
-    const match = map.find(([pattern]) => pattern.test(words));
-    if (!match) continue;
-    setter.call(input, input.type === "date" ? identity.birthday : match[1]);
+    const index = map.findIndex(([pattern]) => pattern.test(words));
+    if (index < 0 || !map[index][1]) continue;
+    setter.call(input, input.type === "date" ? identity.birthday : map[index][1]);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    filled++;
+    const label = (input.labels && input.labels[0] && input.labels[0].textContent) || input.placeholder || input.getAttribute("aria-label") || input.name || input.id || "a field";
+    filled.push({ field: String(label).trim().slice(0, 60), what: kinds[index] });
   }
   return filled;
 }
@@ -1589,7 +1662,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config"]);
+  const pageAllowed = new Set(["paste.secretLengths", "paste.secrets", "guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

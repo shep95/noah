@@ -110,10 +110,58 @@
     }
   }
 
+  // ---- one-way clipboard ----------------------------------------------------------------------
+  // A secret the person keeps in noah, pasted into an AI chat, goes in as its
+  // $NAME instead. The page never sees the value; this script only knows how
+  // long the stored secrets are, and the background (which never runs page
+  // code) does the matching against noah's salted fingerprints.
+  let secretLengths = new Set();
+  function wordsOf(text) {
+    return text.split(/[\s"'`=:,;()<>\[\]{}]+/).filter(Boolean);
+  }
+  function mayHoldSecret(text) {
+    if (!secretLengths.size) return false;
+    return wordsOf(text).some((word) => secretLengths.has([...word].length) || secretLengths.has([...word.replace(/[.!?]+$/, "")].length));
+  }
+  function noteSwap(names) {
+    if (bar) bar.remove();
+    bar = document.createElement(tagName("bar"));
+    const shadow = bar.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `:host { all: initial; position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647; font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
+      .bar { padding: 10px 18px; background: #0b0e0c; color: #d8ddd6; border-bottom: 1px solid rgba(180,210,190,.12); }`;
+    const box = document.createElement("div");
+    box.className = "bar";
+    box.textContent = "noah shield pasted " + names.map((name) => "$" + name).join(", ") + " where your stored secret was. The value stayed on your computer.";
+    shadow.append(style, box);
+    (document.documentElement || document).append(bar);
+    const shown = bar;
+    setTimeout(() => { if (bar === shown) { bar.remove(); bar = null; } }, 6000);
+  }
+
   function watchPastes(config) {
+    if (AI_CHAT.test(location.hostname)) {
+      send({ type: "paste.secretLengths" }).then((answer) => {
+        if (answer && Array.isArray(answer.lengths)) secretLengths = new Set(answer.lengths.filter(Number.isInteger));
+      });
+    }
     document.addEventListener("paste", (event) => {
       const value = event.clipboardData && event.clipboardData.getData("text/plain");
       if (!value || value.length > 20000) return;
+      if (AI_CHAT.test(location.hostname) && mayHoldSecret(value)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const target = event.target;
+        send({ type: "paste.secrets", text: value }).then((answer) => {
+          const names = answer && Array.isArray(answer.names) ? answer.names : [];
+          const text = names.length && typeof answer.text === "string" ? answer.text : value;
+          if (names.length) noteSwap(names);
+          const left = classify(text);
+          if (left.length) askPaste(left, () => insert(target, text));
+          else insert(target, text);
+        });
+        return;
+      }
       const found = classify(value);
       if (!found.length) return;
       const site = location.hostname;

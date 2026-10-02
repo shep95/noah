@@ -443,3 +443,23 @@ byId("purge").addEventListener("click", async () => {
 });
 
 load().then(renderExtensions).then(renderPermissions);
+
+// ---- my details ----------------------------------------------------------------------------
+const DETAIL_FIELDS = ["firstName", "lastName", "email", "username", "phone", "street", "city", "postal", "birthday"];
+async function loadDetails() {
+  const stored = await Shield.api.storage.local.get("myDetails");
+  const details = stored.myDetails || {};
+  for (const field of DETAIL_FIELDS) byId("md-" + field).value = String(details[field] || "");
+}
+byId("md-save").addEventListener("click", async () => {
+  const details = {};
+  for (const field of DETAIL_FIELDS) details[field] = byId("md-" + field).value.trim().slice(0, 200);
+  await Shield.api.storage.local.set({ myDetails: details });
+  byId("md-result").textContent = "kept in this browser";
+});
+byId("md-clear").addEventListener("click", async () => {
+  await Shield.api.storage.local.remove("myDetails");
+  await loadDetails();
+  byId("md-result").textContent = "forgotten";
+});
+loadDetails().catch((error) => console.error("shield: details", error));

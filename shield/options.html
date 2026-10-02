@@ -298,6 +298,23 @@
     </section>
 
     <section>
+      <h2>my details, for forms you choose to fill</h2>
+      <p class="muted">Kept in this browser only: not synced, not sent anywhere. “fill with my details” in the popup puts them into the form on the open page and lists what went where; it never submits.</p>
+      <div class="grid two">
+        <label>First name<input id="md-firstName" autocomplete="off"></label>
+        <label>Last name<input id="md-lastName" autocomplete="off"></label>
+        <label>Email<input id="md-email" type="email" autocomplete="off"></label>
+        <label>Username<input id="md-username" autocomplete="off"></label>
+        <label>Phone<input id="md-phone" autocomplete="off"></label>
+        <label>Street<input id="md-street" autocomplete="off"></label>
+        <label>City<input id="md-city" autocomplete="off"></label>
+        <label>Postal code<input id="md-postal" autocomplete="off"></label>
+        <label>Birthday<input id="md-birthday" type="date" autocomplete="off"></label>
+      </div>
+      <p class="muted"><button id="md-save" class="ghost">Keep these</button> <button id="md-clear" class="ghost">Forget them</button> <span id="md-result"></span></p>
+    </section>
+
+    <section>
       <h2>about</h2>
       <p class="muted" id="about"></p>
       <p class="muted">Feeds are signed with noah's ed25519 release key and refused when the signature does not match, so the website alone cannot change what the shield does. The shield sends nothing about you anywhere: no accounts, no telemetry. Tracker rules are EasyPrivacy (GPLv3 / CC BY-SA 3.0). Source: <a href="https://github.com/shep95/noah/tree/main/shield" target="_blank" rel="noopener">github.com/shep95/noah</a>.</p>

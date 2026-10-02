@@ -580,6 +580,20 @@ byId("decoy").addEventListener("click", async () => {
   out.hidden = false;
   out.textContent = result.error ? result.error : `filled with ${result.identity.fullName}, ${result.identity.email}`;
 });
+byId("fill-mine").addEventListener("click", async () => {
+  if (!current || !current.site) return;
+  const result = await Shield.send({ type: "details.fill", tabId: current.site.tabId });
+  const out = byId("alias-out");
+  out.hidden = false;
+  if (result.error) {
+    out.textContent = result.error;
+    return;
+  }
+  const filled = result.filled || [];
+  out.textContent = filled.length
+    ? `filled ${filled.length}: ` + filled.map((entry) => `${entry.what} in “${entry.field}”`).join(", ") + ". nothing was sent; check the form and submit it yourself."
+    : "no field on this page matched your details.";
+});
 for (const element of document.querySelectorAll("button[data-profile]")) {
   element.addEventListener("click", async () => {
     await Shield.send({ type: "profile.apply", name: element.dataset.profile });
