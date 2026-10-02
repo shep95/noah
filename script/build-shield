@@ -31,7 +31,7 @@ copy_sources() {
     cp -r shield/background.js shield/popup.html shield/popup.css shield/popup.js \
         shield/options.html shield/options.css shield/options.js shield/warn.html shield/warn.css shield/warn.js shield/leak.html shield/leak.js shield/tools.html shield/tools.js shield/record.html shield/record.css shield/record.js shield/newtab.html shield/newtab.css shield/newtab.js shield/offscreen.html shield/log.html shield/log.js \
         shield/footprint.html shield/footprint.css shield/footprint.js \
-        shield/lib shield/content shield/rules shield/icons shield/looks shield/data "$1/"
+        shield/lib shield/content shield/rules shield/icons shield/looks "$1/"
 }
 
 # Chromium: the manifest as written.
