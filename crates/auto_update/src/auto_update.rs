@@ -677,7 +677,13 @@ impl AutoUpdater {
             });
             return Ok(());
         }
+        #[cfg(not(test))]
         manifest.verify_signature()?;
+        #[cfg(test)]
+        match cx.try_read_global::<tests::ReleaseKeyOverride, _>(|key, _| key.0.clone()) {
+            Some(key) => manifest.verify_signature_with(&key)?,
+            None => manifest.verify_signature()?,
+        }
         let newer_version = manifest.version();
         let asset = manifest.asset_for(OS, ARCH).cloned().ok_or_else(|| {
             ManualUpdateNeeded(format!(
@@ -1140,6 +1146,11 @@ mod tests {
     }
 
     use super::*;
+    use base64::Engine as _;
+    use ring::signature::KeyPair as _;
+
+    pub(super) struct ReleaseKeyOverride(pub Vec<u8>);
+    impl Global for ReleaseKeyOverride {}
 
     pub(super) struct InstallOverride(pub Rc<dyn Fn(&Path, &AsyncApp) -> Result<Option<PathBuf>>>);
     impl Global for InstallOverride {}
@@ -1157,6 +1168,13 @@ mod tests {
             cx.set_global(store);
             assert!(AutoUpdateSetting::get_global(cx).0);
         });
+    }
+
+    fn test_signing_key() -> ring::signature::Ed25519KeyPair {
+        let pkcs8 =
+            ring::signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
+                .expect("key generates");
+        ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).expect("key parses")
     }
 
     #[gpui::test]
@@ -1181,11 +1199,15 @@ mod tests {
             let clock = Arc::new(FakeSystemClock::new());
             let release_available = Arc::clone(&release_available);
             let installer_rx = Arc::new(parking_lot::Mutex::new(Some(installer_rx)));
+            let signing_key = test_signing_key();
+            cx.set_global(ReleaseKeyOverride(
+                signing_key.public_key().as_ref().to_vec(),
+            ));
             let asset_key = format!("{OS}-{ARCH}");
             let fake_client_http = FakeHttpClient::create(move |req| {
                 let release_available = release_available.load(atomic::Ordering::Relaxed);
                 let installer_rx = installer_rx.clone();
-                let manifest = serde_json::json!({
+                let mut manifest = serde_json::json!({
                     "build": if release_available { 200 } else { 100 },
                     "version": if release_available { "0.100.1" } else { "0.100.0" },
                     "assets": {
@@ -1194,8 +1216,15 @@ mod tests {
                             "sha256": update_checksum.clone(),
                         }
                     }
-                })
-                .to_string();
+                });
+                let signed_text =
+                    serde_json::from_value::<noah_release::Manifest>(manifest.clone())
+                        .expect("manifest parses")
+                        .signed_text();
+                manifest["signature"] = base64::engine::general_purpose::STANDARD
+                    .encode(signing_key.sign(signed_text.as_bytes()))
+                    .into();
+                let manifest = manifest.to_string();
                 async move {
                     if req.uri().path() == "/downloads/latest.json" {
                         return Ok(Response::builder()

@@ -83,7 +83,7 @@ impl Manifest {
 
     /// What the release key signs; `script/write-release-manifest` builds the
     /// same text, with the asset lines in byte order.
-    fn signed_text(&self) -> String {
+    pub(crate) fn signed_text(&self) -> String {
         let mut lines: Vec<String> = self
             .assets
             .iter()
@@ -100,7 +100,7 @@ impl Manifest {
         self.verify_signature_with(&release_public_key()?)
     }
 
-    fn verify_signature_with(&self, public_key: &[u8]) -> Result<()> {
+    pub(crate) fn verify_signature_with(&self, public_key: &[u8]) -> Result<()> {
         use base64::Engine as _;
         let unsigned = || {
             anyhow::anyhow!(
