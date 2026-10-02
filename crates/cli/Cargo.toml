@@ -33,6 +33,7 @@ flate2 = "1"
 ipc-channel = "0.19"
 parking_lot.workspace = true
 paths.workspace = true
+noah_trust.workspace = true
 release_channel.workspace = true
 serde.workspace = true
 serde_json.workspace = true

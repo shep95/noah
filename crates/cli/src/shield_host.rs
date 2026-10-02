@@ -100,6 +100,27 @@ fn handle(message: &Value) -> Result<Value> {
         // The shield's footprint page hands shepherd a removal plan. The
         // prompt only lands in the composer; the person still sends it, and
         // every browser action shepherd takes afterwards asks as usual.
+        // The shield's "tell noah about this site": one JSON file per site
+        // under ~/.noah/shield/sites, which shepherd's fetch and browser
+        // tools read before trusting the site.
+        "page.report" => {
+            let report = message.get("report").context("report is missing")?;
+            let site = report.get("site").and_then(Value::as_str).unwrap_or("");
+            let file_name = noah_trust::shield_reports::file_name_for(site)
+                .context("the report names no site")?;
+            let text = serde_json::to_vec_pretty(report)?;
+            anyhow::ensure!(text.len() <= MAX_REPORT_BYTES, "the report is too large");
+            let directory = paths::shield_sites_directory();
+            std::fs::create_dir_all(&directory)
+                .with_context(|| format!("couldn't create {}", directory.display()))?;
+            let target = directory.join(file_name);
+            let partial = directory.join(format!(".{}.partial", std::process::id()));
+            std::fs::write(&partial, &text)
+                .with_context(|| format!("couldn't write {}", partial.display()))?;
+            std::fs::rename(&partial, &target)
+                .with_context(|| format!("couldn't place {}", target.display()))?;
+            Ok(json!({ "ok": true, "path": target.display().to_string() }))
+        }
         "agent.prompt" => {
             let prompt = message
                 .get("prompt")
@@ -122,6 +143,8 @@ const MAX_AGENT_PROMPT_BYTES: usize = 24 * 1024;
 /// The encoded prompt travels as one argument; Windows takes about 32 K
 /// characters on a command line.
 const MAX_ENCODED_PROMPT_CHARS: usize = 30_000;
+/// A site report from the shield is a few KB.
+const MAX_REPORT_BYTES: usize = 64 * 1024;
 
 /// Opens noah (or reaches the running copy) with the prompt waiting in
 /// shepherd's composer, the same way a `zed://agent?prompt=` link does.

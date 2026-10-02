@@ -18,4 +18,5 @@ pub mod project_files;
 pub mod provenance;
 pub mod rules_check;
 pub mod secrets;
+pub mod shield_reports;
 pub mod spec;

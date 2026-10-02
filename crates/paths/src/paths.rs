@@ -180,6 +180,12 @@ pub fn prompt_projects_directory() -> PathBuf {
     home_dir().join("noah-projects")
 }
 
+/// What noah shield reported about sites, one file per site, written by
+/// the native host when the person presses "tell noah about this site".
+pub fn shield_sites_directory() -> PathBuf {
+    home_dir().join(".noah").join("shield").join("sites")
+}
+
 /// asherin.chat's home: the folder chat threads run in when they aren't tied
 /// to a project, holding the chat's global memory.
 pub fn chat_directory() -> PathBuf {

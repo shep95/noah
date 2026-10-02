@@ -368,7 +368,16 @@ impl AgentTool for FetchTool {
             if text.trim().is_empty() {
                 return Err("no textual content found".to_string());
             }
-            Ok(text)
+            // What the person's shield saw of this site, when it was asked
+            // to tell noah: shepherd reads the page knowing its grade.
+            let shield_note = url::Url::parse(&current_url)
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_string))
+                .and_then(|host| noah_trust::shield_reports::note_for_host(&host));
+            Ok(match shield_note {
+                Some(note) => format!("{note}\n\n{text}"),
+                None => text,
+            })
         })
     }
 }

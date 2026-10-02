@@ -304,6 +304,7 @@ impl AgentTool for BrowserTool {
                 }
                 _ => None,
             };
+            let mut destination_host: Option<String> = None;
             if let Some(destination) = destination {
                 let url = agent_browser::address_to_url(
                     destination,
@@ -311,6 +312,9 @@ impl AgentTool for BrowserTool {
                 );
                 cx.update(|cx| crate::trust::check_host_allowed(&url, cx))
                     .map_err(LanguageModelToolResultContent::from)?;
+                destination_host = url::Url::parse(&url)
+                    .ok()
+                    .and_then(|url| url.host_str().map(str::to_string));
             }
             let described = std::iter::once(input.action.command().to_string())
                 .chain(input.arguments.iter().cloned())
@@ -390,6 +394,15 @@ impl AgentTool for BrowserTool {
                     "done".to_string()
                 } else {
                     output
+                };
+                // The person's shield may have a record of this site; it is
+                // the first thing shepherd reads about it.
+                let shield_note = destination_host.and_then(|host| {
+                    noah_trust::shield_reports::note_for_host(&host)
+                });
+                let output = match shield_note {
+                    Some(note) => format!("{note}\n\n{output}"),
+                    None => output,
                 };
                 return Ok(truncate(output).into());
             };
