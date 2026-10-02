@@ -50,8 +50,9 @@ cp "$release_dir/cli" "$app/bin/noah"
 strip "$app/libexec/zed-editor" "$app/bin/noah"
 # shepherd's browser: the editor looks for agent-browser beside itself.
 script/fetch-agent-browser "$BROWSER_PLATFORM" "$app/libexec/agent-browser"
-# asherin.eye's source ships in the package, so the room needs no download.
-script/fetch-asherin-eye "$app/libexec/asherin-eye.tar.gz"
+# asherin.eye is not bundled on Linux: with it the packages pass GitHub's
+# 100 MB file limit, and noah downloads it on first use, checked against the
+# signed release manifest.
 
 # Ship the non-system libraries the editor links against, the same set Zed's
 # own bundle ships; base libraries every desktop already has are left out.
