@@ -360,6 +360,42 @@ bindSetting("search-look", ["search", "look"]);
 bindSetting("search-peek", ["search", "peek"]);
 
 // ---- what happened here ---------------------------------------------------------------------
+// What the shield knows about the open site, in one record, to noah on
+// this computer: shepherd reads it before it trusts the site with a fetch
+// or a browser visit. Only on this click; nothing is sent on its own.
+byId("tell-noah").addEventListener("click", async () => {
+  if (!current || !current.site) return;
+  const out = byId("tell-noah-out");
+  out.hidden = false;
+  out.textContent = "gathering…";
+  const site = current.site;
+  const [score, trust, blocked, log] = await Promise.all([
+    Shield.send({ type: "site.score", tabId: site.tabId, url: site.url }),
+    Shield.send({ type: "site.trust", url: site.url }),
+    Shield.send({ type: "tab.blocked", tabId: site.tabId }),
+    Shield.send({ type: "log.list", tabId: site.tabId, limit: 40 }),
+  ]);
+  const report = {
+    site: site.site || site.host,
+    url: String(site.url || "").split(/[?#]/)[0].slice(0, 300),
+    at: new Date().toISOString(),
+    grade: score && score.grade ? score.grade : null,
+    score: score && typeof score.score === "number" ? score.score : null,
+    thirdParties: score && typeof score.thirdParties === "number" ? score.thirdParties : null,
+    advertising: score && typeof score.advertising === "number" ? score.advertising : null,
+    cookies: score && typeof score.cookies === "number" ? score.cookies : null,
+    https: Boolean(score && score.https),
+    lookalike: trust && trust.lookalike ? { brand: String(trust.lookalike.brand || "") } : null,
+    breaches: trust && Array.isArray(trust.breaches) ? trust.breaches.slice(0, 5).map((breach) => ({ date: String(breach.date || "").slice(0, 10), classes: (breach.classes || []).slice(0, 4).map(String) })) : null,
+    stopped: blocked && blocked.groups ? blocked.groups.slice(0, 30).map((group) => ({ site: String(group.site || ""), count: Number(group.count) || 0, kinds: (group.types || []).slice(0, 4).map(String), owner: group.owner ? String(group.owner.owner || "") : "" })) : [],
+    did: ((log && log.entries) || []).slice(0, 40).map((entry) => String(entry.text || entry.message || "").slice(0, 200)).filter(Boolean),
+  };
+  const answer = await Shield.send({ type: "site.report", report });
+  out.textContent = answer && answer.error
+    ? answer.error + (/not installed/.test(answer.error) ? " — noah keeps these at ~/.noah/shield/ once it is on this computer." : "")
+    : `noah has it: ${report.site}, grade ${report.grade || "?"}, ${report.stopped.length} trackers named${report.breaches && report.breaches.length ? ", " + report.breaches.length + " known leaks" : ""}.`;
+});
+
 byId("here").addEventListener("click", async () => {
   if (!current || !current.site) return;
   const list = byId("here-list");

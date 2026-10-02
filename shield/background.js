@@ -818,6 +818,16 @@ const handlers = {
   },
   // Is this site worth trusting: has it leaked its users' data before, is it
   // a lookalike, is it plain http. For the popup only.
+  // The popup's "tell noah about this site": the record goes to noah's
+  // native host, which keeps it for shepherd. Never from a page, never on
+  // its own.
+  async "site.report"(message) {
+    const report = message.report;
+    if (!report || typeof report !== "object" || !report.site) return { error: "nothing to report" };
+    const text = JSON.stringify(report);
+    if (text.length > 64 * 1024) return { error: "the report is too large" };
+    return Shield.host({ type: "page.report", report });
+  },
   async "site.trust"(message) {
     const url = String(message.url || "");
     const host = Shield.hostOf(url);
