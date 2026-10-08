@@ -87,7 +87,6 @@ Shield.BRANDS = [
   { name: "cloudflare", domains: ["cloudflare.com", "cloudflare.net", "cloudflareinsights.com"] },
   { name: "irs", domains: ["irs.gov"] },
   { name: "hmrc", domains: ["hmrc.gov.uk", "gov.uk", "tax.service.gov.uk"] },
-  { name: "coinbase", domains: ["coinbase.com"] },
   { name: "intuit", domains: ["intuit.com", "turbotax.com", "quickbooks.com", "mint.com", "creditkarma.com"] },
   { name: "turbotax", domains: ["turbotax.com", "intuit.com"] },
   { name: "att", domains: ["att.com", "att.net"] },

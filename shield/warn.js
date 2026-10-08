@@ -6,6 +6,13 @@ const title = document.getElementById("title");
 const lines = document.getElementById("lines");
 const actions = document.getElementById("actions");
 const extra = document.getElementById("extra");
+const stateIcon = document.getElementById("state-icon");
+
+// Set threat-level state on body so CSS activates the right color system.
+function setThreatState(state, icon) {
+  document.body.className = state;
+  if (stateIcon && icon) stateIcon.textContent = icon;
+}
 
 function paragraph(text) {
   const element = document.createElement("p");
@@ -26,6 +33,7 @@ async function closeThisTab() {
 }
 
 async function lookalike() {
+  setThreatState("danger", "◈");
   const url = /^https?:\/\//i.test(params.get("url") || "") ? params.get("url") : "";
   const host = Shield.hostOf(url);
   const known = Shield.BRANDS.find((entry) => entry.name === params.get("brand"));
@@ -52,6 +60,7 @@ async function lookalike() {
 }
 
 async function download() {
+  setThreatState("caution", "◎");
   const id = parseInt(params.get("id"), 10);
   const info = await Shield.send({ type: "download.info", id });
   title.textContent = "Keep this download?";
@@ -95,6 +104,7 @@ async function download() {
 }
 
 function focus() {
+  setThreatState("info", "◈");
   const site = params.get("site") || "this site";
   title.textContent = "Focus hours.";
   paragraph(`${site} is on your focus list, and it is inside the hours you set. It will open again when they end.`);
@@ -103,6 +113,7 @@ function focus() {
 }
 
 function parental() {
+  setThreatState("locked", "◆");
   title.textContent = "Not on this browser.";
   paragraph("Parental mode is on, and this address is on the blocked list or matched an adult keyword. A parent can turn the mode off in the shield's settings with the PIN.");
   button("Back", true, () => history.length > 1 ? history.back() : closeThisTab());

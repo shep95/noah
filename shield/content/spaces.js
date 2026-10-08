@@ -22,6 +22,11 @@
   // fire against the same deployment. Twitter changes these query ids often,
   // so we sniff instead of hardcoding.
   let audioSpaceQueryPrefix = null;
+  // HLS stream URL captured from the liveVideoStream / startAudioSpace response.
+  // This is the m3u8 playlist URL that carries the Space's audio. We show it in
+  // the panel so the user can paste it into VLC, ffmpeg or any HLS downloader.
+  let hlsStreamUrl = null;
+  let hlsDynamicUrl = null; // shorter-lived signed URL if present
   // Local soundboard clips saved in this browser only. Each is {id, name, url}
   // where url is a blob: URL for a File the user picked. Nothing uploads.
   let sounds = [];
@@ -123,11 +128,72 @@
     };
   }
 
+  // ---- HLS stream URL extraction ------------------------------------------------
+  // Mechanism: when a user's browser connects to a live Space, X fetches the
+  // stream's HLS playlist from its media backend. The response contains the
+  // m3u8 URL. We intercept those responses — which the browser was already
+  // going to receive — and surface the URL in the panel. The user can then
+  // paste it into VLC, ffmpeg, or any HLS downloader to record or replay
+  // the Space audio. Nothing is uploaded or transmitted; we only read what
+  // already arrived.
+  function extractHlsUrl(json) {
+    if (!json || typeof json !== "object") return;
+    // Walk all string values in the JSON looking for m3u8 URLs
+    function walkForM3u8(node) {
+      if (typeof node === "string") {
+        if (node.includes(".m3u8") || node.includes("master_playlist") || node.includes("stream.m3u8")) {
+          return node;
+        }
+        return null;
+      }
+      if (Array.isArray(node)) {
+        for (const item of node) {
+          const found = walkForM3u8(item);
+          if (found) return found;
+        }
+        return null;
+      }
+      if (node && typeof node === "object") {
+        // Prioritize known field names for the HLS URL
+        for (const key of ["hls_url", "stream_url", "playlist_url", "location", "url"]) {
+          if (typeof node[key] === "string" && node[key].includes(".m3u8")) return node[key];
+        }
+        for (const key of Object.keys(node)) {
+          const found = walkForM3u8(node[key]);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const found = walkForM3u8(json);
+    if (found && found !== hlsStreamUrl) {
+      // Prefer HTTPS URLs; if it's a relative path, skip
+      if (!found.startsWith("http")) return;
+      hlsStreamUrl = found;
+      if (space && config.enabled) render();
+    }
+  }
+
   function onData(json) {
     const found = extract(json);
     if (!found) return;
     space = found;
+    // Also try to pull HLS URL from the same response — AudioSpaceById often
+    // includes the stream location in the same payload as participant data
+    extractHlsUrl(json);
     if (config.enabled) render();
+  }
+
+  function onStreamData(json) {
+    // liveVideoStream / startAudioSpace / audioSpaceStream responses carry the
+    // m3u8 URL even when they contain no participant metadata
+    extractHlsUrl(json);
+    // Some stream responses also update participant counts
+    const found = extract(json);
+    if (found) {
+      space = found;
+      if (config.enabled) render();
+    }
   }
 
   // ---- hooks: fetch and XHR live in the page's world -------------------------------
@@ -142,6 +208,13 @@
             .then((response) => {
               if (!response || !response.clone) return;
               response.clone().json().then(onData).catch(() => {});
+            })
+            .catch(() => {});
+        } else if (isStreamUrl(url)) {
+          promise
+            .then((response) => {
+              if (!response || !response.clone) return;
+              response.clone().json().then(onStreamData).catch(() => {});
             })
             .catch(() => {});
         }
@@ -161,10 +234,16 @@
       return realOpen.call(this, method, url, ...rest);
     };
     XHR.prototype.send = function (...args) {
-      if (this.__noahSpaceUrl && isSpaceUrl(this.__noahSpaceUrl)) {
-        this.addEventListener("load", () => {
-          try { onData(JSON.parse(this.responseText)); } catch {}
-        });
+      if (this.__noahSpaceUrl) {
+        if (isSpaceUrl(this.__noahSpaceUrl)) {
+          this.addEventListener("load", () => {
+            try { onData(JSON.parse(this.responseText)); } catch {}
+          });
+        } else if (isStreamUrl(this.__noahSpaceUrl)) {
+          this.addEventListener("load", () => {
+            try { onStreamData(JSON.parse(this.responseText)); } catch {}
+          });
+        }
       }
       return realSend.apply(this, args);
     };
@@ -179,6 +258,13 @@
       if (match) audioSpaceQueryPrefix = match[1];
     }
     return hit;
+  }
+  function isStreamUrl(url) {
+    // These endpoints carry the HLS stream URL for a live Space
+    return /\/liveVideoStream|\/startAudioSpace|\/AudioSpaceStream|\/live_video_stream|\/1\.1\/live_video_stream/i.test(url)
+      || (url.includes("pscp.tv") && url.includes("broadcastAccess"))
+      || url.includes("broadcast_access")
+      || /\/spaces\/[^/]+\/stream/i.test(url);
   }
 
   // ---- who is this browser signed in as ------------------------------------
@@ -277,9 +363,15 @@
   function stopSound() {
     if (playing) { audioElement.pause(); audioElement.currentTime = 0; playing = null; renderControls(); }
   }
+  // Track all blob URLs created for sounds so they can be revoked on unload.
+  const _blobUrls = [];
+  window.addEventListener("beforeunload", () => {
+    for (const u of _blobUrls) try { URL.revokeObjectURL(u); } catch {}
+  });
   function addSound(file) {
     const id = "s" + Date.now() + Math.floor(Math.random() * 1e6);
     const url = URL.createObjectURL(file);
+    _blobUrls.push(url);
     sounds.push({ id, name: file.name.replace(/\.[^.]+$/, "").slice(0, 24), url });
     renderControls();
   }
@@ -298,49 +390,75 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      #noah-space-panel { position: fixed; left: 14px; bottom: 14px; z-index: 2147483000; width: 320px; max-height: 70vh; display: flex; flex-direction: column; background: rgba(10, 16, 12, .95); color: #d8ddd6; border: 1px solid rgba(180, 210, 190, .16); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45); font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-      #noah-space-panel header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(180, 210, 190, .1); cursor: move; user-select: none; }
-      #noah-space-panel header b { font-family: Georgia, serif; font-weight: 400; font-size: 14px; color: #f1f4ef; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #noah-space-panel .noah-space-pill { font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(180, 210, 190, .2); color: #a9cf9f; letter-spacing: .05em; text-transform: uppercase; }
-      #noah-space-panel button.noah-space-toggle { all: unset; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: #9aa298; font-size: 12px; }
-      #noah-space-panel button.noah-space-toggle:hover { color: #f1f4ef; background: rgba(180, 210, 190, .08); }
-      #noah-space-panel section { padding: 10px 12px; }
-      #noah-space-panel section + section { border-top: 1px solid rgba(180, 210, 190, .08); }
-      #noah-space-panel section h3 { margin: 0 0 6px; font: 400 11px var(--body, sans-serif); color: #9aa298; letter-spacing: .06em; text-transform: uppercase; }
-      #noah-space-panel .noah-space-list { display: flex; flex-direction: column; gap: 4px; max-height: 44vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(180,210,190,.2) transparent; }
-      #noah-space-panel .noah-space-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; text-decoration: none; color: #d8ddd6; transition: background .16s; }
-      #noah-space-panel .noah-space-row:hover { background: rgba(180, 210, 190, .06); }
-      #noah-space-panel .noah-space-row img { width: 20px; height: 20px; border-radius: 999px; background: rgba(180,210,190,.08); object-fit: cover; }
-      #noah-space-panel .noah-space-row .noah-space-name { color: #f1f4ef; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
-      #noah-space-panel .noah-space-row .noah-space-handle { color: #9aa298; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #noah-space-panel .noah-space-row.noah-space-flag { border-left: 2px solid #dcc896; padding-left: 4px; }
-      #noah-space-panel .noah-space-row.noah-space-flag .noah-space-handle::after { content: " · new account"; color: #dcc896; }
-      #noah-space-panel .noah-space-hidden { margin-top: 6px; padding: 6px 8px; color: #dcc896; font-size: 11px; border-left: 2px solid #dcc896; }
-      #noah-space-panel .noah-space-actions { display: flex; gap: 4px; margin-left: auto; opacity: 0; transition: opacity .1s; }
+      @keyframes noah-space-arrive { from { opacity:0; transform:translateY(8px) scale(0.98); } to { opacity:1; transform:none; } }
+      #noah-space-panel {
+        position: fixed; left: 14px; bottom: 14px; z-index: 2147483000;
+        width: 300px; max-height: 72vh; display: flex; flex-direction: column;
+        background: rgba(5, 8, 6, .97);
+        color: #d8ddd6;
+        border: 1px solid rgba(114, 168, 104, .18);
+        border-radius: 14px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.5) inset, 0 0 40px rgba(0,0,0,.3);
+        font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+        overflow: hidden;
+        backdrop-filter: blur(20px) saturate(1.3);
+        animation: noah-space-arrive .22s cubic-bezier(0.16,0.8,0.18,1) both;
+      }
+      #noah-space-panel header {
+        display: flex; align-items: center; gap: 8px; padding: 11px 13px;
+        border-bottom: 1px solid rgba(160, 200, 170, .09);
+        cursor: move; user-select: none;
+        background: linear-gradient(180deg, rgba(95,138,88,.08), transparent);
+      }
+      #noah-space-panel header b { font-family: Georgia, serif; font-weight: 400; font-size: 13px; color: #f1f4ef; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #noah-space-panel .noah-space-pill { font-size: 9px; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(114, 168, 104, .28); color: #a2cb98; letter-spacing: .07em; text-transform: uppercase; background: rgba(95,138,88,.1); }
+      #noah-space-panel button.noah-space-toggle { all: unset; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: #8f9690; font-size: 12px; transition: color .14s, background .14s; }
+      #noah-space-panel button.noah-space-toggle:hover { color: #f1f4ef; background: rgba(160, 200, 170, .07); }
+      #noah-space-panel section { padding: 10px 13px; }
+      #noah-space-panel section + section { border-top: 1px solid rgba(160, 200, 170, .07); }
+      #noah-space-panel section h3 { margin: 0 0 7px; font: 400 10px sans-serif; color: #8f9690; letter-spacing: .08em; text-transform: uppercase; }
+      #noah-space-panel .noah-space-list { display: flex; flex-direction: column; gap: 3px; max-height: 44vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(160,200,170,.18) transparent; }
+      #noah-space-panel .noah-space-row { display: flex; align-items: center; gap: 8px; padding: 5px 7px; border-radius: 8px; text-decoration: none; color: #d8ddd6; transition: background .14s; }
+      #noah-space-panel .noah-space-row:hover { background: rgba(160, 200, 170, .05); }
+      #noah-space-panel .noah-space-row img { width: 22px; height: 22px; border-radius: 999px; background: rgba(160,200,170,.08); object-fit: cover; border: 1px solid rgba(160,200,170,.1); }
+      #noah-space-panel .noah-space-row .noah-space-name { color: #edf0eb; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; font-weight: 500; }
+      #noah-space-panel .noah-space-row .noah-space-handle { color: #8f9690; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #noah-space-panel .noah-space-row.noah-space-flag { border-left: 2px solid rgba(216,194,142,.7); padding-left: 5px; background: rgba(216,194,142,.03); }
+      #noah-space-panel .noah-space-row.noah-space-flag .noah-space-handle::after { content: " · new account"; color: #d8c28e; }
+      #noah-space-panel .noah-space-hidden { margin-top: 5px; padding: 5px 9px; color: #d8c28e; font-size: 11px; border-left: 2px solid rgba(216,194,142,.5); background: rgba(216,194,142,.04); border-radius: 0 6px 6px 0; }
+      #noah-space-panel .noah-space-actions { display: flex; gap: 4px; margin-left: auto; opacity: 0; transition: opacity .12s; }
       #noah-space-panel .noah-space-row:hover .noah-space-actions { opacity: 1; }
-      #noah-space-panel .noah-space-act { all: unset; cursor: pointer; padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(180, 210, 190, .18); color: #d8ddd6; font-size: 10px; }
-      #noah-space-panel .noah-space-act[disabled] { cursor: not-allowed; opacity: .3; }
-      #noah-space-panel .noah-space-act:not([disabled]):hover { background: rgba(180, 210, 190, .1); color: #f1f4ef; }
-      #noah-space-panel .noah-space-act.danger:not([disabled]):hover { background: rgba(230, 150, 150, .12); color: #e69696; border-color: rgba(230, 150, 150, .3); }
-      #noah-space-panel .noah-space-controls input[type="text"] { flex: 1; background: rgba(180, 210, 190, .05); border: 1px solid rgba(180, 210, 190, .14); border-radius: 6px; padding: 3px 8px; color: #f1f4ef; font: inherit; }
+      #noah-space-panel .noah-space-act { all: unset; cursor: pointer; padding: 2px 7px; border-radius: 5px; border: 1px solid rgba(160, 200, 170, .16); color: #d8ddd6; font-size: 10px; transition: background .12s, border-color .12s; }
+      #noah-space-panel .noah-space-act[disabled] { cursor: not-allowed; opacity: .28; }
+      #noah-space-panel .noah-space-act:not([disabled]):hover { background: rgba(160, 200, 170, .09); border-color: rgba(160, 200, 170, .26); color: #f1f4ef; }
+      #noah-space-panel .noah-space-act.danger:not([disabled]):hover { background: rgba(228, 173, 160, .1); color: #e4ada0; border-color: rgba(228, 173, 160, .28); }
+      #noah-space-panel .noah-space-controls input[type="text"] { flex: 1; background: rgba(160, 200, 170, .04); border: 1px solid rgba(160, 200, 170, .13); border-radius: 7px; padding: 4px 8px; color: #f1f4ef; font: inherit; }
       #noah-space-panel .noah-space-controls .noah-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-      #noah-space-panel .noah-space-controls button { all: unset; cursor: pointer; padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(180, 210, 190, .2); color: #a9cf9f; font-size: 11px; }
-      #noah-space-panel .noah-space-controls button:not([disabled]):hover { background: rgba(180, 210, 190, .08); }
-      #noah-space-panel .noah-space-controls button[disabled] { cursor: not-allowed; opacity: .35; color: #9aa298; }
-      #noah-space-panel .noah-space-controls .note { color: #9aa298; font-size: 10px; margin-top: 4px; line-height: 1.4; }
-      #noah-space-panel .noah-space-controls .note.warn { color: #dcc896; }
-      #noah-space-panel .noah-space-sounds { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-      #noah-space-panel .noah-sound { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 999px; background: rgba(180, 210, 190, .08); border: 1px solid rgba(180, 210, 190, .16); color: #d8ddd6; font-size: 11px; }
-      #noah-space-panel .noah-sound button { all: unset; cursor: pointer; padding: 0 3px; color: #9aa298; }
+      #noah-space-panel .noah-space-controls button { all: unset; cursor: pointer; padding: 3px 10px; border-radius: 7px; border: 1px solid rgba(114, 168, 104, .28); color: #a2cb98; font-size: 11px; background: rgba(95,138,88,.07); transition: background .13s; }
+      #noah-space-panel .noah-space-controls button:not([disabled]):hover { background: rgba(95,138,88,.14); }
+      #noah-space-panel .noah-space-controls button[disabled] { cursor: not-allowed; opacity: .32; color: #8f9690; }
+      #noah-space-panel .noah-space-controls .note { color: #8f9690; font-size: 10px; margin-top: 5px; line-height: 1.5; }
+      #noah-space-panel .noah-space-controls .note.warn { color: #d8c28e; }
+      #noah-space-panel .noah-space-sounds { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+      #noah-space-panel .noah-sound { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 999px; background: rgba(160, 200, 170, .06); border: 1px solid rgba(160, 200, 170, .14); color: #d8ddd6; font-size: 11px; transition: border-color .13s; }
+      #noah-space-panel .noah-sound button { all: unset; cursor: pointer; padding: 0 3px; color: #8f9690; transition: color .12s; }
       #noah-space-panel .noah-sound button:hover { color: #f1f4ef; }
-      #noah-space-panel .noah-sound.playing { border-color: #a9cf9f; color: #a9cf9f; }
-      #noah-space-panel .noah-space-op { margin-top: 4px; font-size: 10px; color: #9aa298; }
-      #noah-space-panel .noah-space-op.ok { color: #a9cf9f; }
-      #noah-space-panel .noah-space-op.bad { color: #e69696; }
-      #noah-space-panel footer { padding: 8px 12px; font-size: 10px; color: #6f766e; border-top: 1px solid rgba(180, 210, 190, .08); }
-      #noah-space-panel[data-collapsed="true"] { max-height: 46px; }
+      #noah-space-panel .noah-sound.playing { border-color: rgba(162,203,152,.5); color: #a2cb98; box-shadow: 0 0 8px rgba(95,138,88,.2); }
+      #noah-space-panel .noah-space-op { margin-top: 4px; font-size: 10px; color: #8f9690; }
+      #noah-space-panel .noah-space-op.ok { color: #a2cb98; }
+      #noah-space-panel .noah-space-op.bad { color: #e4ada0; }
+      #noah-space-panel footer { padding: 8px 13px; font-size: 10px; color: #626860; border-top: 1px solid rgba(160, 200, 170, .07); }
+      #noah-space-panel .noah-dl-box { background: rgba(95,138,88,.05); border: 1px solid rgba(114,168,104,.18); border-radius: 9px; padding: 9px 11px; margin-top: 4px; }
+      #noah-space-panel .noah-dl-url { font: 11px/1.4 "SF Mono", "Fira Mono", monospace; color: #a2cb98; word-break: break-all; margin-bottom: 7px; }
+      #noah-space-panel .noah-dl-cmd { font: 10px/1.5 "SF Mono", "Fira Mono", monospace; color: #8f9690; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,.25); border-radius: 5px; padding: 5px 8px; margin: 4px 0; }
+      #noah-space-panel .noah-dl-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
+      #noah-space-panel .noah-dl-btn { all: unset; cursor: pointer; padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(114,168,104,.28); color: #a2cb98; font-size: 10px; background: rgba(95,138,88,.08); transition: background .13s; }
+      #noah-space-panel .noah-dl-btn:hover { background: rgba(95,138,88,.17); }
+      #noah-space-panel .noah-dl-copied { color: #7bc17a; font-size: 10px; margin-left: 4px; opacity: 0; transition: opacity .2s; }
+      #noah-space-panel .noah-dl-copied.show { opacity: 1; }
+      #noah-space-panel[data-collapsed="true"] { max-height: 44px; }
       #noah-space-panel[data-collapsed="true"] section, #noah-space-panel[data-collapsed="true"] footer { display: none; }
-      @media (prefers-reduced-motion: reduce) { #noah-space-panel .noah-space-row { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { #noah-space-panel { animation: none; } #noah-space-panel .noah-space-row { transition: none; } }
     `;
     (document.head || document.documentElement).append(style);
   }
@@ -408,6 +526,8 @@
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // confirmAction: destructive mutations (remove, demote) require confirmation before firing.
+      if (opts.danger && !window.confirm("Send \"" + label + "\" to Twitter for this user? This cannot be undone from the panel.")) return;
       button.disabled = true;
       const previous = button.textContent;
       button.textContent = "…";
@@ -635,6 +755,116 @@
       section.append(hiddenRow);
     }
     panel.append(section);
+
+    // ---- Space downloader ---------------------------------------------------
+    // When liveVideoStream / startAudioSpace returns an m3u8 URL we surface it
+    // here so the user can record or replay the Space with any HLS tool.
+    // Nothing is uploaded; we only show the URL the browser already received.
+    const dlSection = document.createElement("section");
+    {
+      const heading = document.createElement("h3");
+      heading.textContent = "space downloader";
+      dlSection.append(heading);
+
+      if (hlsStreamUrl) {
+        const box = document.createElement("div");
+        box.className = "noah-dl-box";
+
+        const urlEl = document.createElement("div");
+        urlEl.className = "noah-dl-url";
+        urlEl.textContent = hlsStreamUrl;
+        box.append(urlEl);
+
+        const btns = document.createElement("div");
+        btns.className = "noah-dl-btns";
+        const copied = document.createElement("span");
+        copied.className = "noah-dl-copied";
+        copied.textContent = "copied";
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "noah-dl-btn";
+        copyBtn.textContent = "copy stream url";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(hlsStreamUrl).then(() => {
+            copied.classList.add("show");
+            setTimeout(() => copied.classList.remove("show"), 1800);
+          }).catch(() => {
+            // Fallback for browsers that block clipboard in content scripts
+            const ta = document.createElement("textarea");
+            ta.value = hlsStreamUrl;
+            ta.style.position = "fixed";
+            ta.style.top = "-9999px";
+            document.body.append(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+            copied.classList.add("show");
+            setTimeout(() => copied.classList.remove("show"), 1800);
+          });
+        });
+
+        const vlcBtn = document.createElement("button");
+        vlcBtn.type = "button";
+        vlcBtn.className = "noah-dl-btn";
+        vlcBtn.textContent = "open in vlc";
+        vlcBtn.title = "Opens vlc:// protocol — VLC must be installed";
+        vlcBtn.addEventListener("click", () => {
+          window.open("vlc://" + hlsStreamUrl, "_blank");
+        });
+
+        btns.append(copyBtn, vlcBtn, copied);
+        box.append(btns);
+
+        const ffLabel = document.createElement("div");
+        ffLabel.style.color = "#8f9690";
+        ffLabel.style.fontSize = "10px";
+        ffLabel.style.marginBottom = "3px";
+        ffLabel.textContent = "record with ffmpeg (paste in a terminal):";
+        const ffCmd = document.createElement("div");
+        ffCmd.className = "noah-dl-cmd";
+        ffCmd.textContent = `ffmpeg -i "${hlsStreamUrl}" -c copy space_recording.aac`;
+        box.append(ffLabel, ffCmd);
+
+        const copyFf = document.createElement("button");
+        copyFf.type = "button";
+        copyFf.className = "noah-dl-btn";
+        copyFf.textContent = "copy ffmpeg command";
+        const copiedFf = document.createElement("span");
+        copiedFf.className = "noah-dl-copied";
+        copiedFf.textContent = "copied";
+        copyFf.addEventListener("click", () => {
+          const cmd = `ffmpeg -i "${hlsStreamUrl}" -c copy space_recording.aac`;
+          navigator.clipboard.writeText(cmd).then(() => {
+            copiedFf.classList.add("show");
+            setTimeout(() => copiedFf.classList.remove("show"), 1800);
+          }).catch(() => {});
+        });
+        const copyFfRow = document.createElement("div");
+        copyFfRow.className = "noah-dl-btns";
+        copyFfRow.style.marginTop = "5px";
+        copyFfRow.append(copyFf, copiedFf);
+        box.append(copyFfRow);
+
+        const note = document.createElement("div");
+        note.className = "note";
+        note.style.marginTop = "7px";
+        note.style.fontSize = "10px";
+        note.style.color = "#626860";
+        note.textContent = "The stream URL expires. If it stops working, reload the Space and the shield will catch a fresh one. VLC: Media → Open Network Stream and paste the URL.";
+        box.append(note);
+
+        dlSection.append(box);
+      } else {
+        const waiting = document.createElement("div");
+        waiting.style.color = "#8f9690";
+        waiting.style.fontSize = "11px";
+        waiting.style.marginTop = "3px";
+        waiting.textContent = "Waiting for the browser to receive the stream URL — it arrives when you open or join a live Space.";
+        dlSection.append(waiting);
+      }
+    }
+    panel.append(dlSection);
 
     // Controls: soundboard for the plugin holder, and host actions when they
     // are the host of the room. Rendered by renderControls() so it can also

@@ -93,6 +93,7 @@
 
   Shield.toneStop = function toneStop() {
     stopNodes();
+    if (context) { context.close().catch(() => {}); context = null; }
     current = { ...current, playing: false };
     return current;
   };

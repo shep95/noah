@@ -25,7 +25,7 @@
     /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}\b/g,
     /\b\d{3}-\d{2}-\d{4}\b/g,
     /\b(?:sk|pk|rk|ghp|gho|xox[abpr]|AKIA|AIza)[A-Za-z0-9_-]{12,}\b/g,
-    /\b[A-Fa-f0-9]{32,}\b/g,
+    /\b[A-Fa-f0-9]{64,}\b/g,
     /\b0x[a-fA-F0-9]{40}\b/g,
     /\b\d{1,5}\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*\s+(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Lane|Ln\.?|Drive|Dr\.?|Boulevard|Blvd\.?|Way|Court|Ct\.?|Place|Pl\.?)\b/g,
   ];

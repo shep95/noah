@@ -77,6 +77,16 @@ async function run() {
   }
   byId("verdict").textContent = verdict;
   byId("notes").textContent = notes.join(" ");
+
+  // Apply threat state visual: danger = active leak, caution = tunnel off, info = clean.
+  const isLeak = publicRtc.length > 0 || (tunnel.state === "up" && exit && tunnel.exit && exit.ip !== tunnel.exit.ip);
+  const stateClass = isLeak ? "danger" : tunnel.state === "up" ? "info" : "caution";
+  const stateIcon = isLeak ? "◈" : tunnel.state === "up" ? "✓" : "◎";
+  document.body.className = stateClass;
+  const card = document.getElementById("card");
+  if (card) card.className = "card " + stateClass;
+  const iconEl = document.getElementById("state-icon");
+  if (iconEl) iconEl.textContent = stateIcon;
 }
 
 byId("again").addEventListener("click", run);

@@ -266,6 +266,7 @@ async function hideAds(details) {
 api.tabs.onRemoved.addListener((tabId) => {
   Shield.resetTabCount(tabId).catch(() => {});
   Shield.forgetBlocked(tabId).catch(() => {});
+  _dlAssets.delete(tabId);
   api.storage.session.get("mediaTabs").then((session) => {
     const mediaTabs = session.mediaTabs || {};
     if (mediaTabs[tabId]) { delete mediaTabs[tabId]; return api.storage.session.set({ mediaTabs }); }
@@ -311,6 +312,17 @@ async function onceAllowed(site, kind) {
   return Boolean(grant && Date.now() - grant < 10 * 60 * 1000);
 }
 
+// SSRF prevention: only fetch external https URLs that are not RFC-1918 / loopback.
+function isSafeExternalUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname;
+    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1)/i.test(h)) return false;
+    return true;
+  } catch { return false; }
+}
+
 // Token buckets per tab and kind: a page that floods the worker with lookups
 // (breach prefixes, store searches) gets a quiet refusal, not a queue that
 // runs on its behalf.
@@ -323,7 +335,7 @@ function allowRate(kind, sender, perMinute) {
     bucket = { start: now, used: 0 };
     rateBuckets.set(key, bucket);
   }
-  if (rateBuckets.size > 2000) {
+  if (rateBuckets.size > 500) {
     for (const [otherKey, other] of rateBuckets) if (now - other.start > 60000) rateBuckets.delete(otherKey);
   }
   bucket.used += 1;
@@ -533,6 +545,7 @@ const handlers = {
     const settings = await Shield.loadSettings();
     if (!settings.search.peek || settings.localOnly) return { error: "peeking is off" };
     if (!allowRate("peek", sender, 20)) return { error: "too many in a minute; a moment" };
+    if (!isSafeExternalUrl(String(message.url || ""))) return { error: "not a web address" };
     let url;
     try { url = new URL(String(message.url || "")); } catch { return { error: "not a web address" }; }
     if (!/^https?:$/.test(url.protocol) || Shield.isLocalHost(url.hostname)) return { error: "not a web address" };
@@ -663,7 +676,7 @@ const handlers = {
     const site = Shield.siteOf(Shield.hostOf(sender.url || (sender.tab && sender.tab.url) || ""));
     const trusted = settings.privacy.trustedSites.includes(site);
     const security = settings.security;
-    return {
+    const config = {
       site,
       trusted,
       geolocation: trusted ? "ask" : settings.privacy.geolocation,
@@ -708,10 +721,17 @@ const handlers = {
       lockMinutes: settings.modes.lock.sites.includes(site) && settings.modes.lock.pinHash ? settings.modes.lock.minutes : 0,
       mode: settings.modes.siteModes[site] || settings.modes.profile || "",
     };
+    // Count each page load where fingerprint spoofing is active.
+    // Tallied as today.fingerprint and surfaced in the popup tracker-defense counter.
+    if (config.fingerprint) {
+      await Shield.count("fingerprint", 1, sender.tab ? sender.tab.id : null);
+    }
+    return config;
   },
   async "lock.check"(message) {
     const settings = await Shield.loadSettings();
-    const hash = await Shield.hashPin(String(message.pin || ""));
+    // Accepts pre-hashed pinHash (from updated content/lock.js) or legacy plaintext pin.
+    const hash = message.pinHash ? String(message.pinHash) : await Shield.hashPin(String(message.pin || ""));
     return { ok: Boolean(settings.modes.lock.pinHash) && hash === settings.modes.lock.pinHash };
   },
   async "pin.set"(message) {
@@ -818,45 +838,6 @@ const handlers = {
   },
   // Is this site worth trusting: has it leaked its users' data before, is it
   // a lookalike, is it plain http. For the popup only.
-  // The popup's "tell noah about this site": the record goes to noah's
-  // native host, which keeps it for shepherd. Never from a page, never on
-  // its own.
-  async "site.report"(message) {
-    const report = message.report;
-    if (!report || typeof report !== "object" || !report.site) return { error: "nothing to report" };
-    const text = JSON.stringify(report);
-    if (text.length > 64 * 1024) return { error: "the report is too large" };
-    return Shield.host({ type: "page.report", report });
-  },
-  // The one-way clipboard's two halves. Lengths go to the page's content
-  // script so it knows when to hold a paste back; the salted hashes stay
-  // here, and so does the matching.
-  async "paste.secretLengths"() {
-    const fingerprints = await secretFingerprints();
-    return { lengths: [...new Set(fingerprints.secrets.map((secret) => secret.length))] };
-  },
-  async "paste.secrets"(message) {
-    const text = String(message.text || "");
-    if (!text || text.length > 20000) return { text, names: [] };
-    const fingerprints = await secretFingerprints();
-    if (!fingerprints.secrets.length) return { text, names: [] };
-    const lengths = new Set(fingerprints.secrets.map((secret) => secret.length));
-    const pieces = text.split(/[\s"'`=:,;()<>\[\]{}]+/).filter(Boolean);
-    // A secret at the end of a sentence carries the full stop with it.
-    const candidates = pieces.flatMap((word) => [word, word.replace(/[.!?]+$/, "")]);
-    const words = [...new Set(candidates.filter((word) => lengths.has([...word].length)))].slice(0, 400);
-    let replaced = text;
-    const names = [];
-    for (const word of words) {
-      const digest = await sha256Hex(fingerprints.salt + word);
-      const match = fingerprints.secrets.find((secret) => secret.sha256 === digest);
-      if (!match) continue;
-      replaced = replaced.split(word).join("$" + match.name);
-      if (!names.includes(match.name)) names.push(match.name);
-    }
-    if (names.length) await Shield.count("pastes", 1);
-    return { text: replaced, names };
-  },
   async "site.trust"(message) {
     const url = String(message.url || "");
     const host = Shield.hostOf(url);
@@ -900,29 +881,6 @@ const handlers = {
     }
     return { identity };
   },
-  // The form filler: the person's own details, kept in this browser only,
-  // into the form on the open tab. Nothing is submitted; the popup lists
-  // what went where so the person checks it first.
-  async "details.fill"(message) {
-    const stored = await api.storage.local.get("myDetails");
-    const details = stored.myDetails || {};
-    if (!Object.values(details).some((value) => typeof value === "string" && value.trim())) {
-      return { error: "add your details under settings first; they stay in this browser" };
-    }
-    const identity = {
-      firstName: String(details.firstName || ""), lastName: String(details.lastName || ""),
-      fullName: String(details.fullName || [details.firstName, details.lastName].filter(Boolean).join(" ")),
-      email: String(details.email || ""), username: String(details.username || ""), password: "",
-      phone: String(details.phone || ""), street: String(details.street || ""), city: String(details.city || ""),
-      postal: String(details.postal || ""), birthday: String(details.birthday || ""),
-    };
-    try {
-      const [result] = await api.scripting.executeScript({ target: { tabId: Number(message.tabId) }, func: fillDecoy, args: [identity] });
-      return { filled: (result && Array.isArray(result.result)) ? result.result : [] };
-    } catch (error) {
-      return { error: String(error.message || error) };
-    }
-  },
   async "fingerprint.rotate"() {
     await Shield.rotateFingerprint();
     return { ok: true };
@@ -935,6 +893,7 @@ const handlers = {
       await Shield.updateSettings({ privacy: { sync: false } });
       return { ok: true };
     }
+    // TODO: F-02 — passphrase stored plaintext, should be derived not stored
     await api.storage.local.set({ syncPassphrase: passphrase });
     const settings = await Shield.updateSettings({ privacy: { sync: true } });
     await Shield.pushSync(settings);
@@ -1039,15 +998,23 @@ const handlers = {
   },
   async "record.open"() {
     const url = api.runtime.getURL("record.html");
-    const windows = await api.windows.getAll({ populate: true });
-    for (const window of windows) {
-      const tab = (window.tabs || []).find((entry) => entry.url === url);
-      if (tab) {
-        await api.windows.update(window.id, { focused: true });
+    // FIX: type:"popup" windows fail getDisplayMedia() in Chrome 116+ because
+    // the screen-capture picker pulls focus away from the popup window and Chrome
+    // drops the pending call. type:"normal" is a full window — getDisplayMedia()
+    // is reliable there. Use tabs.query for the dedup check (more reliable than
+    // windows.getAll which may not populate tab URLs for all window types).
+    try {
+      const existing = await api.tabs.query({ url });
+      if (existing && existing.length > 0) {
+        const tab = existing[0];
+        await api.windows.update(tab.windowId, { focused: true });
+        await api.tabs.update(tab.id, { active: true });
         return { ok: true, reused: true };
       }
+    } catch {
+      // tabs.query may fail if the URL is not in the allowed set; fall through.
     }
-    await api.windows.create({ url, type: "popup", width: 470, height: 760 });
+    await api.windows.create({ url, type: "normal", width: 520, height: 820, focused: true });
     return { ok: true };
   },
   async "capture.ask"(message, sender) {
@@ -1096,7 +1063,7 @@ const handlers = {
   },
   async "safety.event"(message, sender) {
     if (!allowRate("safety", sender, 120)) return { ok: false, limited: true };
-    const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "keylog", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads"]);
+    const kinds = new Set(["phishing", "passwordHttp", "reuse", "breached", "hiddenFields", "frames", "popups", "leaks", "keylog", "wallets", "clipboard", "fees", "darkPatterns", "traps", "reviewsChecked", "banners", "overlays", "autoplay", "timers", "pastes", "uploads", "fingerprint", "social_sponsored_hidden", "social_suggested_hidden", "social_ad_hidden", "social_promoted_hidden", "social_karma_farm", "social_time_warning", "social_session_expired", "tiktok_session_warning", "tiktok_session_closed", "yt_autoplay_disabled", "yt_sidebar_cleaned", "yt_endscreen_cleaned"]);
     const kind = kinds.has(message.kind) ? message.kind : "other";
     const amount = Math.min(50, Math.max(1, Number(message.amount) || 1));
     await Shield.count(kind, amount, sender.tab ? sender.tab.id : null);
@@ -1305,6 +1272,34 @@ const handlers = {
     } catch {}
     return { spaces: settings.spaces };
   },
+  async "persona.config"() {
+    const settings = await Shield.loadSettings();
+    const prompt = await Shield.loadShepherdPrompt();
+    return { persona: settings.persona, prompt };
+  },
+  async "persona.set"(message) {
+    const change = { persona: message.change || {} };
+    const settings = await Shield.updateSettings(change);
+    const prompt = await Shield.loadShepherdPrompt();
+    try {
+      const tabs = await api.tabs.query({});
+      for (const tab of tabs) {
+        try { await api.tabs.sendMessage(tab.id, { type: "persona.set", persona: settings.persona, prompt }); } catch {}
+      }
+    } catch {}
+    return { persona: settings.persona };
+  },
+  async "persona.consentCheck"() {
+    const stored = await api.storage.local.get("personaConsentGiven");
+    return { granted: Boolean(stored.personaConsentGiven) };
+  },
+  async "persona.reseed"() {
+    try {
+      const tabs = await api.tabs.query({ active: true, currentWindow: true });
+      if (tabs && tabs[0]) await api.tabs.sendMessage(tabs[0].id, { type: "persona.reseed" });
+    } catch {}
+    return { ok: true };
+  },
   async "profile.config"() {
     const settings = await Shield.loadSettings();
     return { profile: settings.profileIntel };
@@ -1319,6 +1314,38 @@ const handlers = {
       }
     } catch {}
     return { profile: settings.profileIntel };
+  },
+  async "social.config"(message) {
+    const settings = await Shield.loadSettings();
+    const platform = String(message.platform || "");
+    const valid = ["instagram", "tiktok", "reddit", "youtube", "linkedin", "twitter"];
+    if (!valid.includes(platform)) return { config: {} };
+    return { config: (settings.social && settings.social[platform]) || {} };
+  },
+  async "social.set"(message) {
+    const platform = String(message.platform || "");
+    const valid = ["instagram", "tiktok", "reddit", "youtube", "linkedin", "twitter"];
+    if (!valid.includes(platform)) return { ok: false };
+    const settings = await Shield.loadSettings();
+    const current = (settings.social && settings.social[platform]) || {};
+    const updated = { ...current, ...(message.change || {}) };
+    const socialSettings = { ...((settings.social) || {}), [platform]: updated };
+    await Shield.updateSettings({ social: socialSettings });
+    // Broadcast to relevant tabs
+    const urlMap = {
+      instagram: ["https://www.instagram.com/*", "https://instagram.com/*"],
+      tiktok: ["https://www.tiktok.com/*", "https://tiktok.com/*"],
+      reddit: ["https://www.reddit.com/*", "https://old.reddit.com/*", "https://reddit.com/*"],
+      youtube: ["https://www.youtube.com/*", "https://youtube.com/*", "https://m.youtube.com/*"],
+      linkedin: ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+    };
+    try {
+      const tabs = await api.tabs.query({ url: urlMap[platform] });
+      for (const tab of tabs) {
+        try { await api.tabs.sendMessage(tab.id, { type: "social.set", platform, config: updated }); } catch {}
+      }
+    } catch {}
+    return { ok: true, config: updated };
   },
   async "inspect.enabled"(message, sender) {
     const tabId = sender.tab ? sender.tab.id : (message && message.tabId);
@@ -1356,7 +1383,64 @@ const handlers = {
     const map = stored.inspectTabs || {};
     return { enabled: Boolean(map[String(tabId)]) };
   },
+
+  // ── Downloader: return network-intercepted assets for a tab ──────────────
+  async "downloader.assets"(message) {
+    const tabId = Number(message && message.tabId);
+    if (!Number.isFinite(tabId)) return { assets: [] };
+    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
+    const tabData = store[tabId] || {};
+    return { assets: Object.values(tabData) };
+  },
+
+  // ── Downloader: content script reports DOM-found items ───────────────────
+  async "downloader.found"(message, sender) {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (!tabId) return { ok: false };
+    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
+    if (!store[tabId]) store[tabId] = {};
+    for (const item of (message.items || [])) store[tabId][item.url] = item;
+    await chrome.storage.session.set({ dlAssets: store });
+    return { ok: true };
+  },
 };
+
+// ── Downloader: per-tab media asset store (storage.session — survives SW restart) ──
+if (api.webRequest && api.webRequest.onCompleted) {
+  api.webRequest.onCompleted.addListener(
+    async (details) => {
+      if (!details.tabId || details.tabId < 0) return;
+      const url = details.url;
+      if (!url || url.startsWith('chrome-extension://') || url.startsWith('data:')) return;
+      const mime = (details.responseHeaders || []).find(h => h.name.toLowerCase() === 'content-type');
+      const mimeType = mime ? mime.value.split(';')[0].trim() : '';
+      let type = null;
+      if (/^video\//i.test(mimeType) || /\.(mp4|webm|mkv|mov|avi|m3u8|mpd|ts)(\?|$)/i.test(url)) type = 'video';
+      else if (/^audio\//i.test(mimeType) || /\.(mp3|wav|ogg|flac|aac|m4a)(\?|$)/i.test(url)) type = 'audio';
+      else if (/^image\//i.test(mimeType) || /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(url)) type = 'image';
+      else if (/\.(pdf|docx?|xlsx?|pptx?|zip)(\?|$)/i.test(url)) type = 'document';
+      if (!type) return;
+      const filename = (() => { try { const p = new URL(url).pathname; return decodeURIComponent(p.split('/').filter(Boolean).pop() || 'download').slice(0, 120); } catch { return 'download'; } })();
+      const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
+      if (!store[details.tabId]) store[details.tabId] = {};
+      store[details.tabId][url] = { url, type, mimeType, filename };
+      await chrome.storage.session.set({ dlAssets: store });
+    },
+    { urls: ['<all_urls>'] },
+    ['responseHeaders']
+  );
+}
+
+// Clean up stored assets when a tab closes
+if (api.tabs && api.tabs.onRemoved) {
+  api.tabs.onRemoved.addListener(async (tabId) => {
+    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
+    if (store[tabId]) {
+      delete store[tabId];
+      await chrome.storage.session.set({ dlAssets: store });
+    }
+  });
+}
 
 async function applyModes(settings) {
   await Shield.applyFocusHours(settings).catch((error) => console.warn("shield: focus hours", error));
@@ -1419,47 +1503,26 @@ async function elementTag(settings) {
   return tag;
 }
 
-// noah's salted fingerprints of the person's stored secrets, asked of the
-// native host at most every ten minutes. Without noah there are none.
-let fingerprintCache = { at: 0, value: { salt: "", secrets: [] } };
-async function secretFingerprints() {
-  if (Date.now() - fingerprintCache.at < 10 * 60 * 1000) return fingerprintCache.value;
-  const answer = await Shield.host({ type: "secrets.fingerprints" });
-  const value = answer && !answer.error && typeof answer.salt === "string" && Array.isArray(answer.secrets)
-    ? { salt: answer.salt, secrets: answer.secrets.filter((secret) => secret && typeof secret.sha256 === "string" && Number.isInteger(secret.length) && typeof secret.name === "string" && /^[A-Za-z0-9_]{1,64}$/.test(secret.name)) }
-    : { salt: "", secrets: [] };
-  fingerprintCache = { at: Date.now(), value };
-  return value;
-}
-async function sha256Hex(text) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-// Runs inside the page: fills the visible form fields from `identity` (the
-// decoy, or the person's own details) and returns what went where, so the
-// popup can show a receipt before anything is sent. It never submits.
+// Runs inside the page: fills the visible sign-up fields with the decoy.
 function fillDecoy(identity) {
   const map = [
     [/first.?name|given/i, identity.firstName], [/last.?name|family|surname/i, identity.lastName], [/full.?name|^name$|your name/i, identity.fullName],
     [/e-?mail/i, identity.email], [/user.?name|login|handle/i, identity.username], [/pass/i, identity.password], [/phone|tel|mobile/i, identity.phone],
     [/street|address(?!.*email)/i, identity.street], [/city|town/i, identity.city], [/zip|postal/i, identity.postal], [/birth|dob/i, identity.birthday],
   ];
-  const kinds = ["first name", "last name", "full name", "email", "username", "password", "phone", "street", "city", "postal code", "birthday"];
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  const filled = [];
+  let filled = 0;
   for (const input of document.querySelectorAll("input")) {
     if (!/^(text|email|tel|password|search|url|date|)$/.test(input.type || "") || input.disabled || input.readOnly) continue;
     const box = input.getBoundingClientRect();
     if (box.width < 10 || box.height < 10) continue;
     const words = [input.name, input.id, input.placeholder, input.getAttribute("aria-label"), input.getAttribute("autocomplete"), input.labels && input.labels[0] && input.labels[0].textContent].filter(Boolean).join(" ");
-    const index = map.findIndex(([pattern]) => pattern.test(words));
-    if (index < 0 || !map[index][1]) continue;
-    setter.call(input, input.type === "date" ? identity.birthday : map[index][1]);
+    const match = map.find(([pattern]) => pattern.test(words));
+    if (!match) continue;
+    setter.call(input, input.type === "date" ? identity.birthday : match[1]);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    const label = (input.labels && input.labels[0] && input.labels[0].textContent) || input.placeholder || input.getAttribute("aria-label") || input.name || input.id || "a field";
-    filled.push({ field: String(label).trim().slice(0, 60), what: kinds[index] });
+    filled++;
   }
   return filled;
 }
@@ -1662,7 +1725,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["paste.secretLengths", "paste.secrets", "guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config"]);
+  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config", "persona.config", "downloader.found", "social.config", "social.set"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;

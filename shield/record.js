@@ -111,9 +111,13 @@ async function countdown() {
 
 async function start() {
   const options = settings();
-  status("");
+  status("waiting for screen picker…");
   byId("result").textContent = "Nothing recorded yet.";
   byId("result-actions").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    status("screen recording not available in this window — try reopening the recorder");
+    return;
+  }
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
@@ -122,7 +126,12 @@ async function start() {
       surfaceSwitching: "include",
     });
   } catch (error) {
-    status(error && error.name === "NotAllowedError" ? "nothing chosen" : "could not start: " + String(error.message || error));
+    const name = error && error.name;
+    if (name === "NotAllowedError" || name === "AbortError") {
+      status("nothing chosen — press start and pick a screen, window or tab");
+    } else {
+      status("could not start: " + String(error && (error.message || error)));
+    }
     return;
   }
   screenVideo.srcObject = screenStream;
@@ -228,13 +237,27 @@ function stamp() {
 async function save(blob) {
   const url = URL.createObjectURL(blob);
   try {
-    await Shield.api.downloads.download({ url, filename: `noah-shield/recording ${stamp()}.webm`, saveAs: false, conflictAction: "uniquify" });
+    // chrome.downloads.download() returns the download id (a number >= 0) on
+    // success and throws on failure. In older callback builds it returned
+    // undefined; guard both. A download id of -1 signals failure in some paths.
+    const id = await Shield.api.downloads.download({
+      url,
+      filename: `noah-shield/recording ${stamp()}.webm`,
+      saveAs: false,
+      conflictAction: "uniquify",
+    });
+    if (typeof id === "number" && id < 0) throw new Error("download id was " + id);
     return true;
   } catch (error) {
-    status("could not save: " + String(error.message || error));
+    // Surface a plain English reason — the user almost always sees "could not
+    // save" when the downloads directory doesn't exist yet or Chrome blocked the
+    // blob URL. Creating the directory first is not possible from the extension,
+    // but the Downloads API creates the subdirectory automatically.
+    const msg = String(error && (error.message || error));
+    status("could not save — " + (msg.includes("interrupted") ? "check your Downloads folder is writable" : msg));
     return false;
   } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setTimeout(() => URL.revokeObjectURL(url), 90000);
   }
 }
 

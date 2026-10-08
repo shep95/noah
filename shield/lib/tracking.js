@@ -6,6 +6,22 @@
 (() => {
 const Shield = (globalThis.Shield = globalThis.Shield || {});
 
+function uint8ToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function detectOsToken() {
+  const p = (typeof navigator !== "undefined" && navigator.platform) || "";
+  if (/mac/i.test(p)) return "Macintosh; Intel Mac OS X 10_15_7";
+  if (/linux/i.test(p)) return "X11; Linux x86_64";
+  return "Windows NT 10.0; Win64; x64";
+}
+
 // ---- what each tab talked to ------------------------------------------------
 
 // Session storage has no transactions; the writers queue behind each other
@@ -224,6 +240,7 @@ Shield.rotateFingerprint = async function rotateFingerprint() {
 
 // Different per site, and again after the rotation period; the same within
 // one so a site does not see a visitor whose hardware changes every click.
+// non-cryptographic by design — used for per-session decoy seed only
 Shield.fingerprintSeed = async function fingerprintSeed(site, settings) {
   const key = await sessionKey();
   const now = new Date();
@@ -241,7 +258,7 @@ const ALL_TYPES = ["main_frame", "sub_frame", "script", "image", "stylesheet", "
 Shield.blendUserAgent = function blendUserAgent() {
   const real = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const major = (/Chrome\/(\d+)/.exec(real) || [])[1] || "141";
-  return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+  return `Mozilla/5.0 (${detectOsToken()}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
 };
 
 Shield.applyHeaderRules = async function applyHeaderRules(settings) {
@@ -307,11 +324,10 @@ Shield.pushSync = async function pushSync(settings) {
   const key = await syncKey(stored.syncPassphrase, salt);
   const plain = new TextEncoder().encode(JSON.stringify({ settings, at: Date.now() }));
   const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
-  const text = btoa(String.fromCharCode(...cipher));
+  const text = uint8ToBase64(cipher);
   const chunks = {};
   const size = 7000;
   for (let index = 0; index * size < text.length; index++) chunks["blob" + index] = text.slice(index * size, (index + 1) * size);
-  await Shield.api.storage.sync.clear();
   await Shield.api.storage.sync.set({ meta: { salt: Shield.hex(salt), iv: Shield.hex(iv), chunks: Object.keys(chunks).length, at: Date.now(), from: Shield.api.runtime.id }, ...chunks });
 };
 
@@ -325,7 +341,9 @@ Shield.pullSync = async function pullSync() {
   const bytes = Shield.fromBase64(text);
   const key = await syncKey(stored.syncPassphrase, Shield.fromHex(all.meta.salt));
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: Shield.fromHex(all.meta.iv) }, key, bytes);
-  return JSON.parse(new TextDecoder().decode(plain));
+  const parsed = JSON.parse(new TextDecoder().decode(plain));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return parsed;
 };
 
 // ---- generators --------------------------------------------------------------------------

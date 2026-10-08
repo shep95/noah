@@ -1,8 +1,20 @@
-body.options { width: auto; max-width: 860px; margin: 0 auto; padding: 8px 12px 40px; }
-body.options header { padding: 18px 4px 10px; }
-body.options header h1 { font-size: 20px; }
+body.options { width: auto; max-width: 860px; margin: 0 auto; padding: 8px 12px 48px; }
+body.options header { padding: 20px 4px 12px; }
+body.options header h1 { font-size: 22px; letter-spacing: .01em; }
 main { display: grid; gap: 12px; }
-body.options section { margin: 0; padding: 16px 18px; gap: 10px; }
+body.options section {
+  margin: 0; padding: 16px 18px; gap: 10px;
+  animation: arrive var(--calm) var(--ease) both;
+}
+body.options section:nth-of-type(1)  { animation-delay: 0.00s; }
+body.options section:nth-of-type(2)  { animation-delay: 0.03s; }
+body.options section:nth-of-type(3)  { animation-delay: 0.06s; }
+body.options section:nth-of-type(4)  { animation-delay: 0.09s; }
+body.options section:nth-of-type(5)  { animation-delay: 0.12s; }
+body.options section:nth-of-type(6)  { animation-delay: 0.15s; }
+body.options section:nth-of-type(7)  { animation-delay: 0.18s; }
+body.options section:nth-of-type(8)  { animation-delay: 0.21s; }
+body.options section:nth-of-type(n+9) { animation-delay: 0.24s; }
 h3 { font: 400 13px/1.3 var(--body); margin: 8px 0 0; color: var(--sub); }
 .grid { display: grid; gap: 8px 16px; }
 .grid.two { grid-template-columns: 1fr 1fr; }

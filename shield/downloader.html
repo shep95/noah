@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · downloader</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="downloader.css">
+</head>
+<body class="options">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>noah shield · downloader</h1>
+    <span class="muted"><a href="options.html">settings</a></span>
+  </header>
+  <main>
+    <section>
+      <h2>media on this page</h2>
+      <p class="muted">the shield watches every request the current tab makes and collects downloadable media. open a page, let it load, then scan.</p>
+      <p>
+        <button id="scan-btn" class="ghost">scan active tab</button>
+        <button id="clear-btn" class="ghost">clear</button>
+      </p>
+      <div id="filter-bar" hidden>
+        <button class="pill filter active" data-type="all">all <span id="count-all">0</span></button>
+        <button class="pill filter" data-type="video">video <span id="count-video">0</span></button>
+        <button class="pill filter" data-type="audio">audio <span id="count-audio">0</span></button>
+        <button class="pill filter" data-type="image">images <span id="count-image">0</span></button>
+        <button class="pill filter" data-type="document">docs <span id="count-document">0</span></button>
+      </div>
+      <div id="dl-list"></div>
+      <p id="dl-empty" class="muted">nothing found yet — navigate to a page with media and press scan</p>
+    </section>
+    <section>
+      <h2>notes</h2>
+      <p class="muted">direct links (mp4, mp3, jpg, pdf) download immediately. streaming video (hls / m3u8) downloads the playlist file — use <a href="https://ffmpeg.org" target="_blank" rel="noopener noreferrer">ffmpeg</a> to reassemble the segments. drm-protected content cannot be captured.</p>
+    </section>
+  </main>
+  <script src="downloader.js"></script>
+</body>
+</html>

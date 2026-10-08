@@ -58,6 +58,72 @@ function serverLabel(server) {
   return `${place}${name}${source ? " · " + source : ""}`;
 }
 
+// WebRTC leak probe: fires an ICE candidate collection against a public STUN server
+// and checks whether any host candidate IP differs from the VPN exit IP.
+// Only runs when the VPN state is "up" and we have a known exit IP to compare against.
+// If the guard is on (webRtcGuard), the result should always be clean — if it isn't,
+// the shield missed a path and the user needs to know immediately.
+async function checkWebRtcLeak(tunnel, guardOn) {
+  const el = byId("webrtc-leak");
+  if (!el) return;
+
+  // Only worth testing when the tunnel is up and we know what the exit IP should be.
+  if (!tunnel || tunnel.state !== "up" || !tunnel.exit || !tunnel.exit.ip) {
+    el.hidden = true;
+    return;
+  }
+  const exitIp = tunnel.exit.ip;
+
+  // Private address ranges: if ALL candidates are private, the guard already blocked
+  // the public path — that's a clean result regardless of IP match.
+  const isPrivate = (ip) =>
+    /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|::1$|fc|fd)/.test(ip);
+
+  let pc;
+  try {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+    pc.createDataChannel("leak-probe");
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const leakIps = await new Promise((resolve) => {
+      const found = [];
+      const done = () => { try { pc.close(); } catch { /* fine */ } resolve(found); };
+      const timer = setTimeout(done, 4500);
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) { clearTimeout(timer); done(); return; }
+        const match = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[0-9a-f:]{3,39})/.exec(
+          event.candidate.candidate
+        );
+        if (match) {
+          const ip = match[1];
+          if (!isPrivate(ip) && ip !== exitIp) found.push(ip);
+        }
+      };
+    });
+
+    el.hidden = false;
+    if (leakIps.length) {
+      // Real public IP candidates that are NOT the VPN exit — this is a leak.
+      el.textContent = guardOn
+        ? `⚠ WebRTC leak bypassed the guard — real IP exposed (${leakIps[0]}). Report this.`
+        : `⚠ WebRTC leak — real IP visible (${leakIps[0]}). Turn on "hide my real address" above.`;
+      el.style.color = "var(--red, #c84b4b)";
+    } else {
+      el.textContent = "✓ No WebRTC leak — VPN address is what sites see.";
+      el.style.color = "var(--accent-soft, #7ab87a)";
+      // Clear the success notice after 5 s to avoid cluttering the UI.
+      setTimeout(() => { if (el) { el.hidden = true; el.style.color = ""; } }, 5000);
+    }
+  } catch {
+    // RTCPeerConnection unavailable (MV3 popup restriction) — hide silently.
+    if (el) el.hidden = true;
+    try { if (pc) pc.close(); } catch { /* fine */ }
+  }
+}
+
 function render(state) {
   current = state;
   const { settings, tunnel, stats, update, site, servers } = state;
@@ -81,7 +147,21 @@ function render(state) {
   if (site && site.web) {
     siteSection.hidden = false;
     byId("site").textContent = site.site || site.host;
-    byId("blocked").textContent = site.blocked + " stopped";
+    byId("blocked").textContent = site.blocked;
+    // live-feed: give the person a sentence the moment something was blocked.
+    // Only show it once there is something to say — silence is cleaner than "0 stopped".
+    const feed = byId("live-feed");
+    if (feed) {
+      const n = site.blocked || 0;
+      if (n > 0) {
+        feed.hidden = false;
+        feed.textContent = n === 1
+          ? "stopped 1 tracker or ad request on this page"
+          : `stopped ${n} tracker and ad requests on this page`;
+      } else {
+        feed.hidden = true;
+      }
+    }
     byId("route").classList.toggle("on", Boolean(settings.tunnel.siteRoutes[site.site]));
     byId("trusted").checked = site.trusted;
     byId("strict").checked = site.strictCookies;
@@ -180,15 +260,26 @@ function render(state) {
   statusNode.className = "muted " + statusClass;
   byId("vpn-dot").className = "dot " + statusClass;
   byId("vpn-state").textContent = shortState;
+  // Hero corner VPN dot: same state, but visible without scrolling to the VPN section.
+  const heroVpnDot = byId("hero-vpn-dot");
+  if (heroVpnDot) heroVpnDot.className = "dot hero-dot " + statusClass;
   byId("kill").checked = settings.tunnel.killSwitch;
   byId("webrtc").checked = settings.tunnel.webRtcGuard;
+  // Live WebRTC leak probe — runs async so it doesn't delay the rest of render.
+  checkWebRtcLeak(tunnel, settings.tunnel.webRtcGuard);
 
   const today = stats.today || {};
   const month = stats.month || {};
   byId("today").textContent = `${month.trackers || 0} trackers this month`;
-  byId("d-trackers").textContent = today.trackers || 0;
+  // fingerprint noise events count as tracker-defense (each fire = one fingerprinting attempt defeated).
+  byId("d-trackers").textContent = (today.trackers || 0) + (today.fingerprint || 0);
   byId("d-cookies").textContent = (today.cookies || 0) + (today.burned || 0);
-  byId("d-scams").textContent = (today.phishing || 0) + (today.popups || 0) + (today.leaks || 0) + (today.keylog || 0) + (today.wallets || 0) + (today.downloads || 0);
+  const scamCount = (today.phishing || 0) + (today.popups || 0) + (today.leaks || 0) + (today.keylog || 0) + (today.wallets || 0) + (today.downloads || 0);
+  byId("d-scams").textContent = scamCount;
+  // Threat banner activates (glows red) only when something was actually caught.
+  // Zero state is quiet — it doesn't advertise danger that isn't there.
+  const scamBanner = byId("scam-banner");
+  if (scamBanner) scamBanner.dataset.active = scamCount > 0 ? "true" : "false";
   byId("d-coupons").textContent = today.coupons || 0;
   byId("d-saved").textContent = today.saved || 0;
   byId("d-annoy").textContent = (today.banners || 0) + (today.overlays || 0);
@@ -198,6 +289,15 @@ function render(state) {
   byId("fingerprint").checked = settings.privacy.fingerprint;
   byId("params").checked = settings.privacy.stripParameters;
   byId("gpc").checked = settings.privacy.gpc;
+  const cookieDecEl = byId("cookie-deception");
+  if (cookieDecEl) cookieDecEl.checked = settings.privacy.cookieDeception !== false;
+  const darkPatEl = byId("dark-patterns");
+  if (darkPatEl) darkPatEl.checked = settings.privacy.darkPatterns !== false;
+  const skipAdsEl = byId("skip-ads");
+  if (skipAdsEl) {
+    const ytCfg = (settings.social && settings.social.youtube) || {};
+    skipAdsEl.checked = ytCfg.skipAds !== false;
+  }
 
   byId("compare").checked = settings.shopping.compare;
   byId("coupons").checked = settings.shopping.coupons && settings.shopping.autoApply;
@@ -217,10 +317,39 @@ function render(state) {
   byId("watch-note").textContent = "Other extensions that could record the screen are listed under settings.";
   Shield.send({ type: "report.weekly" }).then((report) => { if (report && report.text) byId("week").textContent = "This week: " + report.text; });
 
+  const persona = settings.persona || { enabled: true, autoSeed: true };
+  byId("persona-enabled").checked = Boolean(persona.enabled);
+  byId("persona-autoseed").checked = Boolean(persona.autoSeed);
+  byId("persona-status").textContent = persona.enabled ? (persona.autoSeed ? "on · auto-seed" : "on · manual") : "off";
 
   const profileIntel = settings.profileIntel || { enabled: true };
   byId("profile-enabled").checked = Boolean(profileIntel.enabled);
   byId("profile-status").textContent = profileIntel.enabled ? "on" : "off";
+
+  // Social platform section
+  const social = settings.social || {};
+  const socialPlatforms = ["instagram", "tiktok", "reddit", "youtube", "linkedin", "twitter"];
+  let socialEnabled = 0;
+  for (const platform of socialPlatforms) {
+    const cfg = social[platform] || {};
+    const el = byId("social-" + platform);
+    if (el) {
+      const on = cfg.enabled !== false;
+      el.checked = on;
+      if (on) socialEnabled++;
+    }
+  }
+  const socialStatusEl = byId("social-status");
+  if (socialStatusEl) {
+    socialStatusEl.textContent = socialEnabled === 0 ? "all off" : socialEnabled === socialPlatforms.length ? "on" : `${socialEnabled} of ${socialPlatforms.length} on`;
+  }
+  // Surface today's social catches — keys match what the content scripts emit.
+  const socialCaught = (today.social_sponsored_hidden || 0) + (today.social_suggested_hidden || 0) + (today.social_ad_hidden || 0) + (today.social_promoted_hidden || 0) + (today.social_karma_farm || 0);
+  const socialCaughtEl = byId("social-caught");
+  if (socialCaughtEl) {
+    socialCaughtEl.hidden = socialCaught === 0;
+    if (socialCaught > 0) socialCaughtEl.textContent = `${socialCaught} items caught today`;
+  }
 
   const spaces = settings.spaces || { enabled: true, newAccountDays: 30, flagLowFollowers: true, lowFollowersUnder: 20 };
   byId("spaces-enabled").checked = Boolean(spaces.enabled);
@@ -360,42 +489,6 @@ bindSetting("search-look", ["search", "look"]);
 bindSetting("search-peek", ["search", "peek"]);
 
 // ---- what happened here ---------------------------------------------------------------------
-// What the shield knows about the open site, in one record, to noah on
-// this computer: shepherd reads it before it trusts the site with a fetch
-// or a browser visit. Only on this click; nothing is sent on its own.
-byId("tell-noah").addEventListener("click", async () => {
-  if (!current || !current.site) return;
-  const out = byId("tell-noah-out");
-  out.hidden = false;
-  out.textContent = "gathering…";
-  const site = current.site;
-  const [score, trust, blocked, log] = await Promise.all([
-    Shield.send({ type: "site.score", tabId: site.tabId, url: site.url }),
-    Shield.send({ type: "site.trust", url: site.url }),
-    Shield.send({ type: "tab.blocked", tabId: site.tabId }),
-    Shield.send({ type: "log.list", tabId: site.tabId, limit: 40 }),
-  ]);
-  const report = {
-    site: site.site || site.host,
-    url: String(site.url || "").split(/[?#]/)[0].slice(0, 300),
-    at: new Date().toISOString(),
-    grade: score && score.grade ? score.grade : null,
-    score: score && typeof score.score === "number" ? score.score : null,
-    thirdParties: score && typeof score.thirdParties === "number" ? score.thirdParties : null,
-    advertising: score && typeof score.advertising === "number" ? score.advertising : null,
-    cookies: score && typeof score.cookies === "number" ? score.cookies : null,
-    https: Boolean(score && score.https),
-    lookalike: trust && trust.lookalike ? { brand: String(trust.lookalike.brand || "") } : null,
-    breaches: trust && Array.isArray(trust.breaches) ? trust.breaches.slice(0, 5).map((breach) => ({ date: String(breach.date || "").slice(0, 10), classes: (breach.classes || []).slice(0, 4).map(String) })) : null,
-    stopped: blocked && blocked.groups ? blocked.groups.slice(0, 30).map((group) => ({ site: String(group.site || ""), count: Number(group.count) || 0, kinds: (group.types || []).slice(0, 4).map(String), owner: group.owner ? String(group.owner.owner || "") : "" })) : [],
-    did: ((log && log.entries) || []).slice(0, 40).map((entry) => String(entry.text || entry.message || "").slice(0, 200)).filter(Boolean),
-  };
-  const answer = await Shield.send({ type: "site.report", report });
-  out.textContent = answer && answer.error
-    ? answer.error + (/not installed/.test(answer.error) ? " — noah keeps these at ~/.noah/shield/ once it is on this computer." : "")
-    : `noah has it: ${report.site}, grade ${report.grade || "?"}, ${report.stopped.length} trackers named${report.breaches && report.breaches.length ? ", " + report.breaches.length + " known leaks" : ""}.`;
-});
-
 byId("here").addEventListener("click", async () => {
   if (!current || !current.site) return;
   const list = byId("here-list");
@@ -525,6 +618,8 @@ byId("policy").addEventListener("click", async () => {
 });
 byId("recheck").addEventListener("click", async () => {
   byId("tunnel-status").textContent = "Checking…";
+  const el = byId("webrtc-leak");
+  if (el) { el.hidden = false; el.textContent = "Probing for WebRTC leaks…"; el.style.color = ""; }
   await Shield.send({ type: "tunnel.check" });
   await refresh();
 });
@@ -535,6 +630,16 @@ bindSetting("geo", ["privacy", "geolocation"], (checked) => (checked ? "block" :
 bindSetting("fingerprint", ["privacy", "fingerprint"]);
 bindSetting("params", ["privacy", "stripParameters"]);
 bindSetting("gpc", ["privacy", "gpc"]);
+bindSetting("cookie-deception", ["privacy", "cookieDeception"]);
+bindSetting("dark-patterns", ["privacy", "darkPatterns"]);
+// Skip-ads toggle wires into the YouTube social config
+const _skipAdsEl = byId("skip-ads");
+if (_skipAdsEl) {
+  _skipAdsEl.addEventListener("change", async (event) => {
+    await Shield.send({ type: "social.set", platform: "youtube", config: { skipAds: event.target.checked } });
+    await refresh();
+  });
+}
 bindSetting("compare", ["shopping", "compare"]);
 byId("coupons").addEventListener("change", async (event) => {
   await Shield.send({ type: "settings.update", change: { shopping: { coupons: event.target.checked, autoApply: event.target.checked } } });
@@ -580,20 +685,6 @@ byId("decoy").addEventListener("click", async () => {
   out.hidden = false;
   out.textContent = result.error ? result.error : `filled with ${result.identity.fullName}, ${result.identity.email}`;
 });
-byId("fill-mine").addEventListener("click", async () => {
-  if (!current || !current.site) return;
-  const result = await Shield.send({ type: "details.fill", tabId: current.site.tabId });
-  const out = byId("alias-out");
-  out.hidden = false;
-  if (result.error) {
-    out.textContent = result.error;
-    return;
-  }
-  const filled = result.filled || [];
-  out.textContent = filled.length
-    ? `filled ${filled.length}: ` + filled.map((entry) => `${entry.what} in “${entry.field}”`).join(", ") + ". nothing was sent; check the form and submit it yourself."
-    : "no field on this page matched your details.";
-});
 for (const element of document.querySelectorAll("button[data-profile]")) {
   element.addEventListener("click", async () => {
     await Shield.send({ type: "profile.apply", name: element.dataset.profile });
@@ -638,6 +729,27 @@ async function pushProfile(change) {
 }
 byId("profile-enabled").addEventListener("change", (event) => pushProfile({ enabled: event.target.checked }));
 
+// Social platform toggles — each one enables/disables its platform's content script
+async function pushSocial(platform, config) {
+  await Shield.send({ type: "social.set", platform, config });
+  await refresh();
+}
+for (const _platform of ["instagram", "tiktok", "reddit", "youtube", "linkedin", "twitter"]) {
+  (function(platform) {
+    const el = byId("social-" + platform);
+    if (el) el.addEventListener("change", (event) => pushSocial(platform, { enabled: event.target.checked }));
+  })(_platform);
+}
+
+async function pushPersona(change) {
+  await Shield.send({ type: "persona.set", change });
+  await refresh();
+}
+byId("persona-enabled").addEventListener("change", (event) => pushPersona({ enabled: event.target.checked }));
+byId("persona-autoseed").addEventListener("change", (event) => pushPersona({ autoSeed: event.target.checked }));
+byId("persona-reseed").addEventListener("click", async () => {
+  await Shield.send({ type: "persona.reseed" });
+});
 byId("spaces-lowfollow").addEventListener("change", (event) => pushSpaces({ flagLowFollowers: event.target.checked }));
 byId("spaces-days").addEventListener("change", (event) => pushSpaces({ newAccountDays: Math.max(1, Math.min(365, Number(event.target.value) || 30)) }));
 byId("spaces-underfollow").addEventListener("change", (event) => pushSpaces({ lowFollowersUnder: Math.max(0, Math.min(100000, Number(event.target.value) || 20)) }));

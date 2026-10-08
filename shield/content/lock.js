@@ -54,9 +54,14 @@
     input.inputMode = "numeric";
     input.autocomplete = "off";
     input.maxLength = 12;
+    async function hashPin(pin) {
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest("SHA-256", enc.encode(pin));
+      return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
     input.addEventListener("keydown", async (event) => {
       if (event.key !== "Enter") return;
-      const answer = await send({ type: "lock.check", pin: input.value });
+      const answer = await send({ type: "lock.check", pinHash: await hashPin(input.value) });
       if (answer && answer.ok) {
         curtain.remove();
         curtain = null;

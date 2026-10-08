@@ -130,6 +130,7 @@
     const fallback = globalThis.__noahShieldHash;
     return algorithm === "SHA-1" ? fallback.sha1(text) : fallback.sha256(text);
   }
+  // NOTE: SHA-256 iterated 3001x — not hardware-resistant. Consider PBKDF2 for next version. See F-12.
   async function hashPassword(password) {
     if (!salt) salt = (await send({ type: "password.salt" })).salt || "";
     let digest = await digestHex("SHA-256", salt + "\n" + password);
@@ -296,7 +297,10 @@
   let scamHandled = false;
   function checkScam(config) {
     if (scamHandled || !config.scamPopups || !isTop) return;
-    const text = (document.body && document.body.innerText || "").slice(0, 60000);
+    // FIX: innerText forces a full page layout reflow to compute visible text.
+    // textContent reads the raw DOM string (no reflow) and is sufficient for scam pattern matching.
+    // Replace whitespace runs to approximate innerText normalisation without the layout cost.
+    const text = (document.body && document.body.textContent || "").replace(/\s+/g, " ").slice(0, 60000);
     let hits = 0;
     for (const pattern of SCAM) if (pattern.test(text)) hits++;
     const urgency = document.fullscreenElement !== null || /call now|immediately|within \d+ (minutes|hours)|urgent/i.test(text);
@@ -326,17 +330,50 @@
     checkLookalike(config);
     watchPasswords(config);
     watchPasswordCopies(config);
+
+    // FIX: sweeping flag prevents the MutationObserver from scheduling a new
+    // sweep in response to DOM mutations that the sweep itself caused (disarmHiddenFields
+    // and checkFrames both modify the DOM, which would otherwise queue a second sweep
+    // 700 ms later, creating a SPA-like re-entry loop on every mutation).
+    let sweeping = false;
     const sweep = () => {
+      sweeping = true;
       if (config.hiddenFields) disarmHiddenFields();
       if (config.hiddenFrames) checkFrames();
       checkScam(config);
+      // Keep the flag set for one more microtask tick so mutations that fire
+      // synchronously during sweep() are also gated.
+      Promise.resolve().then(() => { sweeping = false; });
     };
+
+    // FIX: scamHandled survives SPA navigation (pushState/replaceState) because it
+    // is a module-scope let — once a scam page sets it, the user can navigate away
+    // within the same SPA and the new page is never checked.  Reset on URL change.
+    let lastHref = location.href;
+    const onNavigation = () => {
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        scamHandled = false;
+        sweep();
+      }
+    };
+    window.addEventListener("popstate", onNavigation);
+    window.addEventListener("hashchange", onNavigation);
+    // pushState/replaceState don't fire popstate; intercept them.
+    for (const method of ["pushState", "replaceState"]) {
+      const original = history[method];
+      history[method] = function (...args) {
+        original.apply(this, args);
+        onNavigation();
+      };
+    }
+
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", sweep, { once: true });
     else sweep();
     setTimeout(sweep, 2500);
     let pending = null;
     new MutationObserver(() => {
-      if (pending) return;
+      if (pending || sweeping) return;
       pending = setTimeout(() => { pending = null; sweep(); }, 700);
     }).observe(document.documentElement, { childList: true, subtree: true });
   });

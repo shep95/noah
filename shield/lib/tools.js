@@ -6,6 +6,15 @@
 (() => {
 const Shield = (globalThis.Shield = globalThis.Shield || {});
 
+function uint8ToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 // Dynamic rule ranges (1..1999 are per-site trust and strict-cookie rules).
 const FOCUS_RULE_BASE = 3000;
 const LOW_DATA_RULE_BASE = 4000;
@@ -267,7 +276,7 @@ Shield.vaultSave = async function vaultSave(passphrase, notes) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await vaultKey(passphrase, salt);
   const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(notes))));
-  await Shield.api.storage.local.set({ vault: { salt: Shield.hex(salt), iv: Shield.hex(iv), data: btoa(String.fromCharCode(...cipher)), at: new Date().toISOString() } });
+  await Shield.api.storage.local.set({ vault: { salt: Shield.hex(salt), iv: Shield.hex(iv), data: uint8ToBase64(cipher), at: new Date().toISOString() } });
 };
 
 Shield.vaultOpen = async function vaultOpen(passphrase) {

@@ -38,6 +38,11 @@
   }
   const AI_CHAT = /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|gemini\.google\.com|copilot\.microsoft\.com|perplexity\.ai|poe\.com|character\.ai|meta\.ai|grok\.com|x\.ai|deepseek\.com|chat\.mistral\.ai|huggingface\.co|you\.com|pi\.ai|kimi\.moonshot\.cn|chat\.qwen\.ai)$/i;
   const PAYMENT = /(^|\.)(stripe\.com|paypal\.com|checkout\.com|adyen\.com|klarna\.com|affirm\.com|shopify\.com|amazon\.(?:com|co\.uk|co\.jp|com\.au|com\.br|com\.mx|com\.tr|de|fr|it|es|ca|in|nl|se|pl|sg|ae|sa|eg)|apple\.com|google\.com)$/i;
+  const BIP39_SAMPLE = new Set(["abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse","access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act","action","actor","actual","adapt","add","addict","address","adjust","admit","adult","advance","advice","aerobic","afford","afraid","again","age","agent","agree","ahead","aim","air","airport","aisle","alarm","album"]);
+  function looksLikeSeedPhrase(words) {
+    const matchCount = words.filter((w) => BIP39_SAMPLE.has(w)).length;
+    return matchCount >= 2;
+  }
   function classify(textValue) {
     const found = [];
     const digitsOnly = textValue.replace(/[\s-]/g, "");
@@ -47,7 +52,7 @@
     if (/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/.test(digitsOnly.toUpperCase()) && /\b(DE|GB|FR|NL|ES|IT|BE|CH|AT|IE|PT|SE|NO|DK|FI|PL)\d{2}/i.test(textValue)) found.push("an IBAN");
     if (/\b(sk|rk)-(live|test|proj)?[-_]?[A-Za-z0-9]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bAIza[0-9A-Za-z_-]{35}\b|\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/.test(textValue)) found.push("an API key or token");
     const words = textValue.trim().toLowerCase().split(/\s+/);
-    if ((words.length === 12 || words.length === 24) && words.every((word) => /^[a-z]{3,8}$/.test(word))) found.push("what looks like a wallet seed phrase");
+    if ((words.length === 12 || words.length === 24) && words.every((word) => /^[a-z]{3,8}$/.test(word)) && looksLikeSeedPhrase(words)) found.push("what looks like a wallet seed phrase");
     if (/\b(password|passwd|pwd)\s*[:=]\s*\S{6,}/i.test(textValue)) found.push("a password");
     if (/\b[A-PR-WY][1-9]\d\s?\d{4}[1-9]\b/.test(textValue) && /passport/i.test(textValue)) found.push("a passport number");
     return found;
@@ -110,58 +115,10 @@
     }
   }
 
-  // ---- one-way clipboard ----------------------------------------------------------------------
-  // A secret the person keeps in noah, pasted into an AI chat, goes in as its
-  // $NAME instead. The page never sees the value; this script only knows how
-  // long the stored secrets are, and the background (which never runs page
-  // code) does the matching against noah's salted fingerprints.
-  let secretLengths = new Set();
-  function wordsOf(text) {
-    return text.split(/[\s"'`=:,;()<>\[\]{}]+/).filter(Boolean);
-  }
-  function mayHoldSecret(text) {
-    if (!secretLengths.size) return false;
-    return wordsOf(text).some((word) => secretLengths.has([...word].length) || secretLengths.has([...word.replace(/[.!?]+$/, "")].length));
-  }
-  function noteSwap(names) {
-    if (bar) bar.remove();
-    bar = document.createElement(tagName("bar"));
-    const shadow = bar.attachShadow({ mode: "closed" });
-    const style = document.createElement("style");
-    style.textContent = `:host { all: initial; position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647; font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
-      .bar { padding: 10px 18px; background: #0b0e0c; color: #d8ddd6; border-bottom: 1px solid rgba(180,210,190,.12); }`;
-    const box = document.createElement("div");
-    box.className = "bar";
-    box.textContent = "noah shield pasted " + names.map((name) => "$" + name).join(", ") + " where your stored secret was. The value stayed on your computer.";
-    shadow.append(style, box);
-    (document.documentElement || document).append(bar);
-    const shown = bar;
-    setTimeout(() => { if (bar === shown) { bar.remove(); bar = null; } }, 6000);
-  }
-
   function watchPastes(config) {
-    if (AI_CHAT.test(location.hostname)) {
-      send({ type: "paste.secretLengths" }).then((answer) => {
-        if (answer && Array.isArray(answer.lengths)) secretLengths = new Set(answer.lengths.filter(Number.isInteger));
-      });
-    }
     document.addEventListener("paste", (event) => {
       const value = event.clipboardData && event.clipboardData.getData("text/plain");
       if (!value || value.length > 20000) return;
-      if (AI_CHAT.test(location.hostname) && mayHoldSecret(value)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const target = event.target;
-        send({ type: "paste.secrets", text: value }).then((answer) => {
-          const names = answer && Array.isArray(answer.names) ? answer.names : [];
-          const text = names.length && typeof answer.text === "string" ? answer.text : value;
-          if (names.length) noteSwap(names);
-          const left = classify(text);
-          if (left.length) askPaste(left, () => insert(target, text));
-          else insert(target, text);
-        });
-        return;
-      }
       const found = classify(value);
       if (!found.length) return;
       const site = location.hostname;
@@ -247,7 +204,12 @@
   }
 
   async function cleanFile(file) {
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 40 * 1024 * 1024) return null;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return null;
+    if (file.size > 40 * 1024 * 1024) {
+      send({ type: "safety.event", kind: "uploadTooLarge", amount: 1 });
+      console.warn("[noah-shield] file too large to strip metadata:", file.name, file.size);
+      return null;
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const cleaned = file.type === "image/jpeg" ? stripJpeg(bytes) : file.type === "image/png" ? stripPng(bytes) : stripWebp(bytes);
     if (!cleaned) return null;
@@ -274,8 +236,6 @@
       send({ type: "safety.event", kind: "uploads", amount: cleanedCount });
     }, true);
   }
-
-  window.__noahShieldStrip = { stripJpeg, stripPng, stripWebp, classify };
 
   waitForConfig().then((config) => {
     if (!config) return;

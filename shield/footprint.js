@@ -70,7 +70,7 @@ const ENGINES = {
   },
   baidu: {
     name: "Baidu",
-    url: (q) => `https://www.baidu.com/s?wd=${encodeURIComponent(q)}&ie=utf-8`,
+    url: (q) => { console.info("[noah-shield] footprint: querying Baidu with user PII — ensure user consented to cross-border data transfer"); return `https://www.baidu.com/s?wd=${encodeURIComponent(q)}&ie=utf-8`; },
     parse(doc) {
       return Array.from(doc.querySelectorAll(".result, .c-container")).map((node) => {
         const anchor = node.querySelector("h3 a");

@@ -7,18 +7,21 @@
   <link rel="stylesheet" href="warn.css">
 </head>
 <body>
-  <main class="card">
-    <p class="eyebrow">noah shield</p>
-    <h1>Leak test</h1>
-    <p>Two questions: where does the browser's traffic come out, and does WebRTC give away another address?</p>
-    <p><strong>Tunnel:</strong> <span id="tunnel">reading…</span></p>
-    <p><strong>Exit seen by noah.asherin.com:</strong> <span id="exit">asking…</span></p>
-    <p><strong>WebRTC addresses:</strong> <span id="webrtc">gathering…</span></p>
-    <p><strong>Language and time zone the pages see:</strong> <span id="locale"></span></p>
-    <h1 id="verdict" class="verdict">…</h1>
-    <p class="muted" id="notes"></p>
-    <div class="actions"><button id="again" class="primary">Run again</button></div>
-    <small>DNS is not tested here: with the tunnel on, names are resolved by the server by construction. Without it, your operating system's resolver is used, as with any browser.</small>
+  <main id="card" class="card">
+    <div class="threat-bar"></div>
+    <div class="card-inner">
+      <p class="eyebrow"><span id="state-icon">◉</span> noah shield · leak test</p>
+      <h1 id="verdict">checking…</h1>
+      <p class="muted" id="notes">Two questions: where does traffic come out, and does WebRTC reveal another address?</p>
+      <div class="leak-rows">
+        <div class="leak-row"><span class="leak-label">tunnel</span><span id="tunnel" class="leak-val">reading…</span></div>
+        <div class="leak-row"><span class="leak-label">exit ip</span><span id="exit" class="leak-val">asking…</span></div>
+        <div class="leak-row"><span class="leak-label">webrtc</span><span id="webrtc" class="leak-val">gathering…</span></div>
+        <div class="leak-row"><span class="leak-label">locale</span><span id="locale" class="leak-val"></span></div>
+      </div>
+      <div class="actions"><button id="again" class="primary">Run again</button></div>
+      <small>DNS is not tested here: with the tunnel on, names resolve through the server. Without it, your OS resolver is used, as with any browser.</small>
+    </div>
   </main>
   <script src="lib/common.js"></script>
   <script src="lib/look.js"></script>

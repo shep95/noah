@@ -170,7 +170,8 @@
       const run = () => blurNames(names);
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
       else run();
-      setInterval(run, 3000);
+      const nameObserver = new MutationObserver(() => run());
+      nameObserver.observe(document.body, { childList: true, subtree: true });
     }
   });
 

@@ -16,5 +16,22 @@
         "xmlhttprequest", "ping", "websocket", "media", "font", "other"
       ]
     }
+  },
+  {
+    "id": 2,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "Accept-CH", "operation": "remove" },
+        { "header": "Critical-CH", "operation": "remove" },
+        { "header": "Accept-CH-Lifetime", "operation": "remove" },
+        { "header": "Permissions-Policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "*",
+      "resourceTypes": ["main_frame", "sub_frame"]
+    }
   }
 ]

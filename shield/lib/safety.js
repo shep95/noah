@@ -93,7 +93,15 @@ Shield.passwordSeen = async function passwordSeen(hash, site) {
     sites.push(site);
     map[hash] = sites.slice(-8);
     const keys = Object.keys(map);
-    if (keys.length > 500) delete map[keys[0]];
+    if (keys.length > 500) {
+      // Evict the hash associated with the fewest sites (least useful to keep).
+      let minKey = keys[0];
+      let minLen = (map[keys[0]] || []).length;
+      for (const k of keys) {
+        if ((map[k] || []).length < minLen) { minKey = k; minLen = (map[k] || []).length; }
+      }
+      delete map[minKey];
+    }
     await Shield.api.storage.local.set({ passwordSites: map });
   }
   return { reused };
@@ -135,6 +143,7 @@ Shield.breachHistory = async function breachHistory(site) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
+    // PRIVACY: site domain is sent to HIBP to check for known breaches. See privacy settings to disable.
     const response = await fetch("https://haveibeenpwned.com/api/v3/breaches?domain=" + encodeURIComponent(site), {
       headers: { "user-agent": "noah-shield" },
       credentials: "omit",

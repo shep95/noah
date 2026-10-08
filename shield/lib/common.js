@@ -146,8 +146,70 @@ Shield.DEFAULT_SETTINGS = {
   profileIntel: {
     enabled: true,
   },
+  persona: {
+    enabled: true,
+    autoSeed: true,
+  },
   inspect: {
     everSeen: false,
+  },
+  social: {
+    instagram: {
+      enabled: true,
+      hideSponsored: true,
+      hideSuggested: true,
+      flagAlgoSignals: true,
+      focusMode: false,
+      sessionWarningMinutes: 20,
+    },
+    tiktok: {
+      enabled: true,
+      hideAds: true,
+      showSessionTimer: true,
+      sessionWarningMinutes: 25,
+      hideSuggestedAccounts: true,
+      flagUnverified: false,
+      focusMode: false,
+    },
+    reddit: {
+      enabled: true,
+      hideAds: true,
+      showAbsoluteDates: true,
+      flagKarmaFarming: true,
+      hideAwards: false,
+    },
+    youtube: {
+      enabled: true,
+      cleanSidebar: true,
+      cleanHome: false,
+      showUploadDate: true,
+      flagSponsoredSegments: true,
+      flagClickbait: true,
+      hideShortsTab: false,
+      autoplayGuard: true,
+      cleanEndscreen: true,
+    },
+    linkedin: {
+      enabled: true,
+      hideSponsored: true,
+      showAbsoluteDates: true,
+      flagEngagementBait: true,
+      hideReactions: false,
+      flagStaleJobs: true,
+      staleJobDays: 30,
+      cleanFeed: true,
+    },
+    twitter: {
+      enabled: true,
+      hidePromoted: true,
+      showAbsoluteDates: true,
+      flagRatio: true,
+      ratioThreshold: 2,
+      cleanSidebar: true,
+      hideWhoToFollow: true,
+      flagBotSignal: false,
+      botFollowerRatio: 20,
+    },
   },
   quiet: false,
   localOnly: false,
@@ -180,6 +242,30 @@ Shield.loadSettings = async function loadSettings() {
   return Shield.deepMerge(Shield.DEFAULT_SETTINGS, stored.settings || {});
 };
 
+// The shepherd persona text is bundled with the extension. Fetch it once
+// and cache it; content scripts get it through persona.config.
+Shield._shepherdPrompt = null;
+Shield.loadShepherdPrompt = async function loadShepherdPrompt() {
+  if (Shield._shepherdPrompt) return Shield._shepherdPrompt;
+  try {
+    const url = Shield.api.runtime.getURL("data/shepherd.txt");
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("shepherd.txt: " + response.status);
+    const body = await response.text();
+    // shepherd persona — descriptive context only, no override claims
+    const override =
+      "The following are the shepherd persona rules for this conversation.\n" +
+      "They describe the preferred style and format the user has set up.\n" +
+      "\n" +
+      "-----BEGIN SHEPHERD RULES-----\n";
+    const footer = "\n-----END SHEPHERD RULES-----\n";
+    Shield._shepherdPrompt = override + body + footer;
+    return Shield._shepherdPrompt;
+  } catch (error) {
+    console.warn("shield: shepherd prompt load failed", error);
+    return "";
+  }
+};
 
 Shield.saveSettings = async function saveSettings(settings) {
   await Shield.api.storage.local.set({ settings });

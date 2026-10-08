@@ -287,7 +287,7 @@
       body.append(line("muted", span("", summary)));
       if (history.waitHint) body.append(line("save", span("", "Above its usual price: waiting has paid off before.")));
       const was = wasPrice();
-      if (was && history.count >= 3 && was > history.high * 1.02) body.append(line("muted", span("", `The “was” price ${money(was, result.currency)} never appeared in the ${history.count} days the shield watched. The sale is against a made-up number.`)));
+      if (was && history.count >= 3 && was > history.high * 1.02) body.append(line("muted", span("", `The "was" price ${money(was, result.currency)} never appeared in the ${history.count} days the shield watched. The sale is against a made-up number.`)));
     }
     const actions = line("actions");
     const watch = document.createElement("button");
@@ -395,7 +395,7 @@
     try {
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 6000);
-      const response = await fetch(anchor.href, { credentials: "same-origin", signal: controller.signal });
+      const response = await fetch(anchor.href, { credentials: "omit", signal: controller.signal });
       const html = await response.text();
       const plain = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/g, " ").replace(/\s+/g, " ");
       const days = /(\d{1,3})[- ]day/i.exec(plain);
@@ -446,17 +446,26 @@
 
   // ---- codes the store shows on its own pages ----------------------------
 
+  let _couponNonce;
+  try {
+    _couponNonce = sessionStorage.getItem("_ns_nonce");
+    if (!_couponNonce) {
+      _couponNonce = Math.random().toString(36).slice(2);
+      sessionStorage.setItem("_ns_nonce", _couponNonce);
+    }
+  } catch { _couponNonce = "x"; }
+
   function harvestCodes() {
     const seen = new Set();
     const bodyText = (document.body && document.body.innerText || "").slice(0, 200000);
-    const pattern = /\b(?:code|coupon|promo)\s*[:\-]?\s*["“']?([A-Z][A-Z0-9]{3,19})\b/g;
+    const pattern = /\b(?:code|coupon|promo)\s*[:\-]?\s*[""']?([A-Z][A-Z0-9]{3,19})\b/g;
     let match;
     while ((match = pattern.exec(bodyText)) && seen.size < 10) {
       const code = match[1];
       if (/^(CODE|PROMO|COUPON|HERE|NOW|SAVE|FREE|SHOP|ONLY|WITH|YOUR|THIS|THAT|FROM|SALE)$/.test(code)) continue;
       seen.add(code);
     }
-    const key = "noah-shield-seen:" + location.hostname;
+    const key = "_ns_c_" + _couponNonce + ":" + location.hostname;
     let remembered = [];
     try {
       remembered = JSON.parse(sessionStorage.getItem(key) || "[]");

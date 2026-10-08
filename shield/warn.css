@@ -1,44 +1,272 @@
+/* warn.css — noah shield threat page. four states, one calm voice. */
+/* danger: phishing/lookalike — caution: downloads — info: focus — locked: parental */
 :root { color-scheme: dark; }
-* { box-sizing: border-box; }
+
+/* ── state token defaults (neutral / unknown) ─────────────────────────────── */
 body {
-  margin: 0;
-  min-height: 100vh;
+  --state-color:  #5f8a58;
+  --state-glow:   rgba(95, 138, 88, 0.10);
+  --state-bar:    #5a8452;
+  --state-text:   #a2cb98;
+  --state-bg-end: rgba(95, 138, 88, 0.05);
+}
+body.danger {
+  --state-color:  #b05840;
+  --state-glow:   rgba(176, 88, 64, 0.14);
+  --state-bar:    #c0624a;
+  --state-text:   #e8b4a8;
+  --state-bg-end: rgba(176, 88, 64, 0.07);
+}
+body.caution {
+  --state-color:  #9a7838;
+  --state-glow:   rgba(154, 120, 56, 0.12);
+  --state-bar:    #b08840;
+  --state-text:   #dcc896;
+  --state-bg-end: rgba(154, 120, 56, 0.06);
+}
+body.info {
+  --state-color:  #3a7a8a;
+  --state-glow:   rgba(58, 122, 138, 0.10);
+  --state-bar:    #4a8898;
+  --state-text:   #88b8c8;
+  --state-bg-end: rgba(58, 122, 138, 0.05);
+}
+body.locked {
+  --state-color:  #6a4a7a;
+  --state-glow:   rgba(106, 74, 122, 0.10);
+  --state-bar:    #7a5a8a;
+  --state-text:   #b898c8;
+  --state-bg-end: rgba(106, 74, 122, 0.05);
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  min-height: 100svh;
   display: grid;
   place-items: center;
-  background: #070909;
+  padding: 20px;
+  /* Ambient state glow — peripheral vision catches this first */
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 42%, var(--state-glow) 0%, transparent 70%),
+    #050707;
   color: #d8ddd6;
-  font: 15px/1.55 Georgia, "Times New Roman", serif;
+  font: 15px/1.62 Georgia, "Times New Roman", serif;
+  transition: background 0.5s ease;
 }
-@keyframes arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── arrival animations ────────────────────────────────────────────────────── */
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(14px) scale(0.975); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes bar-sweep {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+@keyframes content-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── card ──────────────────────────────────────────────────────────────────── */
 .card {
-  width: min(600px, calc(100vw - 40px));
-  background: rgba(8, 11, 9, 0.94);
-  border: 1px solid rgba(180, 210, 190, 0.1);
+  width: min(600px, calc(100vw - 32px));
+  background: rgba(6, 9, 7, 0.96);
+  border: 1px solid rgba(180, 210, 190, 0.07);
+  border-top: none;    /* threat-bar owns the top edge */
   border-radius: 18px;
-  padding: 40px 42px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-  animation: arrive 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(180, 210, 190, 0.03) inset,
+    0 0 60px var(--state-glow),
+    0 28px 72px rgba(0, 0, 0, 0.55),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+  animation: arrive 0.38s cubic-bezier(0.16, 0.8, 0.18, 1) both;
 }
-.eyebrow { font: 12px/1 -apple-system, "Segoe UI", system-ui, sans-serif; letter-spacing: .08em; color: #9aa298; margin: 0 0 16px; }
-h1 { font-size: 32px; font-weight: 400; line-height: 1.15; margin: 0 0 16px; color: #f1f4ef; }
-h1.warn { color: #e8b4a8; }
-p { margin: 0 0 10px; color: #b9beb7; }
-code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,.05); padding: 2px 6px; border-radius: 6px; color: #d8ddd6; word-break: break-all; }
-.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+
+/* ── threat bar ── the state signal that lands before the headline is read ─── */
+.threat-bar {
+  height: 3px;
+  background: var(--state-bar);
+  transform-origin: left center;
+  animation: bar-sweep 0.55s cubic-bezier(0.16, 0.8, 0.18, 1) 0.22s both;
+  box-shadow:
+    0 0 16px var(--state-color),
+    0 0 36px var(--state-glow);
+}
+
+/* ── content ───────────────────────────────────────────────────────────────── */
+.card-inner {
+  padding: 30px 40px 36px;
+  animation: content-in 0.32s cubic-bezier(0.16, 0.8, 0.18, 1) 0.10s both;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 11px/1 -apple-system, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--state-text);
+  margin: 0 0 20px;
+  opacity: 0.85;
+}
+
+#state-icon { font-size: 13px; line-height: 1; }
+
+h1 {
+  font: 400 36px/1.1 Georgia, "Times New Roman", serif;
+  letter-spacing: -0.015em;
+  color: #f1f4ef;
+  margin: 0 0 18px;
+}
+
+h1.warn { color: var(--state-text); }
+
+p {
+  margin: 0 0 12px;
+  color: #b2b7b0;
+  line-height: 1.68;
+}
+
+code {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(180, 210, 190, 0.08);
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: #d8ddd6;
+  word-break: break-all;
+}
+
+ul {
+  margin: 4px 0 14px 20px;
+  padding: 0;
+  color: #b2b7b0;
+  line-height: 1.72;
+}
+
+/* ── actions ───────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 28px;
+}
+
 button {
-  font: 14px -apple-system, "Segoe UI", system-ui, sans-serif; padding: 10px 16px; border-radius: 10px;
-  border: 1px solid rgba(180,210,190,.16); background: rgba(10,16,12,.9); color: #d8ddd6; cursor: pointer;
-  transition: background .16s, border-color .16s, color .16s;
+  font: 14px/1 -apple-system, "Segoe UI", system-ui, sans-serif;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(180, 210, 190, 0.13);
+  background: rgba(10, 16, 12, 0.9);
+  color: #c4c9c2;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s, box-shadow 0.16s;
 }
-button:hover { background: rgba(180,210,190,.08); color: #f1f4ef; }
-button.primary { background: #5f8a58; border-color: #5f8a58; color: #f1f4ef; }
-button.primary:hover { background: #6a9962; border-color: #6a9962; }
-button:focus-visible { outline: 1px solid #72a868; outline-offset: 2px; }
-.muted { font: 13px -apple-system, "Segoe UI", system-ui, sans-serif; color: #8f958d; margin-top: 14px; }
-small { display: block; margin-top: 18px; font: 12px -apple-system, "Segoe UI", system-ui, sans-serif; color: #6f766e; }
-ul { margin: 6px 0 10px 18px; padding: 0; color: #b9beb7; }
-.verdict { font-size: 24px; margin-top: 20px; }
+
+button:hover {
+  background: rgba(180, 210, 190, 0.07);
+  border-color: rgba(180, 210, 190, 0.2);
+  color: #f1f4ef;
+}
+
+/* Primary: the safe path — always green regardless of threat state. */
+/* This is intentional: green = safe action, always. Users learn fast. */
+button.primary {
+  background: rgba(76, 112, 70, 0.9);
+  border-color: rgba(114, 168, 104, 0.5);
+  color: #f1f4ef;
+  box-shadow: 0 2px 12px rgba(95, 138, 88, 0.22), 0 0 0 1px rgba(114, 168, 104, 0.14) inset;
+}
+
+button.primary:hover {
+  background: rgba(88, 130, 80, 0.96);
+  border-color: rgba(114, 168, 104, 0.65);
+  box-shadow: 0 4px 20px rgba(95, 138, 88, 0.32), 0 0 0 1px rgba(114, 168, 104, 0.18) inset;
+}
+
+/* Ghost-danger: the "continue anyway / keep it" option — intentionally less visible */
+button.ghost-danger {
+  border-color: rgba(192, 98, 74, 0.22);
+  color: rgba(232, 180, 168, 0.7);
+}
+
+button.ghost-danger:hover {
+  background: rgba(192, 98, 74, 0.08);
+  border-color: rgba(192, 98, 74, 0.36);
+  color: #e8b4a8;
+}
+
+button:focus-visible {
+  outline: 1.5px solid var(--state-color);
+  outline-offset: 2px;
+}
+
+/* ── supporting text ──────────────────────────────────────────────────────── */
+.muted {
+  font: 13px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif;
+  color: #8f958d;
+  margin-top: 16px;
+}
+
+small {
+  display: block;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(180, 210, 190, 0.055);
+  font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+  color: #505850;
+}
+
+.verdict {
+  font-size: 22px;
+  margin-top: 18px;
+  color: var(--state-text);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* ── leak test rows ─────────────────────────────────────────────────────────── */
+.leak-rows {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+}
+.leak-row {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 10px 14px;
+  background: rgba(255,255,255,.028);
+  border: 1px solid rgba(180,210,190,.07);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.leak-label {
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: lowercase;
+  color: rgba(255,255,255,.35);
+  min-width: 52px;
+  flex-shrink: 0;
+}
+.leak-val {
+  color: rgba(255,255,255,.8);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* ── mobile ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .card-inner { padding: 22px 22px 28px; }
+  h1 { font-size: 28px; }
+  .actions { flex-direction: column; }
+  .actions button { width: 100%; text-align: center; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -21,6 +21,7 @@ function stripTags(html) {
   return decodeEntities(String(html).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
 
+// TODO: deduplicate with lib/tools.js parsePrice
 Shield.parsePrice = function parsePrice(text) {
   const cleaned = String(text).replace(/[^\d.,]/g, "");
   if (!cleaned) return null;
@@ -332,7 +333,16 @@ Shield.recordPrice = async function recordPrice(product) {
   else points.push({ day: today, price });
   history[key] = points.slice(-366);
   const keys = Object.keys(history);
-  if (keys.length > 400) delete history[keys[0]];
+  if (keys.length > 400) {
+    // Evict the product whose most recent price point is oldest.
+    let oldestKey = keys[0];
+    let oldestTime = (history[keys[0]] || [{ day: "" }]).slice(-1)[0].day;
+    for (const k of keys) {
+      const lastDay = (history[k] || [{ day: "" }]).slice(-1)[0].day;
+      if (lastDay < oldestTime) { oldestKey = k; oldestTime = lastDay; }
+    }
+    delete history[oldestKey];
+  }
   await Shield.api.storage.local.set({ priceHistory: history });
   return Shield.summarizeHistory(history[key], (stored.watchlist || []).some((entry) => entry.key === key));
 };
@@ -414,26 +424,52 @@ Shield.priceFromHtml = function priceFromHtml(html, kind) {
 
 // Every six hours: each watched page is fetched and its price recorded; a
 // drop of three percent or more since the last look is announced.
+// MV3-safe: processes one item per alarm invocation to avoid long service-worker runs.
+Shield._watchlistNotify = null;
 Shield.checkWatchlist = async function checkWatchlist(notify) {
-  const stored = await Shield.api.storage.local.get("watchlist");
-  const watchlist = stored.watchlist || [];
-  for (const entry of watchlist) {
-    const html = await fetchPage(entry.url);
-    if (!html) continue;
-    const price = Shield.priceFromHtml(html, entry.kind);
-    if (!price) continue;
-    const previous = entry.price;
-    entry.price = price;
-    entry.lastChecked = new Date().toISOString();
-    await Shield.recordPrice({ url: entry.url, price, title: entry.title });
-    if (previous && price <= previous * 0.97) {
-      entry.dropped = { from: previous, to: price, at: entry.lastChecked };
-      await notify(entry, previous, price);
-      await Shield.count("drops", 1);
-    }
-  }
-  await Shield.api.storage.local.set({ watchlist });
+  Shield._watchlistNotify = notify;
+  await Shield.api.storage.local.set({ watchlistIndex: 0 });
+  Shield.api.alarms.create("watchlist-tick", { delayInMinutes: 0 });
 };
+
+Shield.checkWatchlistItem = async function checkWatchlistItem() {
+  const notify = Shield._watchlistNotify;
+  const stored = await Shield.api.storage.local.get(["watchlist", "watchlistIndex"]);
+  const watchlist = stored.watchlist || [];
+  const index = Number(stored.watchlistIndex) || 0;
+  if (index >= watchlist.length) return;
+  const entry = watchlist[index];
+  try {
+    const html = await fetchPage(entry.url);
+    if (html) {
+      const price = Shield.priceFromHtml(html, entry.kind);
+      if (price) {
+        const previous = entry.price;
+        entry.price = price;
+        entry.lastChecked = new Date().toISOString();
+        await Shield.recordPrice({ url: entry.url, price, title: entry.title });
+        if (notify && previous && price <= previous * 0.97) {
+          entry.dropped = { from: previous, to: price, at: entry.lastChecked };
+          await notify(entry, previous, price);
+          await Shield.count("drops", 1);
+        }
+        watchlist[index] = entry;
+        await Shield.api.storage.local.set({ watchlist });
+      }
+    }
+  } catch { /* skip this item on fetch error */ }
+  const nextIndex = index + 1;
+  await Shield.api.storage.local.set({ watchlistIndex: nextIndex });
+  if (nextIndex < watchlist.length) {
+    Shield.api.alarms.create("watchlist-tick", { delayInMinutes: 0 });
+  }
+};
+
+if (typeof Shield.api !== "undefined" && Shield.api.alarms && Shield.api.alarms.onAlarm) {
+  Shield.api.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "watchlist-tick") Shield.checkWatchlistItem().catch(() => {});
+  });
+}
 
 // ---- reviews on reddit ----------------------------------------------------------------
 

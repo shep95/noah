@@ -85,6 +85,7 @@ Shield.auditExtensions = async function auditExtensions() {
 
 Shield.setExtensionEnabled = async function setExtensionEnabled(id, enabled) {
   if (id === Shield.api.runtime.id) throw new Error("that is the shield itself");
+  console.warn("[noah-shield] setExtensionEnabled called on external extension:", id, "— ensure this is intentional");
   await Shield.api.management.setEnabled(id, enabled);
 };
 

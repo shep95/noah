@@ -16,15 +16,20 @@
   <p id="update" class="notice" hidden></p>
 
   <section id="site-section" class="hero">
-    <div class="row">
+    <div class="hero-top">
       <div id="grade" class="grade">·</div>
-      <div class="grow">
+      <div class="hero-info">
         <h2 id="site" class="site-name">this page</h2>
         <p id="score" class="muted">reading the page…</p>
         <p id="trust" class="muted" hidden></p>
       </div>
-      <span id="blocked" class="pill" title="requests to trackers stopped on this tab">0</span>
+      <div class="hero-right">
+        <span id="blocked" class="blocked-count" title="tracker requests stopped on this tab">0</span>
+        <span class="blocked-label">blocked</span>
+        <span id="hero-vpn-dot" class="dot hero-dot" title="VPN status"></span>
+      </div>
     </div>
+    <div id="live-feed" class="live-feed" hidden></div>
     <div class="row small">
       <label class="switch"><input type="checkbox" id="trusted"><span>trust this site</span></label>
       <label class="switch"><input type="checkbox" id="strict"><span>no cookies here</span></label>
@@ -32,16 +37,13 @@
       <label class="switch"><input type="checkbox" id="shopquiet"><span>no shopping help</span></label>
     </div>
     <div class="row small">
-      <button id="burn" class="ghost danger" title="Delete this site's cookies, cache and storage">burn this site</button>
-      <button id="here" class="ghost" title="What the shield stopped and did on this page, in words">what happened here</button>
+      <button id="here" class="ghost primary" title="What the shield stopped and did on this page, in words">what happened here</button>
       <button id="watchers" class="ghost">who's watching</button>
+      <button id="burn" class="ghost danger" title="Delete this site's cookies, cache and storage">burn</button>
       <button id="alias" class="ghost" title="An email alias for this site">alias</button>
-      <button id="decoy" class="ghost" title="Fill the sign-up form with decoy details">decoy form</button>
-      <button id="fill-mine" class="ghost" title="Fill this form with your own details, kept in this browser; you see what went where before you submit">fill with my details</button>
-      <button id="policy" class="ghost" title="Read this page as a policy or terms">read policy</button>
-      <button id="tell-noah" class="ghost" title="Give noah what the shield knows about this site: its grade, who it talks to, what was stopped, and whether it leaked before. shepherd reads it before trusting the site.">tell noah about this site</button>
+      <button id="decoy" class="ghost" title="Fill the sign-up form with decoy details">decoy</button>
+      <button id="policy" class="ghost" title="Read this page as a policy or terms">policy</button>
     </div>
-    <p id="tell-noah-out" class="muted" hidden></p>
     <div id="here-list" class="watchers" hidden></div>
     <div id="watchers-list" class="watchers" hidden></div>
     <p id="alias-out" class="muted" hidden></p>
@@ -50,15 +52,64 @@
 
   <section>
     <div class="row"><h2>today</h2><span id="today" class="muted"></span></div>
+    <div class="threat-banner" id="scam-banner">
+      <b id="d-scams">0</b><span>scams &amp; threats caught</span>
+    </div>
     <div class="dash">
-      <div><b id="d-trackers">0</b><span>ads and trackers stopped</span></div>
-      <div><b id="d-cookies">0</b><span>cookies burned</span></div>
-      <div><b id="d-scams">0</b><span>scams caught</span></div>
-      <div><b id="d-coupons">0</b><span>codes that worked</span></div>
-      <div><b id="d-saved">0</b><span>saved on orders</span></div>
-      <div><b id="d-annoy">0</b><span>banners and walls</span></div>
+      <div class="defense"><b id="d-trackers">0</b><span>ads &amp; trackers</span></div>
+      <div class="defense"><b id="d-cookies">0</b><span>cookies burned</span></div>
+      <div class="defense"><b id="d-annoy">0</b><span>banners &amp; walls</span></div>
+      <div class="savings"><b id="d-coupons">0</b><span>codes that worked</span></div>
+      <div class="savings reward"><b id="d-saved">0</b><span>saved on orders</span></div>
     </div>
     <p id="week" class="muted"></p>
+  </section>
+
+  <section id="vpn-section">
+    <div class="row">
+      <h2>vpn</h2>
+      <span id="vpn-dot" class="dot"></span>
+      <span id="vpn-state" class="muted">off</span>
+    </div>
+    <div class="row">
+      <select id="server" class="grow"></select>
+      <button id="tunnel-on" class="ghost primary">connect</button>
+    </div>
+    <p id="tunnel-status" class="muted"></p>
+    <div class="row small">
+      <label class="switch"><input type="checkbox" id="kill"><span>block everything if it drops</span></label>
+      <label class="switch"><input type="checkbox" id="webrtc"><span>hide my real address in calls</span></label>
+      <button id="recheck" class="ghost" title="Ask where the traffic comes out right now">check</button>
+      <button id="fastest" class="ghost" title="Try every location once and keep the fastest">fastest</button>
+      <button id="route" class="ghost" title="Send only this site through a location, or straight out">this site</button>
+    </div>
+    <p id="webrtc-leak" class="muted small" hidden></p>
+    <p id="vpn-noah" class="muted" hidden>One press needs <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">noah on this computer</a> (free): it fetches Tor from the Tor Project, runs it while you are connected and picks the country you choose. Without it, start Tor Browser and pick that route, or add a server under settings.</p>
+  </section>
+
+  <section id="social-section">
+    <div class="row"><h2>social</h2><span id="social-status" class="muted"></span></div>
+    <p class="muted small">Sponsored posts, engagement bait, algo injections and session timers across every platform.</p>
+    <div class="social-grid">
+      <label class="platform-toggle" title="Instagram"><input type="checkbox" id="social-instagram"><span>instagram</span></label>
+      <label class="platform-toggle" title="TikTok"><input type="checkbox" id="social-tiktok"><span>tiktok</span></label>
+      <label class="platform-toggle" title="Reddit"><input type="checkbox" id="social-reddit"><span>reddit</span></label>
+      <label class="platform-toggle" title="YouTube"><input type="checkbox" id="social-youtube"><span>youtube</span></label>
+      <label class="platform-toggle" title="Skip unskippable ads on YouTube invisibly"><input type="checkbox" id="skip-ads"><span>skip ads</span></label>
+      <label class="platform-toggle" title="LinkedIn"><input type="checkbox" id="social-linkedin"><span>linkedin</span></label>
+      <label class="platform-toggle" title="X / Twitter"><input type="checkbox" id="social-twitter"><span>x / twitter</span></label>
+    </div>
+    <p id="social-caught" class="muted" hidden></p>
+  </section>
+
+  <section id="persona-section">
+    <div class="row"><h2>shepherd persona for every AI</h2><span id="persona-status" class="muted"></span></div>
+    <p class="muted small">On every AI chat you open — Gemini, Gemini Lens, ChatGPT, Claude, Copilot, Perplexity, Poe, Mistral, DeepSeek, HuggingChat, Grok, Yandex, Character.ai, Pi, You, Kagi, Venice — the shepherd instructions are pasted as turn one of a fresh conversation. Every response after that runs under those rules.</p>
+    <label class="switch"><input type="checkbox" id="persona-enabled"><span>seed AI chats with the shepherd persona</span></label>
+    <label class="switch"><input type="checkbox" id="persona-autoseed"><span>seed automatically when a new chat opens</span></label>
+    <div class="row small">
+      <button id="persona-reseed" class="ghost" title="Force the shepherd persona into the current AI chat">reseed the current tab</button>
+    </div>
   </section>
 
   <section id="profile-section">
@@ -98,27 +149,6 @@
       <button id="record" class="ghost" title="Record the screen, a window or a tab, with your camera in a corner if you like; the file goes straight to your downloads">record</button>
     </div>
     <label class="switch"><input type="checkbox" id="capture-blur"><span>blur private details first (emails, numbers, cards, keys, filled-in fields)</span></label>
-  </section>
-
-  <section id="vpn-section">
-    <div class="row">
-      <h2>vpn</h2>
-      <span id="vpn-dot" class="dot"></span>
-      <span id="vpn-state" class="muted">off</span>
-    </div>
-    <div class="row">
-      <select id="server" class="grow"></select>
-      <button id="tunnel-on" class="ghost primary">connect</button>
-    </div>
-    <p id="tunnel-status" class="muted"></p>
-    <div class="row small">
-      <label class="switch"><input type="checkbox" id="kill"><span>block everything if it drops</span></label>
-      <label class="switch"><input type="checkbox" id="webrtc"><span>hide my real address in calls</span></label>
-      <button id="recheck" class="ghost" title="Ask where the traffic comes out right now">check</button>
-      <button id="fastest" class="ghost" title="Try every location once and keep the fastest">fastest</button>
-      <button id="route" class="ghost" title="Send only this site through a location, or straight out">this site</button>
-    </div>
-    <p id="vpn-noah" class="muted" hidden>One press needs <a href="https://noah.asherin.com/download" target="_blank" rel="noopener">noah on this computer</a> (free): it fetches Tor from the Tor Project, runs it while you are connected and picks the country you choose. Without it, start Tor Browser and pick that route, or add a server under settings.</p>
   </section>
 
   <section id="light-section">
@@ -178,6 +208,8 @@
       <label class="switch"><input type="checkbox" id="fingerprint"><span>blur fingerprints</span></label>
       <label class="switch"><input type="checkbox" id="params"><span>strip tracking parameters</span></label>
       <label class="switch"><input type="checkbox" id="gpc"><span>send Global Privacy Control</span></label>
+      <label class="switch"><input type="checkbox" id="cookie-deception"><span>auto-approve cookie banners with false consent (keeps functional cookies, strips analytics)</span></label>
+      <label class="switch"><input type="checkbox" id="dark-patterns"><span>detect and flag dark patterns (pre-ticked boxes, fake countdowns, confirm-shaming, hidden subscriptions)</span></label>
     </section>
     <section>
       <h2>shopping</h2>

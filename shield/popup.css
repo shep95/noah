@@ -1,28 +1,34 @@
 /* The noah look: layered near-black greens, thin lowercase type, one accent. */
+/* v4: deeper blacks, tighter glow on grade, glass hero, sharper motion */
 :root {
   color-scheme: dark;
-  --bg: #070909;
-  --surface: rgba(8, 11, 9, 0.92);
-  --surface2: rgba(10, 14, 11, 0.9);
-  --raise: rgba(10, 16, 12, 1);
-  --line: rgba(180, 210, 190, 0.08);
-  --line-mid: rgba(180, 210, 190, 0.14);
+  --bg: #050707;
+  --surface: rgba(6, 9, 7, 0.95);
+  --surface2: rgba(8, 12, 9, 0.92);
+  --raise: rgba(9, 14, 10, 1);
+  --glass: rgba(8, 12, 9, 0.78);
+  --line: rgba(160, 200, 170, 0.07);
+  --line-mid: rgba(160, 200, 170, 0.13);
+  --line-hi: rgba(114, 168, 104, 0.22);
   --text: #d8ddd6;
-  --sub: #b9beb7;
-  --muted: #9aa298;
-  --faint: #6f766e;
-  --accent: #5f8a58;
-  --accent-bright: #72a868;
-  --accent-soft: #a9cf9f;
-  --bad: #e8b4a8;
-  --warn: #dcc896;
+  --sub: #b4b9b2;
+  --muted: #8f9690;
+  --faint: #626860;
+  --accent: #5a8452;
+  --accent-bright: #6ea364;
+  --accent-soft: #a2cb98;
+  --accent-glow: rgba(95, 138, 88, 0.18);
+  --bad: #e4ada0;
+  --bad-glow: rgba(228, 173, 160, 0.12);
+  --warn: #d8c28e;
+  --warn-glow: rgba(216, 194, 142, 0.1);
   --display: Georgia, "Times New Roman", serif;
   --body: -apple-system, "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   /* Motion: one easing, two lengths. Things arrive; nothing bounces. */
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --quick: 0.16s;
-  --calm: 0.26s;
+  --ease: cubic-bezier(0.16, 0.8, 0.18, 1);
+  --quick: 0.14s;
+  --calm: 0.24s;
 }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: rgba(180, 210, 190, 0.16) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -58,7 +64,12 @@ section {
   display: grid;
   gap: 8px;
 }
-section.hero { background: linear-gradient(180deg, rgba(95,138,88,.12), rgba(8,11,9,.92) 70%); border-color: rgba(114,168,104,.18); }
+section.hero {
+  background: linear-gradient(160deg, rgba(95,138,88,.13) 0%, rgba(7,10,8,.96) 60%);
+  border-color: rgba(114,168,104,.2);
+  box-shadow: 0 0 0 1px rgba(114,168,104,.06) inset, 0 8px 32px rgba(0,0,0,.4);
+  backdrop-filter: blur(2px);
+}
 .row { display: flex; align-items: center; gap: 10px; }
 .row h2 { flex: 1; }
 .row.small { flex-wrap: wrap; gap: 6px 10px; }
@@ -66,9 +77,24 @@ section.hero { background: linear-gradient(180deg, rgba(95,138,88,.12), rgba(8,1
 .muted { color: var(--muted); font-size: 12px; margin: 0; }
 .big { font: 400 30px/1.05 var(--display); color: #f1f4ef; }
 .big small { font: 12px var(--body); color: var(--muted); margin-left: 6px; }
-.grade { font: 400 26px/1 var(--display); color: var(--accent-soft); min-width: 32px; text-align: center; }
-.grade.c, .grade.d { color: var(--warn); }
-.grade.f { color: var(--bad); }
+.grade {
+  font: 400 28px/1 var(--display);
+  color: var(--accent-soft);
+  min-width: 36px; text-align: center;
+  text-shadow: 0 0 20px rgba(169,207,159,.35), 0 0 40px rgba(169,207,159,.12);
+  filter: drop-shadow(0 0 8px rgba(95,138,88,.3));
+  transition: text-shadow var(--calm) var(--ease), filter var(--calm) var(--ease), color var(--calm) var(--ease);
+}
+.grade.c, .grade.d {
+  color: var(--warn);
+  text-shadow: 0 0 20px rgba(216,194,142,.3);
+  filter: drop-shadow(0 0 6px rgba(216,194,142,.2));
+}
+.grade.f {
+  color: var(--bad);
+  text-shadow: 0 0 20px rgba(228,173,160,.35);
+  filter: drop-shadow(0 0 8px rgba(228,173,160,.2));
+}
 .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: rgba(180,210,190,.06); color: var(--sub); border: 1px solid var(--line); }
 .pill.warn { color: var(--warn); border-color: rgba(220,200,150,.25); }
 .switch { display: flex; align-items: center; gap: 9px; cursor: pointer; color: var(--sub); transition: color var(--quick); }
@@ -143,6 +169,56 @@ button.ghost.danger { border-color: rgba(232,180,168,.3); color: var(--bad); }
 .dash div { padding: 8px 10px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--line); }
 .dash b { display: block; font: 400 20px/1.1 var(--display); color: #f1f4ef; }
 .dash span { font-size: 11px; color: var(--muted); }
+/* Category color system — defense stats are amber-tinted, savings are green.
+   Colors are persistent category signals, not reactive states.
+   The number's hue tells you what you're looking at before you read the label. */
+.dash div.defense b { color: #d4c4a4; }
+.dash div.savings b { color: var(--accent-soft); }
+.dash div.savings { border-color: rgba(162, 203, 152, 0.11); background: rgba(95, 138, 88, 0.04); }
+
+/* ── social platform section ──────────────────────────────────────────────── */
+.muted.small, p.small { font-size: 11px; line-height: 1.5; }
+.social-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.platform-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-mid);
+  background: rgba(180, 210, 190, 0.04);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--quick), border-color var(--quick), color var(--quick);
+  user-select: none;
+}
+.platform-toggle:hover { background: rgba(180, 210, 190, 0.08); color: var(--sub); }
+.platform-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--line-mid);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--calm) var(--ease), border-color var(--calm) var(--ease);
+}
+.platform-toggle input:checked {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 5px rgba(114, 168, 104, 0.5);
+}
+.platform-toggle:has(input:checked) {
+  border-color: rgba(114, 168, 104, 0.28);
+  color: var(--accent-soft);
+  background: rgba(95, 138, 88, 0.08);
+}
 footer {
   display: flex;
   flex-wrap: wrap;
@@ -181,8 +257,11 @@ details > section { animation: none; }
 .pill { transition: color var(--quick), border-color var(--quick); }
 select { transition: border-color var(--quick); }
 select:hover, select:focus-visible { border-color: rgba(114, 168, 104, 0.45); outline: none; }
-button.ghost { transition: background var(--quick), color var(--quick), border-color var(--quick); }
+button.ghost { transition: background var(--quick), color var(--quick), border-color var(--quick), box-shadow var(--quick); }
+button.ghost:hover { box-shadow: 0 0 0 1px rgba(180,210,190,.07) inset; }
+button.ghost.on { box-shadow: 0 0 12px rgba(95,138,88,.18); }
 button.ghost:focus-visible { outline: 1px solid var(--accent-bright); outline-offset: 2px; }
+button.ghost.primary { box-shadow: 0 0 16px rgba(95,138,88,.15); }
 summary { list-style: none; user-select: none; transition: color var(--quick); }
 summary::-webkit-details-marker { display: none; }
 summary::before { content: "›"; display: inline-block; width: 12px; color: var(--faint); transition: transform var(--calm) var(--ease); }
@@ -193,10 +272,89 @@ summary:hover { color: var(--text); }
 .watcher:hover { border-color: var(--line-mid); }
 a { transition: color var(--quick); }
 [hidden] { display: none !important; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; transition: background var(--calm) var(--ease), box-shadow var(--calm) var(--ease); }
-.dot.up { background: var(--accent-bright); box-shadow: 0 0 0 4px rgba(114, 168, 104, 0.18); }
-.dot.checking { background: var(--warn); }
-.dot.held, .dot.error { background: var(--bad); }
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--faint); flex: none;
+  transition: background var(--calm) var(--ease), box-shadow var(--calm) var(--ease);
+}
+.dot.up {
+  background: var(--accent-bright);
+  box-shadow: 0 0 0 4px rgba(114,168,104,.16), 0 0 0 8px rgba(114,168,104,.06), 0 0 12px rgba(114,168,104,.4);
+}
+.dot.checking { background: var(--warn); box-shadow: 0 0 0 4px rgba(216,194,142,.14), 0 0 10px rgba(216,194,142,.3); }
+.dot.held, .dot.error { background: var(--bad); box-shadow: 0 0 0 4px rgba(228,173,160,.14), 0 0 10px rgba(228,173,160,.3); }
+
+/* ── hero-top: grade + info + live blocked count + vpn dot ──────────────── */
+.hero-top { display: flex; align-items: flex-start; gap: 12px; }
+.hero-info { flex: 1; min-width: 0; }
+.hero-right {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 3px; flex-shrink: 0; padding-top: 2px;
+}
+/* The blocked counter: big enough to register at a glance (32px display),
+   amber-free so it reads as "action taken" not "threat", tabular so it
+   doesn't jump width as digits change. */
+.blocked-count {
+  font: 400 32px/1 var(--display);
+  color: var(--accent-soft);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  transition: color var(--calm) var(--ease);
+}
+.blocked-count.hot { color: #f1f4ef; }
+.blocked-label {
+  font-size: 10px; letter-spacing: .1em;
+  color: var(--faint); text-transform: lowercase; line-height: 1;
+}
+/* VPN dot in the hero corner — same visual grammar as the footer dot,
+   but placed so the eye catches it while reading the grade. */
+.hero-dot { margin-top: 5px; }
+
+/* live-feed: a one-liner that surfaces when the shield just did something.
+   The pulsing border is the only animation on the page — it stops the eye
+   without demanding attention. Disappears when there is nothing to say. */
+.live-feed {
+  font-size: 12px; color: var(--accent-soft); line-height: 1.45;
+  padding: 6px 10px; border-radius: 8px;
+  background: rgba(95,138,88,.08);
+  border: 1px solid rgba(114,168,104,.15);
+  animation: pulse-border 2.4s ease-in-out infinite;
+  word-break: break-word;
+}
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(114,168,104,.15); }
+  50%       { border-color: rgba(114,168,104,.38); }
+}
+
+/* ── threat banner (scam / phishing count) ───────────────────────────────── */
+/* Passive state: visible but subdued — red glow only when something was
+   actually caught today, so it never cries wolf. */
+.threat-banner {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  background: rgba(228,173,160,.04);
+  border: 1px solid rgba(228,173,160,.10);
+  transition: background var(--calm) var(--ease), border-color var(--calm) var(--ease), box-shadow var(--calm) var(--ease);
+}
+.threat-banner b {
+  font: 400 28px/1 var(--display);
+  color: var(--bad); font-variant-numeric: tabular-nums;
+  transition: color var(--calm) var(--ease);
+}
+.threat-banner span { font-size: 12px; color: var(--muted); }
+.threat-banner[data-active="true"] {
+  background: rgba(228,173,160,.09);
+  border-color: rgba(228,173,160,.28);
+  box-shadow: 0 0 22px rgba(228,173,160,.07);
+}
+.threat-banner[data-active="true"] b { color: #f4c4b8; }
+
+/* ── dash: 5 cells, two rows (3 + 2) ────────────────────────────────────── */
+/* Previously 6 cells in 3-col; now 5. The last row holds 2 savings cells
+   wider so the grid fills without an orphan. */
+.dash { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dash div:nth-child(4), .dash div:nth-child(5) { grid-column: span 1; }
+
 button.ghost.primary { border-color: rgba(114, 168, 104, 0.5); color: var(--accent-soft); }
 button.ghost.primary:hover { background: rgba(95, 138, 88, 0.16); color: #f1f4ef; }
 button.ghost.primary.on { background: rgba(95, 138, 88, 0.22); color: #f1f4ef; }

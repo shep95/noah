@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noah shield · optimizer</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="optimizer.css">
+</head>
+<body class="options">
+  <header>
+    <img src="icons/32.png" alt="" width="24" height="24">
+    <h1>noah shield · optimizer</h1>
+    <span class="muted"><a href="options.html">settings</a></span>
+  </header>
+  <main>
+    <section>
+      <h2>reduce file size</h2>
+      <p class="muted">everything happens in your browser. nothing is uploaded anywhere.</p>
+      <div id="drop-zone" role="button" tabindex="0" aria-label="drop zone — click or drop a file">
+        <span class="drop-icon">&#x2B07;</span>
+        <span class="drop-label">drop a file here or click to choose</span>
+        <span class="drop-sub muted">png &middot; jpg &middot; webp &middot; gif &middot; svg &middot; pdf &middot; docx &middot; xlsx &middot; pptx &middot; zip &middot; mp4 &middot; webm &middot; json &middot; css &middot; html</span>
+      </div>
+      <input id="file-input" type="file" style="display:none" accept="*/*">
+      <div id="spinner" hidden class="muted" style="margin-top:12px;text-align:center">optimizing&#x2026;</div>
+    </section>
+
+    <section id="result" hidden>
+      <h2>result</h2>
+      <p id="file-name" class="muted" style="font-size:11px;word-break:break-all"></p>
+      <div class="size-row">
+        <div class="size-block">
+          <div class="size-label muted">original</div>
+          <div class="size-num" id="before-size">&#x2014;</div>
+        </div>
+        <div class="size-arrow muted">&#x2192;</div>
+        <div class="size-block">
+          <div class="size-label muted">optimized</div>
+          <div class="size-num" id="after-size">&#x2014;</div>
+        </div>
+        <span id="reduction" class="pill" style="align-self:center"></span>
+      </div>
+      <p id="quality-note" class="muted" style="font-size:11px;margin-top:8px"></p>
+      <p><button id="download-btn" class="ghost">download</button></p>
+    </section>
+
+    <section>
+      <h2>what gets optimized</h2>
+      <p class="muted"><b style="color:var(--text);font-weight:500">png</b> &mdash; lossless re-compression, all metadata stripped. <b style="color:var(--text);font-weight:500">jpg</b> &mdash; re-encoded at 92% quality, visually identical for most images. <b style="color:var(--text);font-weight:500">gif</b> &mdash; converted to webp, rename the file after download. <b style="color:var(--text);font-weight:500">svg</b> &mdash; whitespace and comments removed. <b style="color:var(--text);font-weight:500">docx &middot; xlsx &middot; pptx &middot; zip</b> &mdash; each internal file re-compressed at maximum deflate level. <b style="color:var(--text);font-weight:500">pdf</b> &mdash; metadata, thumbnails, and xmp removed. <b style="color:var(--text);font-weight:500">mp4 &middot; mov</b> &mdash; title, author, and encoder metadata zeroed. <b style="color:var(--text);font-weight:500">json &middot; css &middot; html</b> &mdash; whitespace collapsed. video transcoding requires desktop software.</p>
+    </section>
+  </main>
+  <script src="optimizer.js"></script>
+</body>
+</html>

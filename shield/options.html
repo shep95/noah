@@ -257,6 +257,15 @@
     </section>
 
     <section>
+      <h2>shepherd persona on every AI</h2>
+      <p class="muted">On every AI chat you open — Gemini, Gemini Lens, ChatGPT, Claude, Copilot, Perplexity, Poe, Mistral, DeepSeek, HuggingChat, Grok, Yandex Alice, Character.ai, Pi, You.com, Kagi Assistant, Venice, AI Studio — the bundled shepherd document is pasted into the composer of a fresh conversation and sent as turn one. Every response after that runs under the shepherd rules. A small pill on the AI page shows the state and carries a "reseed" button. Auto-seeding only fires on a fresh chat with an empty composer.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="persona.enabled"><span>Enable shepherd persona on AI chats</span></label>
+        <label class="switch"><input type="checkbox" data-path="persona.autoSeed"><span>Seed automatically when a new chat opens</span></label>
+      </div>
+    </section>
+
+    <section>
       <h2>x profile intelligence</h2>
       <p class="muted">On any X or Twitter profile page a floating report opens with account age and post rate, the rest_id and its rough signup era, verified/protected/withheld flags, follow ratio, bio URLs expanded (X hides them behind t.co), cross-platform handles pulled out of the bio, and one-click links to reverse-image-search the profile picture, browse older versions on Wayback Machine, and check any email in the bio against HIBP. Data comes from what your browser was already going to receive; external lookups only fire when you click them.</p>
       <label class="switch"><input type="checkbox" data-path="profileIntel.enabled"><span>Show the intel report on X and Twitter profile pages</span></label>
@@ -280,6 +289,76 @@
       <p class="muted">A tab you arm from the popup records every fetch, XHR, WebSocket frame, form submit, storage read, CSP violation, and cross-origin postMessage the page sees, in plain text, with JWTs decoded and known secret shapes flagged. A snapshot button also pulls cookies, localStorage and sessionStorage. Copy-out puts the transcript on the clipboard for your security team. Off by default, per tab. Never turn it on for a site you do not own.</p>
     </section>
 
+    <section>
+      <h2>instagram</h2>
+      <p class="muted">Flags sponsored posts, hides suggested content, surfaces algorithmic signals (Explore vs. Following, Reel rank), and adds a session-time reminder so the feed doesn't swallow hours. Reel focus mode hides the sidebar and related carousel.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="social.instagram.enabled"><span>Enable instagram intelligence</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.instagram.hideSponsored"><span>Hide sponsored posts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.instagram.hideSuggested"><span>Hide "Suggested for you" posts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.instagram.flagAlgoSignals"><span>Flag algorithmic signals on posts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.instagram.focusMode"><span>Reel focus mode (hide sidebar and related)</span></label>
+      </div>
+      <label>Session reminder after (minutes)<input type="number" data-number="social.instagram.sessionWarningMinutes" min="5" max="120" step="5"></label>
+    </section>
+
+    <section>
+      <h2>tiktok</h2>
+      <p class="muted">Adds a live session clock TikTok deliberately hides, flags paid promotions and unverified creators, hides suggested accounts, and shows an exit panel once you hit your session limit. Focus mode removes the sidebar discovery carousel.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.enabled"><span>Enable TikTok intelligence</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.hideAds"><span>Hide promoted / ad videos</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.showSessionTimer"><span>Show session timer</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.hideSuggestedAccounts"><span>Hide suggested accounts sidebar</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.flagUnverified"><span>Flag unverified creators</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.tiktok.focusMode"><span>Focus mode (hide discovery sidebar)</span></label>
+      </div>
+      <label>Session warning after (minutes)<input type="number" data-number="social.tiktok.sessionWarningMinutes" min="5" max="120" step="5"></label>
+    </section>
+
+    <section>
+      <h2>reddit</h2>
+      <p class="muted">Removes promoted posts, converts fuzzy "3 days ago" timestamps to exact dates, flags karma-farming title patterns, and can hide the award clutter that inflates post authority. Works on both the new (shreddit) and old Reddit.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="social.reddit.enabled"><span>Enable reddit intelligence</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.reddit.hideAds"><span>Hide promoted posts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.reddit.showAbsoluteDates"><span>Show exact post dates</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.reddit.flagKarmaFarming"><span>Flag karma-farming titles</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.reddit.hideAwards"><span>Hide post awards</span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>youtube</h2>
+      <p class="muted">Removes the recommendation sidebar trap while watching, cleans endscreen cards, disables autoplay, shows exact upload dates with content age, flags sponsored disclosures in descriptions, and detects clickbait title patterns. Optionally hides the Shorts tab.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="social.youtube.enabled"><span>Enable YouTube intelligence</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.cleanSidebar"><span>Hide recommendation sidebar while watching</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.autoplayGuard"><span>Disable autoplay</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.cleanEndscreen"><span>Remove endscreen cards</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.showUploadDate"><span>Show exact upload date with age</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.flagSponsoredSegments"><span>Flag sponsor disclosures in descriptions</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.flagClickbait"><span>Flag clickbait title patterns</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.hideShortsTab"><span>Hide the Shorts tab</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.youtube.cleanHome"><span>Clean homepage (remove promoted sections)</span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>linkedin</h2>
+      <p class="muted">Removes sponsored content and job ads, converts "1 week ago" to a real date with days-since count, detects engagement-bait and hustle-porn formatting, flags job postings older than your threshold that are probably already filled, and cleans suggested / trending sidebar noise.</p>
+      <div class="grid two">
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.enabled"><span>Enable linkedin intelligence</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.hideSponsored"><span>Hide sponsored posts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.showAbsoluteDates"><span>Show exact post dates</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.flagEngagementBait"><span>Flag engagement bait and hustle formatting</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.flagStaleJobs"><span>Flag stale job postings</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.hideReactions"><span>Mute reaction counts</span></label>
+        <label class="switch"><input type="checkbox" data-path="social.linkedin.cleanFeed"><span>Remove suggested / trending sidebar noise</span></label>
+      </div>
+      <label>Flag job postings older than (days)<input type="number" data-number="social.linkedin.staleJobDays" min="7" max="90" step="1"></label>
+    </section>
+
     <section id="look">
       <h2>the look</h2>
       <p class="muted">
@@ -295,23 +374,6 @@
         <span id="look-status" class="muted"></span>
       </div>
       <div id="look-swatches" class="swatches"></div>
-    </section>
-
-    <section>
-      <h2>my details, for forms you choose to fill</h2>
-      <p class="muted">Kept in this browser only: not synced, not sent anywhere. “fill with my details” in the popup puts them into the form on the open page and lists what went where; it never submits.</p>
-      <div class="grid two">
-        <label>First name<input id="md-firstName" autocomplete="off"></label>
-        <label>Last name<input id="md-lastName" autocomplete="off"></label>
-        <label>Email<input id="md-email" type="email" autocomplete="off"></label>
-        <label>Username<input id="md-username" autocomplete="off"></label>
-        <label>Phone<input id="md-phone" autocomplete="off"></label>
-        <label>Street<input id="md-street" autocomplete="off"></label>
-        <label>City<input id="md-city" autocomplete="off"></label>
-        <label>Postal code<input id="md-postal" autocomplete="off"></label>
-        <label>Birthday<input id="md-birthday" type="date" autocomplete="off"></label>
-      </div>
-      <p class="muted"><button id="md-save" class="ghost">Keep these</button> <button id="md-clear" class="ghost">Forget them</button> <span id="md-result"></span></p>
     </section>
 
     <section>

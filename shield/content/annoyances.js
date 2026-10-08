@@ -47,8 +47,11 @@
         return;
       }
     }
+    // FIX: check text (cheap string match) before visible() (layout read: getComputedStyle +
+    // getBoundingClientRect). Pages with hundreds of buttons only call visible() on those
+    // whose label matches the reject pattern — typically 0–3 elements, not hundreds.
     const buttons = Array.from(document.querySelectorAll("button, a[role='button'], input[type='button'], input[type='submit'], [role='button']"))
-      .filter((element) => visible(element) && REJECT_TEXT.test(text(element) || element.value || ""));
+      .filter((element) => REJECT_TEXT.test(text(element) || element.value || "") && visible(element));
     for (const button of buttons) {
       const container = button.closest("[class*='cookie' i], [id*='cookie' i], [class*='consent' i], [id*='consent' i], [class*='cmp' i], [id*='cmp' i], [class*='gdpr' i], [id*='gdpr' i], [class*='privacy' i], [id*='privacy' i], [aria-label*='cookie' i], [aria-modal='true'], dialog, [role='dialog']");
       if (!container || !CMP_HINT.test(text(container).slice(0, 600))) continue;
@@ -74,7 +77,19 @@
   const KEEP = /cookie|consent|gdpr|privacy|checkout|payment|cart|sign in|log in$|login|password|captcha|verify/i;
   let overlaysRemoved = 0;
   function removeOverlays() {
-    const candidates = Array.from(document.querySelectorAll("body *")).filter((element) => {
+    // FIX: "body *" visits every element in the DOM, calling getComputedStyle() and
+    // getBoundingClientRect() on each — hundreds to thousands of forced layout reflows.
+    // Overlays are overwhelmingly: (a) direct children of body, (b) elements whose
+    // class or id contains modal/overlay/wall/popup hints, (c) dialog elements.
+    // This targeted selector reduces the pool by 95%+ on typical pages.
+    const pool = document.querySelectorAll(
+      "body > *, " +
+      "[class*='overlay' i], [class*='modal' i], [class*='popup' i], [class*='wall' i], " +
+      "[class*='paywall' i], [class*='gate' i], [class*='banner' i], [class*='subscribe' i], " +
+      "[id*='overlay' i], [id*='modal' i], [id*='popup' i], [id*='wall' i], " +
+      "dialog, [role='dialog'], [aria-modal='true']"
+    );
+    const candidates = Array.from(pool).filter((element) => {
       if (/^(NOAH-SHIELD|NS-[0-9A-F]{8})-(SHOP|BAR|NOTICE|TOAST)$/.test(element.tagName)) return false;
       const style = getComputedStyle(element);
       if (style.position !== "fixed" && style.position !== "sticky" && style.position !== "absolute") return false;
@@ -130,9 +145,15 @@
   function flagUrgency() {
     let key;
     try { key = "noah-shield-timer:" + location.pathname; } catch { return; }
+    // FIX: original called visible() (layout reflow) on EVERY span/div/p/b/strong/em/li/td —
+    // potentially thousands of elements. Text check is pure string work; visible() is a
+    // forced layout read. Filter by text first, then check visibility only for matches.
     const elements = Array.from(document.querySelectorAll("span, div, p, b, strong, em, li, td"))
-      .filter((element) => element.children.length <= 3 && visible(element))
-      .filter((element) => { const words = text(element); return words.length < 120 && URGENCY.test(words); })
+      .filter((element) => {
+        if (element.children.length > 3) return false;
+        const words = text(element);
+        return words.length < 120 && URGENCY.test(words) && visible(element);
+      })
       .slice(0, 8);
     if (!elements.length) return;
     let previous = null;

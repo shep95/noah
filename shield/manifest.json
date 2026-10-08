@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "noah shield",
-  "version": "2026.10.2.2",
+  "version": "2026.10.3.9",
   "description": "A tunnel that fails closed instead of leaking, trackers and data grabs stopped on every page, cheaper prices and working coupons while you shop, and a watch on anything that could record your screen.",
   "author": "House of Asher",
   "homepage_url": "https://noah.asherin.com/shield",
@@ -243,6 +243,18 @@
         "https://*.x.com/*"
       ],
       "js": [
+        "content/social_twitter.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://twitter.com/*",
+        "https://*.twitter.com/*",
+        "https://x.com/*",
+        "https://*.x.com/*"
+      ],
+      "js": [
         "content/spaces.js"
       ],
       "run_at": "document_start",
@@ -287,6 +299,83 @@
     },
     {
       "matches": [
+        "https://gemini.google.com/*",
+        "https://bard.google.com/*",
+        "https://lens.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://poe.com/*",
+        "https://chat.mistral.ai/*",
+        "https://mistral.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://deepseek.com/*",
+        "https://huggingface.co/chat/*",
+        "https://grok.com/*",
+        "https://x.ai/*",
+        "https://grok.x.ai/*",
+        "https://ya.ru/*",
+        "https://alice.yandex.ru/*",
+        "https://yandex.com/*",
+        "https://yandex.ru/*",
+        "https://character.ai/*",
+        "https://beta.character.ai/*",
+        "https://pi.ai/*",
+        "https://you.com/*",
+        "https://kagi.com/*",
+        "https://venice.ai/*",
+        "https://shieldtest.example/*"
+      ],
+      "js": [
+        "content/persona.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://bard.google.com/*",
+        "https://lens.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://poe.com/*",
+        "https://chat.mistral.ai/*",
+        "https://mistral.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://deepseek.com/*",
+        "https://huggingface.co/chat/*",
+        "https://grok.com/*",
+        "https://x.ai/*",
+        "https://grok.x.ai/*",
+        "https://ya.ru/*",
+        "https://alice.yandex.ru/*",
+        "https://yandex.com/*",
+        "https://yandex.ru/*",
+        "https://character.ai/*",
+        "https://beta.character.ai/*",
+        "https://pi.ai/*",
+        "https://you.com/*",
+        "https://kagi.com/*",
+        "https://venice.ai/*",
+        "https://shieldtest.example/*"
+      ],
+      "js": [
+        "content/persona_bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "http://*/*",
         "https://*/*"
       ],
@@ -304,6 +393,113 @@
       ],
       "js": [
         "content/inspect_bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/downloader_scan.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*",
+        "https://instagram.com/*"
+      ],
+      "js": [
+        "content/social_instagram.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://tiktok.com/*"
+      ],
+      "js": [
+        "content/social_tiktok.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.reddit.com/*",
+        "https://old.reddit.com/*",
+        "https://reddit.com/*"
+      ],
+      "js": [
+        "content/social_reddit.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": [
+        "content/social_youtube.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/cookie_consent.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/dark_patterns.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*"
+      ],
+      "js": [
+        "content/social_linkedin.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/cognition.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/prefetch.js"
       ],
       "run_at": "document_start",
       "all_frames": false
@@ -359,7 +555,7 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://noah.asherin.com https: http:; base-uri 'none'; form-action 'none'"
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://noah.asherin.com https://haveibeenpwned.com https://api.ivpn.net https://timing.cloudflare.com; base-uri 'none'; form-action 'none'"
   },
   "commands": {
     "panic": {
@@ -376,7 +572,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "warn.html"
+        "warn.html",
+        "downloader.html",
+        "optimizer.html"
       ],
       "matches": [
         "<all_urls>"
@@ -389,7 +587,8 @@
       ],
       "matches": [
         "<all_urls>"
-      ]
+      ],
+      "use_dynamic_url": true
     }
   ],
   "chrome_url_overrides": {

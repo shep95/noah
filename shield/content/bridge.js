@@ -114,7 +114,23 @@
   `;
 
   let host = null;
+  const barQueue = [];
+  let barActive = false;
+  function drainBarQueue() {
+    if (barActive || !barQueue.length) return;
+    barActive = true;
+    const { id, kind, site, detail } = barQueue.shift();
+    _showBarNow(id, kind, site, detail);
+  }
   function showBar(id, kind, site, detail) {
+    barQueue.push({ id, kind, site, detail });
+    setTimeout(drainBarQueue, barActive ? 500 : 0);
+  }
+  function showBarFinished() {
+    barActive = false;
+    drainBarQueue();
+  }
+  function _showBarNow(id, kind, site, detail) {
     if (host) host.remove();
     host = document.createElement(tagName("bar"));
     const shadow = host.attachShadow({ mode: "closed" });
@@ -122,6 +138,9 @@
     style.textContent = STYLE;
     const bar = document.createElement("div");
     bar.className = "bar";
+    bar.setAttribute("role", "alertdialog");
+    bar.setAttribute("aria-modal", "true");
+    bar.setAttribute("aria-label", "noah shield permission request");
     const text = document.createElement("span");
     const strong = document.createElement("b");
     strong.textContent = site;
@@ -137,17 +156,21 @@
     }
     const once = document.createElement("button");
     once.textContent = "Allow once";
+    once.setAttribute("aria-label", "Allow " + kind + " once");
     const always = document.createElement("button");
     always.textContent = "Always allow " + site;
+    always.setAttribute("aria-label", "Always allow " + kind + " from " + site);
     const stop = document.createElement("button");
     stop.className = "stop";
     stop.textContent = "Stop it";
+    stop.setAttribute("aria-label", "Block " + kind + " from " + site);
     const decide = (allow, forever) => {
       api.runtime.sendMessage({ type: "capture.decide", kind, allow, always: forever }, () => {
         void api.runtime.lastError;
         answer(id, allow);
         host.remove();
         host = null;
+        showBarFinished();
       });
     };
     once.addEventListener("click", () => decide(true, false));
@@ -156,6 +179,9 @@
     bar.append(text, once, always, stop);
     shadow.append(style, bar);
     (document.documentElement || document).append(host);
+    // FIX: double querySelector call (unnecessary second layout read) and no guard for the
+    // case where decide() was called within the 50ms window (host set to null, bar removed).
+    setTimeout(() => { const btn = shadow.querySelector("button"); if (host && btn) btn.focus(); }, 50);
   }
 
   let toastHost = null;
