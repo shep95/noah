@@ -252,7 +252,7 @@ impl MistralLanguageModel {
         cx: &AsyncApp,
     ) -> BoxFuture<
         'static,
-        Result<futures::stream::BoxStream<'static, Result<mistral::StreamResponse>>>,
+        Result<futures::stream::BoxStream<'static, Result<mistral::StreamResponse>>, LanguageModelCompletionError>,
     > {
         let http_client = self.http_client.clone();
 
@@ -278,8 +278,9 @@ impl MistralLanguageModel {
                 affinity,
                 &extra_headers,
             );
-            let response = request.await?;
-            Ok(response)
+            request.await.map_err(|error| {
+                LanguageModelCompletionError::from_request_error(PROVIDER_NAME, error)
+            })
         });
 
         async move { Ok(future.await?.boxed()) }.boxed()

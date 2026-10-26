@@ -53,6 +53,7 @@
     const s = document.createElement("style");
     s.textContent = `
       @keyframes noah-li-in { from { opacity:0; } to { opacity:1; } }
+      @media (prefers-reduced-motion: reduce) { .noah-li-badge { animation: none !important; } }
       .noah-li-badge {
         display:inline-flex !important; align-items:center; gap:4px;
         font:11px/1.4 -apple-system,system-ui,sans-serif !important;

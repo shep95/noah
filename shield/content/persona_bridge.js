@@ -19,7 +19,6 @@
     nonce = String(event.detail || "");
     onPaired();
   });
-  try { window.dispatchEvent(new CustomEvent("noah-persona-bridge-ready")); } catch {}
   function onPaired() {
     if (cached) send(cached);
     else fetchAndSend();
@@ -32,7 +31,7 @@
   function fetchAndSend() {
     api.runtime.sendMessage({ type: "persona.config" }, (reply) => {
       if (api.runtime.lastError || !reply) return;
-      send({ config: reply.persona || { enabled: true, autoSeed: true }, prompt: reply.prompt || null });
+      send({ config: reply.persona || { enabled: false, autoSeed: false, consentGiven: false }, prompt: reply.prompt || null });
     });
   }
   fetchAndSend();
@@ -41,7 +40,7 @@
     api.runtime.onMessage.addListener((message) => {
       if (!message) return;
       if (message.type === "persona.set") {
-        send({ config: message.persona || { enabled: true, autoSeed: true }, prompt: message.prompt || null });
+        send({ config: message.persona || { enabled: false, autoSeed: false, consentGiven: false }, prompt: message.prompt || null });
       } else if (message.type === "persona.reseed") {
         if (nonce !== null) try { window.dispatchEvent(new CustomEvent(channel("noah-persona-force-seed"))); } catch {}
       }

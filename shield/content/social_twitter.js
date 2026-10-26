@@ -90,6 +90,7 @@
     const s = document.createElement("style");
     s.textContent = `
       @keyframes noah-tw-in { from { opacity:0; } to { opacity:1; } }
+      @media (prefers-reduced-motion: reduce) { .noah-tw-badge { animation: none !important; } }
       .noah-tw-badge {
         display:inline-flex !important; align-items:center; gap:4px;
         font:11px/1.4 -apple-system,system-ui,sans-serif !important;

@@ -6253,9 +6253,9 @@ impl ThreadView {
             .and_then(|thread| thread.read(cx).model().cloned());
         let session = self.session_id.0.to_string();
         let task = agent::second_opinion(question, answer, author, Some(session), cx);
-        self.second_opinion = Some(SecondOpinionState::Asking);
-        cx.notify();
-        cx.spawn(async move |this, cx| {
+        // The task lives in the state, so sending the next message or
+        // dismissing the card drops it and a late answer can't reappear.
+        let task = cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
                 this.second_opinion = Some(match result {
@@ -6264,8 +6264,10 @@ impl ThreadView {
                 });
                 cx.notify();
             })
-        })
-        .detach_and_log_err(cx);
+            .log_err();
+        });
+        self.second_opinion = Some(SecondOpinionState::Asking(task));
+        cx.notify();
     }
 
     /// A quiet "second opinion" under a finished reply, and the other
@@ -6296,7 +6298,7 @@ impl ThreadView {
             None => None,
             Some(state) => {
                 let (heading, body, color) = match state {
-                    SecondOpinionState::Asking => (
+                    SecondOpinionState::Asking(_) => (
                         "second opinion".to_string(),
                         "asking a model from another family…".to_string(),
                         Color::Muted,
@@ -14238,7 +14240,7 @@ struct VoiceState {
 }
 
 pub(crate) enum SecondOpinionState {
-    Asking,
+    Asking(Task<()>),
     Answered { reviewer: String, text: String },
     Failed(String),
 }
@@ -14433,7 +14435,6 @@ fn looks_like_a_test(command: &str) -> bool {
         "swift test",
         "zig build test",
         "deno test",
-        "elixir",
     ]
     .iter()
     .any(|marker| lower.contains(marker))

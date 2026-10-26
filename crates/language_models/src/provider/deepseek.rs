@@ -224,7 +224,10 @@ impl DeepSeekLanguageModel {
         &self,
         request: deepseek::Request,
         cx: &AsyncApp,
-    ) -> BoxFuture<'static, Result<BoxStream<'static, Result<deepseek::StreamResponse>>>> {
+    ) -> BoxFuture<
+        'static,
+        Result<BoxStream<'static, Result<deepseek::StreamResponse>>, LanguageModelCompletionError>,
+    > {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, cx| {
@@ -248,8 +251,9 @@ impl DeepSeekLanguageModel {
                 request,
                 &extra_headers,
             );
-            let response = request.await?;
-            Ok(response)
+            request.await.map_err(|error| {
+                LanguageModelCompletionError::from_request_error(PROVIDER_NAME, error)
+            })
         });
 
         async move { Ok(future.await?.boxed()) }.boxed()

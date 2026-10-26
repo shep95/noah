@@ -1012,7 +1012,9 @@ impl LanguageModel for PresetLanguageModel {
     /// used for agent work, so tools are offered and a model that rejects them
     /// reports its own error.
     fn supports_tools(&self) -> bool {
-        true
+        // Perplexity's Sonar API answers with search results and rejects
+        // function definitions.
+        self.preset.id != "perplexity"
     }
 
     fn supports_images(&self) -> bool {

@@ -723,7 +723,7 @@ mod tests {
     fn parses_text_models_and_skips_the_rest() {
         let models = parse_models(MODELS).expect("parses");
         let ids: Vec<_> = models.iter().map(|model| model.id.as_str()).collect();
-        assert_eq!(ids, ["llama-3.2-3b", "qwen3-235b"]);
+        assert_eq!(ids, ["llama-3.2-3b", "qwen3-235b", "retired-model"]);
         assert_eq!(models[1].display_name, "Qwen3 235B");
         assert_eq!(models[1].context_tokens, 131_072);
         assert_eq!(models[1].max_output_tokens, Some(32_768));

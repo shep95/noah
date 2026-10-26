@@ -506,3 +506,20 @@ impl HttpClient for FakeHttpClient {
         self
     }
 }
+
+/// A provider answered with an error status. Kept typed so callers can tell
+/// a bad key, a rate limit and an exhausted quota apart.
+#[derive(Debug)]
+pub struct HttpStatusError {
+    pub provider: &'static str,
+    pub status: StatusCode,
+    pub body: String,
+}
+
+impl std::fmt::Display for HttpStatusError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{} returned {}: {}", self.provider, self.status, self.body)
+    }
+}
+
+impl std::error::Error for HttpStatusError {}

@@ -970,7 +970,13 @@ impl MissionControlPanel {
                                         .style(ButtonStyle::Subtle)
                                         .label_size(LabelSize::XSmall)
                                         .on_click(cx.listener(move |this, _, window, cx| {
-                                            if let Some(root) = this.project_root(cx) {
+                                            // The id can come from a commit message, so it
+                                            // must be a plain file name.
+                                            let plain = !evidence.contains("..")
+                                                && evidence.chars().all(|c| {
+                                                    c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')
+                                                });
+                                            if plain && let Some(root) = this.project_root(cx) {
                                                 let path = project_files::path(
                                                     &root,
                                                     project_files::EVIDENCE,

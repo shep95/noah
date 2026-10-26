@@ -198,4 +198,12 @@
     (document.documentElement || document).append(toastHost);
     setTimeout(() => { if (toastHost) { toastHost.remove(); toastHost = null; } }, 6000);
   }
+
+  // guard.js runs in the page world and reports what it caught with plain
+  // document events; the background only takes these from this side.
+  document.addEventListener("__noahReport", (event) => {
+    const detail = event.detail || {};
+    if (!detail.type) return;
+    api.runtime.sendMessage({ type: "safety.event", kind: String(detail.type), amount: 1 }, () => void api.runtime.lastError);
+  });
 })();

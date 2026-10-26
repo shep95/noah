@@ -318,7 +318,8 @@ a { transition: color var(--quick); }
   padding: 6px 10px; border-radius: 8px;
   background: rgba(95,138,88,.08);
   border: 1px solid rgba(114,168,104,.15);
-  animation: pulse-border 2.4s ease-in-out infinite;
+  animation: pulse-border 2.4s ease-in-out;
+  animation-iteration-count: 3;
   word-break: break-word;
 }
 @keyframes pulse-border {

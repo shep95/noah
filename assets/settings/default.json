@@ -1415,7 +1415,6 @@
           "grep": true,
           "brain": true,
           "cost_of": true,
-          "explain_diff": true,
           "footprint": true,
           "skill": true,
           "project_memory": true,

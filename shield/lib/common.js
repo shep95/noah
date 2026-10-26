@@ -28,6 +28,8 @@ Shield.DEFAULT_SETTINGS = {
     torCountry: "",
   },
   privacy: {
+    cookieDeception: true,
+    darkPatterns: true,
     trackers: true,
     thirdPartyCookies: false,
     gpc: true,
@@ -147,8 +149,9 @@ Shield.DEFAULT_SETTINGS = {
     enabled: true,
   },
   persona: {
-    enabled: true,
-    autoSeed: true,
+    enabled: false,
+    autoSeed: false,
+    consentGiven: false,
   },
   inspect: {
     everSeen: false,

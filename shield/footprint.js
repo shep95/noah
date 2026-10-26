@@ -324,7 +324,7 @@ async function search() {
   const failures = [];
   const status = () => {
     byId("f-status").textContent = `${done} of ${plan.length} searches · ${results.length} pages on ${hosts.size} sites` + (failures.length ? ` · ${failures.length} engines did not answer` : "");
-    byId("f-progress").firstElementChild.style.width = Math.round((done / plan.length) * 100) + "%";
+    byId("f-progress").firstElementChild.style.transform = "scaleX(" + (plan.length ? done / plan.length : 0) + ")";
   };
   status();
   // Four at a time keeps the engines from seeing a flood from one address.
@@ -478,6 +478,11 @@ function step() {
 
 function settle(rounds) {
   cancelAnimationFrame(animation);
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    for (let round = 0; round < rounds; round++) step();
+    draw();
+    return;
+  }
   let left = rounds;
   const tick = () => {
     step();

@@ -228,8 +228,10 @@ impl OpenAiCompatibleLanguageModel {
         &self,
         request: ResponseRequest,
         cx: &AsyncApp,
-    ) -> BoxFuture<'static, Result<futures::stream::BoxStream<'static, Result<ResponsesStreamEvent>>>>
-    {
+    ) -> BoxFuture<
+        'static,
+        Result<futures::stream::BoxStream<'static, Result<ResponsesStreamEvent>>, LanguageModelCompletionError>,
+    > {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, _cx| {
@@ -373,7 +375,7 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
     }
 
     fn supports_streaming_tools(&self) -> bool {
-        true
+        self.model.capabilities.tools
     }
 
     fn supports_thinking(&self) -> bool {
@@ -397,7 +399,8 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
     }
 
     fn max_output_tokens(&self) -> Option<u64> {
-        self.model.max_output_tokens
+        // Settings accept either name for the output cap.
+        self.model.max_output_tokens.or(self.model.max_completion_tokens)
     }
 
     fn stream_completion(

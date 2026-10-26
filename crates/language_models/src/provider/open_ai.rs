@@ -380,8 +380,10 @@ impl OpenAiLanguageModel {
         &self,
         request: open_ai::Request,
         cx: &AsyncApp,
-    ) -> BoxFuture<'static, Result<futures::stream::BoxStream<'static, Result<ResponseStreamEvent>>>>
-    {
+    ) -> BoxFuture<
+        'static,
+        Result<futures::stream::BoxStream<'static, Result<ResponseStreamEvent>>, LanguageModelCompletionError>,
+    > {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, cx| {
@@ -416,8 +418,10 @@ impl OpenAiLanguageModel {
         &self,
         request: ResponseRequest,
         cx: &AsyncApp,
-    ) -> BoxFuture<'static, Result<futures::stream::BoxStream<'static, Result<ResponsesStreamEvent>>>>
-    {
+    ) -> BoxFuture<
+        'static,
+        Result<futures::stream::BoxStream<'static, Result<ResponsesStreamEvent>>, LanguageModelCompletionError>,
+    > {
         let http_client = self.http_client.clone();
 
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, cx| {
@@ -725,7 +729,8 @@ impl LanguageModel for OpenAiLanguageModel {
                 self.model.supports_prompt_cache_key(),
                 self.max_output_tokens(),
                 ChatCompletionMaxTokensParameter::MaxCompletionTokens,
-                None,
+                // A custom model's configured effort applies on Chat Completions too.
+                self.model.reasoning_effort(),
                 false,
             ) {
                 Ok(request) => request,

@@ -29,6 +29,17 @@ use language_model::ApiKeyState;
 const PROVIDER_ID: LanguageModelProviderId = GOOGLE_PROVIDER_ID;
 const PROVIDER_NAME: LanguageModelProviderName = GOOGLE_PROVIDER_NAME;
 
+#[derive(Debug)]
+struct MissingKey;
+
+impl std::fmt::Display for MissingKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Missing Google API key")
+    }
+}
+
+impl std::error::Error for MissingKey {}
+
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct GoogleSettings {
     pub api_url: String,
@@ -264,7 +275,7 @@ impl GoogleLanguageModel {
         });
 
         async move {
-            let api_key = api_key.context("Missing Google API key")?;
+            let api_key = api_key.ok_or(MissingKey)?;
             let request = google_ai::stream_generate_content(
                 http_client.as_ref(),
                 &api_url,
@@ -369,7 +380,22 @@ impl LanguageModel for GoogleLanguageModel {
         };
         let request = self.stream_completion(request, cx);
         let future = self.request_limiter.stream(async move {
-            let response = request.await.map_err(LanguageModelCompletionError::from)?;
+            let response = request.await.map_err(|error| {
+                if let Some(api_error) = error.downcast_ref::<google_ai::ApiError>() {
+                    LanguageModelCompletionError::from_http_status(
+                        PROVIDER_NAME,
+                        api_error.status,
+                        api_error.body.clone(),
+                        None,
+                    )
+                } else if error.is::<MissingKey>() {
+                    LanguageModelCompletionError::NoApiKey {
+                        provider: PROVIDER_NAME,
+                    }
+                } else {
+                    LanguageModelCompletionError::from(error)
+                }
+            })?;
             Ok(GoogleEventMapper::new().map_stream(response))
         });
         async move { Ok(future.await?.boxed()) }.boxed()

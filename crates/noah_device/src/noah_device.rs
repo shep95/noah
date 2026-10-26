@@ -195,7 +195,18 @@ fn base64_encode(bytes: &[u8]) -> String {
 /// Quotes a string as a PowerShell single-quoted literal.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn powershell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
+    // PowerShell also ends a single-quoted string at the typographic quotes
+    // U+2018..U+201B, which Windows file names may contain.
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for character in value.chars() {
+        if matches!(character, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            quoted.push(character);
+        }
+        quoted.push(character);
+    }
+    quoted.push('\'');
+    quoted
 }
 
 /// Formats a byte count for people, e.g. `1.5 GB`.

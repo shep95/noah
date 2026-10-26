@@ -10,6 +10,15 @@ if (typeof importScripts === "function") {
 const api = Shield.api;
 const ALARMS = { feeds: 6 * 60, cookies: 12 * 60, tunnel: 10 };
 
+// wake, install and startup can all fire together when the worker spins up;
+// running them one after another keeps their rule updates from interleaving.
+let applyChain = Promise.resolve();
+function queueApplyAll(reason) {
+  const next = applyChain.then(() => applyAll(reason));
+  applyChain = next.catch(() => {});
+  return next;
+}
+
 async function applyAll(reason) {
   const settings = await Shield.loadSettings();
   await Shield.applyPrivacy(settings);
@@ -60,7 +69,7 @@ if (api.notifications && api.notifications.onClicked) {
 }
 
 api.runtime.onInstalled.addListener((details) => {
-  applyAll("install").catch((error) => console.error("shield: install", error));
+  queueApplyAll("install").catch((error) => console.error("shield: install", error));
   if (details.reason === "install") {
     api.tabs.create({ url: Shield.SITE + "/shield?installed" }).catch?.(() => {});
   }
@@ -71,7 +80,7 @@ api.runtime.onStartup.addListener(() => {
     if (settings.tunnel.connectAtStartup && settings.tunnel.serverId && !settings.tunnel.enabled) {
       await Shield.updateSettings({ tunnel: { enabled: true } });
     }
-    await applyAll("startup");
+    await queueApplyAll("startup");
   })().catch((error) => console.error("shield: startup", error));
 });
 
@@ -266,7 +275,6 @@ async function hideAds(details) {
 api.tabs.onRemoved.addListener((tabId) => {
   Shield.resetTabCount(tabId).catch(() => {});
   Shield.forgetBlocked(tabId).catch(() => {});
-  _dlAssets.delete(tabId);
   api.storage.session.get("mediaTabs").then((session) => {
     const mediaTabs = session.mediaTabs || {};
     if (mediaTabs[tabId]) { delete mediaTabs[tabId]; return api.storage.session.set({ mediaTabs }); }
@@ -836,6 +844,45 @@ const handlers = {
   async "site.score"(message) {
     return Shield.privacyScore(Number(message.tabId), String(message.url || ""));
   },
+  // The popup's "tell noah about this site": the record goes to noah's
+  // native host, which keeps it for shepherd. Never from a page, never on
+  // its own.
+  async "site.report"(message) {
+    const report = message.report;
+    if (!report || typeof report !== "object" || !report.site) return { error: "nothing to report" };
+    const text = JSON.stringify(report);
+    if (text.length > 64 * 1024) return { error: "the report is too large" };
+    return Shield.host({ type: "page.report", report });
+  },
+  // The one-way clipboard's two halves. Lengths go to the page's content
+  // script so it knows when to hold a paste back; the salted hashes stay
+  // here, and so does the matching.
+  async "paste.secretLengths"() {
+    const fingerprints = await secretFingerprints();
+    return { lengths: [...new Set(fingerprints.secrets.map((secret) => secret.length))] };
+  },
+  async "paste.secrets"(message) {
+    const text = String(message.text || "");
+    if (!text || text.length > 20000) return { text, names: [] };
+    const fingerprints = await secretFingerprints();
+    if (!fingerprints.secrets.length) return { text, names: [] };
+    const lengths = new Set(fingerprints.secrets.map((secret) => secret.length));
+    const pieces = text.split(/[\s"'`=:,;()<>\[\]{}]+/).filter(Boolean);
+    // A secret at the end of a sentence carries the full stop with it.
+    const candidates = pieces.flatMap((word) => [word, word.replace(/[.!?]+$/, "")]);
+    const words = [...new Set(candidates.filter((word) => lengths.has([...word].length)))].slice(0, 400);
+    let replaced = text;
+    const names = [];
+    for (const word of words) {
+      const digest = await sha256Hex(fingerprints.salt + word);
+      const match = fingerprints.secrets.find((secret) => secret.sha256 === digest);
+      if (!match) continue;
+      replaced = replaced.split(word).join("$" + match.name);
+      if (!names.includes(match.name)) names.push(match.name);
+    }
+    if (names.length) await Shield.count("pastes", 1);
+    return { text: replaced, names };
+  },
   // Is this site worth trusting: has it leaked its users' data before, is it
   // a lookalike, is it plain http. For the popup only.
   async "site.trust"(message) {
@@ -880,6 +927,29 @@ const handlers = {
       return { error: String(error.message || error), identity };
     }
     return { identity };
+  },
+  // The form filler: the person's own details, kept in this browser only,
+  // into the form on the open tab. Nothing is submitted; the popup lists
+  // what went where so the person checks it first.
+  async "details.fill"(message) {
+    const stored = await api.storage.local.get("myDetails");
+    const details = stored.myDetails || {};
+    if (!Object.values(details).some((value) => typeof value === "string" && value.trim())) {
+      return { error: "add your details under settings first; they stay in this browser" };
+    }
+    const identity = {
+      firstName: String(details.firstName || ""), lastName: String(details.lastName || ""),
+      fullName: String(details.fullName || [details.firstName, details.lastName].filter(Boolean).join(" ")),
+      email: String(details.email || ""), username: String(details.username || ""), password: "",
+      phone: String(details.phone || ""), street: String(details.street || ""), city: String(details.city || ""),
+      postal: String(details.postal || ""), birthday: String(details.birthday || ""),
+    };
+    try {
+      const [result] = await api.scripting.executeScript({ target: { tabId: Number(message.tabId) }, func: fillDecoy, args: [identity] });
+      return { filled: (result && Array.isArray(result.result)) ? result.result : [] };
+    } catch (error) {
+      return { error: String(error.message || error) };
+    }
   },
   async "fingerprint.rotate"() {
     await Shield.rotateFingerprint();
@@ -1272,6 +1342,16 @@ const handlers = {
     } catch {}
     return { spaces: settings.spaces };
   },
+  async "cookie.config"() {
+    const settings = await Shield.loadSettings();
+    const enabled = settings.privacy?.cookieDeception ?? true;
+    return { enabled, config: { cookieDeception: enabled } };
+  },
+  async "dark.config"() {
+    const settings = await Shield.loadSettings();
+    const enabled = settings.privacy?.darkPatterns ?? true;
+    return { enabled, config: { darkPatterns: enabled } };
+  },
   async "persona.config"() {
     const settings = await Shield.loadSettings();
     const prompt = await Shield.loadShepherdPrompt();
@@ -1288,10 +1368,6 @@ const handlers = {
       }
     } catch {}
     return { persona: settings.persona };
-  },
-  async "persona.consentCheck"() {
-    const stored = await api.storage.local.get("personaConsentGiven");
-    return { granted: Boolean(stored.personaConsentGiven) };
   },
   async "persona.reseed"() {
     try {
@@ -1328,7 +1404,7 @@ const handlers = {
     if (!valid.includes(platform)) return { ok: false };
     const settings = await Shield.loadSettings();
     const current = (settings.social && settings.social[platform]) || {};
-    const updated = { ...current, ...(message.change || {}) };
+    const updated = { ...current, ...(message.change || message.config || {}) };
     const socialSettings = { ...((settings.social) || {}), [platform]: updated };
     await Shield.updateSettings({ social: socialSettings });
     // Broadcast to relevant tabs
@@ -1338,6 +1414,7 @@ const handlers = {
       reddit: ["https://www.reddit.com/*", "https://old.reddit.com/*", "https://reddit.com/*"],
       youtube: ["https://www.youtube.com/*", "https://youtube.com/*", "https://m.youtube.com/*"],
       linkedin: ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      twitter: ["https://x.com/*", "https://twitter.com/*", "https://www.twitter.com/*"],
     };
     try {
       const tabs = await api.tabs.query({ url: urlMap[platform] });
@@ -1388,8 +1465,8 @@ const handlers = {
   async "downloader.assets"(message) {
     const tabId = Number(message && message.tabId);
     if (!Number.isFinite(tabId)) return { assets: [] };
-    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
-    const tabData = store[tabId] || {};
+    const key = dlAssetsKey(tabId);
+    const tabData = (await chrome.storage.session.get(key))[key] || {};
     return { assets: Object.values(tabData) };
   },
 
@@ -1397,13 +1474,35 @@ const handlers = {
   async "downloader.found"(message, sender) {
     const tabId = sender && sender.tab && sender.tab.id;
     if (!tabId) return { ok: false };
-    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
-    if (!store[tabId]) store[tabId] = {};
-    for (const item of (message.items || [])) store[tabId][item.url] = item;
-    await chrome.storage.session.set({ dlAssets: store });
+    const items = (Array.isArray(message.items) ? message.items : [])
+      .filter((item) => item && typeof item.url === "string" && /^https?:\/\//i.test(item.url))
+      .slice(0, 50);
+    await updateDlAssets(tabId, (tabData) => {
+      for (const item of items) tabData[item.url] = item;
+    });
     return { ok: true };
   },
 };
+
+function dlAssetsKey(tabId) {
+  return "dlAssets:" + tabId;
+}
+// Read-modify-write on storage.session is not atomic; chaining every write
+// keeps concurrent reports for the same tab from overwriting each other.
+let dlAssetsChain = Promise.resolve();
+function queueDlAssets(work) {
+  const next = dlAssetsChain.then(work);
+  dlAssetsChain = next.catch((error) => console.warn("shield: downloader assets", error));
+  return next;
+}
+function updateDlAssets(tabId, mutate) {
+  return queueDlAssets(async () => {
+    const key = dlAssetsKey(tabId);
+    const tabData = (await chrome.storage.session.get(key))[key] || {};
+    mutate(tabData);
+    await chrome.storage.session.set({ [key]: tabData });
+  });
+}
 
 // ── Downloader: per-tab media asset store (storage.session — survives SW restart) ──
 if (api.webRequest && api.webRequest.onCompleted) {
@@ -1421,10 +1520,9 @@ if (api.webRequest && api.webRequest.onCompleted) {
       else if (/\.(pdf|docx?|xlsx?|pptx?|zip)(\?|$)/i.test(url)) type = 'document';
       if (!type) return;
       const filename = (() => { try { const p = new URL(url).pathname; return decodeURIComponent(p.split('/').filter(Boolean).pop() || 'download').slice(0, 120); } catch { return 'download'; } })();
-      const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
-      if (!store[details.tabId]) store[details.tabId] = {};
-      store[details.tabId][url] = { url, type, mimeType, filename };
-      await chrome.storage.session.set({ dlAssets: store });
+      await updateDlAssets(details.tabId, (tabData) => {
+        tabData[url] = { url, type, mimeType, filename };
+      });
     },
     { urls: ['<all_urls>'] },
     ['responseHeaders']
@@ -1434,11 +1532,7 @@ if (api.webRequest && api.webRequest.onCompleted) {
 // Clean up stored assets when a tab closes
 if (api.tabs && api.tabs.onRemoved) {
   api.tabs.onRemoved.addListener(async (tabId) => {
-    const store = (await chrome.storage.session.get('dlAssets')).dlAssets || {};
-    if (store[tabId]) {
-      delete store[tabId];
-      await chrome.storage.session.set({ dlAssets: store });
-    }
+    await queueDlAssets(() => chrome.storage.session.remove(dlAssetsKey(tabId)));
   });
 }
 
@@ -1503,26 +1597,47 @@ async function elementTag(settings) {
   return tag;
 }
 
-// Runs inside the page: fills the visible sign-up fields with the decoy.
+// noah's salted fingerprints of the person's stored secrets, asked of the
+// native host at most every ten minutes. Without noah there are none.
+let fingerprintCache = { at: 0, value: { salt: "", secrets: [] } };
+async function secretFingerprints() {
+  if (Date.now() - fingerprintCache.at < 10 * 60 * 1000) return fingerprintCache.value;
+  const answer = await Shield.host({ type: "secrets.fingerprints" });
+  const value = answer && !answer.error && typeof answer.salt === "string" && Array.isArray(answer.secrets)
+    ? { salt: answer.salt, secrets: answer.secrets.filter((secret) => secret && typeof secret.sha256 === "string" && Number.isInteger(secret.length) && typeof secret.name === "string" && /^[A-Za-z0-9_]{1,64}$/.test(secret.name)) }
+    : { salt: "", secrets: [] };
+  fingerprintCache = { at: Date.now(), value };
+  return value;
+}
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// Runs inside the page: fills the visible form fields from `identity` (the
+// decoy, or the person's own details) and returns what went where, so the
+// popup can show a receipt before anything is sent. It never submits.
 function fillDecoy(identity) {
   const map = [
     [/first.?name|given/i, identity.firstName], [/last.?name|family|surname/i, identity.lastName], [/full.?name|^name$|your name/i, identity.fullName],
     [/e-?mail/i, identity.email], [/user.?name|login|handle/i, identity.username], [/pass/i, identity.password], [/phone|tel|mobile/i, identity.phone],
     [/street|address(?!.*email)/i, identity.street], [/city|town/i, identity.city], [/zip|postal/i, identity.postal], [/birth|dob/i, identity.birthday],
   ];
+  const kinds = ["first name", "last name", "full name", "email", "username", "password", "phone", "street", "city", "postal code", "birthday"];
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  let filled = 0;
+  const filled = [];
   for (const input of document.querySelectorAll("input")) {
     if (!/^(text|email|tel|password|search|url|date|)$/.test(input.type || "") || input.disabled || input.readOnly) continue;
     const box = input.getBoundingClientRect();
     if (box.width < 10 || box.height < 10) continue;
     const words = [input.name, input.id, input.placeholder, input.getAttribute("aria-label"), input.getAttribute("autocomplete"), input.labels && input.labels[0] && input.labels[0].textContent].filter(Boolean).join(" ");
-    const match = map.find(([pattern]) => pattern.test(words));
-    if (!match) continue;
-    setter.call(input, input.type === "date" ? identity.birthday : match[1]);
+    const index = map.findIndex(([pattern]) => pattern.test(words));
+    if (index < 0 || !map[index][1]) continue;
+    setter.call(input, input.type === "date" ? identity.birthday : map[index][1]);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    filled++;
+    const label = (input.labels && input.labels[0] && input.labels[0].textContent) || input.placeholder || input.getAttribute("aria-label") || input.name || input.id || "a field";
+    filled.push({ field: String(label).trim().slice(0, 60), what: kinds[index] });
   }
   return filled;
 }
@@ -1589,7 +1704,10 @@ if (api.commands && api.commands.onCommand) {
 }
 
 if (api.contextMenus) {
-  api.runtime.onInstalled.addListener(() => {
+  api.runtime.onInstalled.addListener(async () => {
+    // onInstalled also fires on updates, when the old menu items still exist
+    // and creating them again would fail with duplicate ids.
+    await api.contextMenus.removeAll();
     api.contextMenus.create({ id: "copy-clean-link", title: "Copy clean link (noah shield)", contexts: ["link"] });
     api.contextMenus.create({ id: "fill-decoy", title: "Fill this form with decoy details (noah shield)", contexts: ["editable"] });
     api.contextMenus.create({ id: "throwaway", title: "Open in a throwaway window (noah shield)", contexts: ["link"] });
@@ -1725,7 +1843,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Content scripts of a page speak only for that page; the popup and options
   // pages carry the extension's own origin.
   const fromPage = !(sender.url && sender.url.startsWith(api.runtime.getURL("")));
-  const pageAllowed = new Set(["guard.config", "site.score", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config", "persona.config", "downloader.found", "social.config", "social.set"]);
+  const pageAllowed = new Set(["paste.secretLengths", "paste.secrets", "guard.config", "media.state", "lock.check", "shop.price", "shop.watch", "shop.unwatch", "shop.storeCheck", "shop.reddit", "shop.remind", "shop.receipt", "capture.ask", "capture.decide", "capture.shot", "capture.save", "light.state", "search.state", "search.hidden", "search.peek", "log.open", "safety.event", "lookalike.check", "lookalike.allow", "password.salt", "password.seen", "password.breach", "scam.close", "shop.compare", "shop.codes", "shop.seen", "shop.worked", "shop.saved", "shop.compared", "shop.quiet", "inspect.enabled", "inspect.arm.self", "spaces.config", "profile.config", "persona.config", "downloader.found", "social.config", "cookie.config", "dark.config"]);
   if (fromPage && !pageAllowed.has(message.type)) {
     sendResponse({ error: "not from here" });
     return false;
@@ -1743,4 +1861,4 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-applyAll("wake").catch((error) => console.error("shield: wake", error));
+queueApplyAll("wake").catch((error) => console.error("shield: wake", error));

@@ -118,6 +118,7 @@
     const s = document.createElement("style");
     s.textContent = `
       @keyframes noah-tt-arrive { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+      @media (prefers-reduced-motion: reduce) { [style*="noah-tt-arrive"] { animation: none !important; } }
       [data-noah-tt-badge] {
         position:absolute; top:8px; left:8px; z-index:9999;
         display:inline-flex; align-items:center; gap:4px;

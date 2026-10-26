@@ -307,11 +307,12 @@ pub async fn stream_chat_completion(
     } else {
         let mut body = String::new();
         response.body_mut().read_to_string(&mut body).await?;
-        anyhow::bail!(
-            "Failed to connect to LM Studio API: {} {}",
-            response.status(),
+        Err(http_client::HttpStatusError {
+            provider: "LM Studio",
+            status: response.status(),
             body,
-        );
+        }
+        .into())
     }
 }
 

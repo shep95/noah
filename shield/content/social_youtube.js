@@ -57,6 +57,7 @@
     _styleEl.id = "noah-yt-styles";
     _styleEl.textContent = `
       @keyframes noah-yt-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+      @media (prefers-reduced-motion: reduce) { .noah-yt-badge { animation: none !important; } }
       .noah-yt-badge {
         display:inline-flex !important; align-items:center; gap:4px;
         font:11px/1.4 -apple-system,system-ui,sans-serif !important;

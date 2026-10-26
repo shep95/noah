@@ -51,6 +51,7 @@
     const s = document.createElement("style");
     s.textContent = `
       @keyframes noah-reddit-in { from { opacity:0; } to { opacity:1; } }
+      @media (prefers-reduced-motion: reduce) { [data-noah-reddit-badge] { animation: none !important; } }
       [data-noah-reddit-badge] {
         display:inline-flex !important; align-items:center; gap:4px;
         font:11px/1.4 -apple-system,system-ui,sans-serif !important;

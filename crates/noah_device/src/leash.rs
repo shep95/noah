@@ -28,7 +28,11 @@ pub(crate) fn rule_name(exe: &Path) -> String {
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| exe.display().to_string());
-    format!("noah leash: {name}")
+    // The full path's hash keeps two programs with the same file name apart.
+    use std::hash::{Hash as _, Hasher as _};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    exe.to_string_lossy().to_lowercase().hash(&mut hasher);
+    format!("noah leash: {name} ({:08x})", hasher.finish() as u32)
 }
 
 /// Blocks every outbound connection `exe` makes, after an administrator
@@ -119,10 +123,9 @@ mod tests {
 
     #[test]
     fn rule_names_and_listing() {
-        assert_eq!(
-            rule_name(Path::new("/opt/app/tracker.exe")),
-            "noah leash: tracker.exe"
-        );
+        let name = rule_name(Path::new("/opt/app/tracker.exe"));
+        assert!(name.starts_with("noah leash: tracker.exe ("), "{name}");
+        assert_ne!(name, rule_name(Path::new("/srv/other/tracker.exe")));
         let programs = parse_programs("C:\\\\a\\\\b.exe\r\nAny\r\n\r\nC:\\\\a\\\\b.exe\r\nC:\\\\c.exe\r\n");
         assert_eq!(programs.len(), 2);
     }

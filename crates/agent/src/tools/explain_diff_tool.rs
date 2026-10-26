@@ -111,7 +111,7 @@ pub(crate) fn note_text(hunks: &[Hunk], explanations: &[String]) -> String {
 
 async fn diff_for(root: &Path, cx: &mut gpui::AsyncApp) -> Result<(String, &'static str), String> {
     let (code, staged, _) =
-        super::evidence_tool::run_shell("git --no-pager diff --cached --no-color", root, cx).await;
+        super::evidence_tool::run_shell("git -c core.fsmonitor= -c core.hooksPath=/dev/null --no-pager diff --cached --no-color --no-ext-diff --no-textconv", root, cx).await;
     if code != Some(0) {
         return Err(format!("git couldn't read the change: {}", staged.trim()));
     }
@@ -119,7 +119,7 @@ async fn diff_for(root: &Path, cx: &mut gpui::AsyncApp) -> Result<(String, &'sta
         return Ok((staged, "the staged change"));
     }
     let (code, last, _) =
-        super::evidence_tool::run_shell("git --no-pager show --no-color --format= HEAD", root, cx)
+        super::evidence_tool::run_shell("git -c core.fsmonitor= -c core.hooksPath=/dev/null --no-pager show --no-color --no-ext-diff --no-textconv --format= HEAD", root, cx)
             .await;
     if code != Some(0) {
         return Err(format!("git couldn't read the last commit: {}", last.trim()));
@@ -134,7 +134,7 @@ impl AgentTool for ExplainDiffTool {
     const NAME: &'static str = "explain_diff";
 
     fn kind() -> acp::ToolKind {
-        acp::ToolKind::Read
+        acp::ToolKind::Execute
     }
 
     fn allow_in_restricted_mode() -> bool {
@@ -195,20 +195,24 @@ impl AgentTool for ExplainDiffTool {
                     Ok(out)
                 }
                 ExplainDiffAction::Attach => {
-                    if input.explanations.len() != hunks.len() {
+                    // A long change is cut in `read`, so fewer explanations than hunks is
+                    // expected; the hunks past them are marked as not read.
+                    if input.explanations.is_empty() || input.explanations.len() > hunks.len() {
                         return Err(format!(
-                            "{what} has {} hunks and {} explanations were given; give one per hunk, in `read` order",
+                            "{what} has {} hunks and {} explanations were given; give one per hunk you read, in `read` order",
                             hunks.len(),
                             input.explanations.len()
                         ));
                     }
+                    let mut explanations = input.explanations.clone();
+                    explanations.resize(hunks.len(), "not read: the change was too long to read whole".to_string());
                     if what == "the staged change" {
                         return Err(
                             "the change is staged but not committed; commit it first, then attach"
                                 .to_string(),
                         );
                     }
-                    let note = note_text(&hunks, &input.explanations);
+                    let note = note_text(&hunks, &explanations);
                     let authorize = cx.update(|cx| {
                         let context = crate::ToolPermissionContext::new(
                             "terminal",
@@ -217,17 +221,18 @@ impl AgentTool for ExplainDiffTool {
                         event_stream.authorize("attach the explanation to the last commit", context, cx)
                     });
                     authorize.await.map_err(|error| error.to_string())?;
-                    let note_file = root.join(".git").join("NOAH_EXPLAIN_NOTE");
-                    std::fs::write(&note_file, &note)
+                    // `.git` is a file in worktrees and submodules, so the note goes
+                    // through a temporary file outside the repository.
+                    let note_file = tempfile::NamedTempFile::new()
                         .map_err(|error| format!("couldn't write the note: {error}"))?;
+                    std::fs::write(note_file.path(), &note)
+                        .map_err(|error| format!("couldn't write the note: {error}"))?;
+                    let note_path = note_file.path().to_string_lossy().replace('\'', "'\\''");
                     let command = format!(
-                        "git notes --ref={NOTES_REF} add -f -F .git/NOAH_EXPLAIN_NOTE HEAD"
+                        "git -c core.hooksPath=/dev/null notes --ref={NOTES_REF} add -f -F '{note_path}' HEAD"
                     );
                     let (code, output, _) =
                         super::evidence_tool::run_shell(&command, &root, cx).await;
-                    if let Err(error) = std::fs::remove_file(&note_file) {
-                        log::warn!("couldn't remove {}: {error}", note_file.display());
-                    }
                     if code != Some(0) {
                         return Err(format!("git couldn't attach the note: {}", output.trim()));
                     }

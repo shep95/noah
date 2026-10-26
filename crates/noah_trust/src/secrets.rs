@@ -592,8 +592,14 @@ pub fn write_fingerprints(path: &std::path::Path, secrets: &[(String, String)]) 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let partial = path.with_extension("partial");
+    // A name unique to this write, so two writes racing can't interleave.
+    let partial = path.with_extension(format!("partial{}", rand::random::<u64>()));
     std::fs::write(&partial, serde_json::to_vec_pretty(&fingerprints)?)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&partial, std::fs::Permissions::from_mode(0o600))?;
+    }
     std::fs::rename(&partial, path)?;
     Ok(())
 }

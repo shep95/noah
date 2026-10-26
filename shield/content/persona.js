@@ -1,12 +1,11 @@
-// Auto-seed every AI chat with the shepherd instructions so the whole
-// conversation runs under those rules. Works across Google Gemini and Lens,
+// With the user's opt-in, paste the shepherd instructions into the composer
+// of a fresh AI chat; the user reviews and sends it themselves. Works across Google Gemini and Lens,
 // OpenAI ChatGPT, Anthropic Claude, Microsoft Copilot, Perplexity, Poe,
 // Mistral, DeepSeek, HuggingChat, xAI Grok, Yandex Alice/GPT, Character.ai,
 // Pi.ai, You.com, Kagi Assistant, and AI Studio. The persona goes in as
 // turn one of a fresh chat; every response after that is under those rules.
 //
-// Runs in the page's own world so it can drive the site's rich-text editor
-// and click its send button. Chat UIs are picky about how text arrives —
+// Runs in the page's own world so it can drive the site's rich-text editor. Chat UIs are picky about how text arrives —
 // direct value assignment is ignored by most because their state models
 // listen for real InputEvents.
 (() => {
@@ -15,7 +14,7 @@
   const host = location.hostname.toLowerCase();
   window.__noahShieldPersona = true;
 
-  let config = { enabled: true, autoSeed: true, seededChats: {} };
+  let config = { enabled: false, autoSeed: false, consentGiven: false, seededChats: {} };
   let prompt = null;
   let pill = null;
   let seededThisChat = false;
@@ -28,7 +27,10 @@
   const nonce = crypto.randomUUID();
   const channel = (name) => name + ":" + nonce;
   const hello = () => { try { window.dispatchEvent(new CustomEvent("noah-persona-hello", { detail: nonce })); } catch {} };
-  window.addEventListener("noah-persona-bridge-ready", hello);
+  // Fired exactly once, synchronously at document_start before any page
+  // script exists; answering a later "ready" ping would hand the nonce to
+  // whichever page script sent it. The bridge is declared first in the
+  // manifest so it is already listening.
   hello();
 
   window.addEventListener(channel("noah-persona-config"), (event) => {
@@ -366,9 +368,7 @@
     if (!config.enabled || !config.autoSeed || !prompt) return;
     if (seededThisChat) return;
     if (seedingInProgress) return;
-    // USER CONSENT REQUIRED before injection — F-01 fix: gate on storage flag 'personaConsentGiven'
-    const consentStored = await send({ type: "persona.consentCheck" });
-    if (!consentStored || !consentStored.granted) return;
+    if (!config.consentGiven) return;
     seedingInProgress = true;
     try {
       if (!isNewChat()) { setPill("existing chat, will not seed"); return; }
@@ -378,18 +378,9 @@
       if (existing.length > 0) { setPill("chat in progress, not seeding"); return; }
       setPill("seeding shepherd…");
       if (!setComposerText(composer, prompt)) { setPill("could not paste into composer"); return; }
-      // Mark seeded now so a re-entrant call while the button search is
-      // pending sees the composer's transient text as "in progress" from
-      // us, not from the user.
       seededThisChat = true;
-      await sleep(300);
-      const button = await waitFor(findSendButton, 4000);
-      if (!button) {
-        setPill("shepherd pasted; press send");
-        return;
-      }
-      button.click();
-      setPill("shepherd is turn one · " + site.name + " runs under those rules");
+      // The user sends it themselves; the extension never submits a message.
+      setPill("shepherd pasted; press send");
     } finally {
       seedingInProgress = false;
     }
@@ -464,11 +455,4 @@
   if (!site) return;
   ensurePill();
   watchNavigation();
-  // Ask the bridge for the config, in case its initial dispatch happened
-  // before this script's listener was registered.
-  hello();
-  setTimeout(() => {
-    hello();
-    if (config.enabled && config.autoSeed && prompt) tryAutoSeed();
-  }, 1500);
 })();

@@ -470,10 +470,11 @@ pub async fn stream_completion(
     } else {
         let mut body = String::new();
         response.body_mut().read_to_string(&mut body).await?;
-        anyhow::bail!(
-            "Failed to connect to Mistral API: {} {}",
-            response.status(),
+        Err(http_client::HttpStatusError {
+            provider: "Mistral",
+            status: response.status(),
             body,
-        );
+        }
+        .into())
     }
 }

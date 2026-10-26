@@ -234,7 +234,8 @@ impl AgentTool for FootprintTool {
                 .map(|country| country.trim().to_ascii_lowercase())
                 .filter(|country| country.len() == 2 && country.chars().all(|c| c.is_ascii_alphabetic()))
                 .collect();
-            countries.dedup();
+            let mut seen = HashSet::new();
+            countries.retain(|country| seen.insert(country.clone()));
             countries.truncate(MAX_COUNTRIES);
             if countries.is_empty() {
                 countries.push("us".to_string());

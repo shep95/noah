@@ -473,7 +473,7 @@ impl LmStudioLanguageModel {
         cx: &AsyncApp,
     ) -> BoxFuture<
         'static,
-        Result<futures::stream::BoxStream<'static, Result<lmstudio::ResponseStreamEvent>>>,
+        Result<futures::stream::BoxStream<'static, Result<lmstudio::ResponseStreamEvent>>, LanguageModelCompletionError>,
     > {
         let http_client = self.http_client.clone();
         let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, cx| {
@@ -493,7 +493,10 @@ impl LmStudioLanguageModel {
                 request,
                 &extra_headers,
             )
-            .await?;
+            .await
+            .map_err(|error| {
+                LanguageModelCompletionError::from_request_error(PROVIDER_NAME, error)
+            })?;
             Ok(stream)
         });
 

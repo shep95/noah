@@ -24,13 +24,14 @@ pub async fn stream_generate_content(
     // The `model` field is emptied as it is provided as a path parameter.
     let model_id = mem::take(&mut request.model.model_id);
 
-    let uri =
-        format!("{api_url}/v1beta/models/{model_id}:streamGenerateContent?alt=sse&key={api_key}",);
+    // The key goes in a header so it never lands in proxy logs or error text.
+    let uri = format!("{api_url}/v1beta/models/{model_id}:streamGenerateContent?alt=sse");
 
     let request = HttpRequest::builder()
         .method(Method::POST)
         .uri(uri)
         .header("Content-Type", "application/json")
+        .header("x-goog-api-key", api_key)
         .extra_headers(extra_headers)
         .body(AsyncBody::from(serde_json::to_string(&request)?))?;
     let mut response = client.send(request).await?;
@@ -68,13 +69,29 @@ pub async fn stream_generate_content(
     } else {
         let mut text = String::new();
         response.body_mut().read_to_string(&mut text).await?;
-        Err(anyhow!(
-            "error during streamGenerateContent, status code: {:?}, body: {}",
-            response.status(),
-            text
-        ))
+        Err(ApiError {
+            status: response.status(),
+            body: text,
+        }
+        .into())
     }
 }
+
+/// A response Google rejected, kept typed so callers can tell a bad key,
+/// a rate limit and an exhausted quota apart.
+#[derive(Debug)]
+pub struct ApiError {
+    pub status: http_client::StatusCode,
+    pub body: String,
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "google returned {}: {}", self.status, self.body)
+    }
+}
+
+impl std::error::Error for ApiError {}
 
 pub fn validate_generate_content_request(request: &GenerateContentRequest) -> Result<()> {
     if request.model.is_empty() {

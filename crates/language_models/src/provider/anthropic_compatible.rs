@@ -51,9 +51,10 @@ pub type State = ApiCompatibleProviderState<AnthropicCompatibleSettings>;
 fn available_model_to_anthropic_model(available: &AvailableModel) -> anthropic::Model {
     let mode = match available.mode.unwrap_or_default() {
         settings::ModelMode::Default => AnthropicModelMode::Default,
-        settings::ModelMode::Thinking { budget_tokens } => {
-            AnthropicModelMode::Thinking { budget_tokens }
-        }
+        // The API rejects a null budget, so an unset one gets the documented default.
+        settings::ModelMode::Thinking { budget_tokens } => AnthropicModelMode::Thinking {
+            budget_tokens: Some(budget_tokens.unwrap_or(4_096)),
+        },
         settings::ModelMode::Adaptive => AnthropicModelMode::AdaptiveThinking,
     };
     let supports_thinking = matches!(
@@ -69,7 +70,7 @@ fn available_model_to_anthropic_model(available: &AvailableModel) -> anthropic::
             .unwrap_or_else(|| available.name.clone()),
         id: available.name.clone(),
         max_input_tokens: available.max_tokens,
-        max_output_tokens: available.max_output_tokens.unwrap_or(4_096),
+        max_output_tokens: available.max_output_tokens.unwrap_or(32_000),
         default_temperature: available.default_temperature.unwrap_or(1.0),
         mode,
         supports_thinking,

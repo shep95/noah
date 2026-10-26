@@ -357,6 +357,7 @@
     style.id = STYLE_ID;
     style.textContent = `
       @keyframes noah-profile-arrive { from { opacity:0; transform:translateY(6px) scale(0.99); } to { opacity:1; transform:none; } }
+      @media (prefers-reduced-motion: reduce) { #noah-profile-panel { animation: none !important; } }
       #noah-profile-panel {
         position: fixed; right: 14px; bottom: 14px; z-index: 2147483000;
         width: 340px; max-height: 78vh; display: flex; flex-direction: column;

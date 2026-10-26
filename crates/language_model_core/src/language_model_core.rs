@@ -332,6 +332,17 @@ impl LanguageModelCompletionError {
         }
     }
 
+    /// Turns a request error into a typed one when it carries an HTTP status,
+    /// so a bad key fails at once and a rate limit honours its wait.
+    pub fn from_request_error(provider: LanguageModelProviderName, error: anyhow::Error) -> Self {
+        match error.downcast::<http_client::HttpStatusError>() {
+            Ok(status_error) => {
+                Self::from_http_status(provider, status_error.status, status_error.body, None)
+            }
+            Err(error) => Self::Other(error),
+        }
+    }
+
     pub fn from_http_status(
         provider: LanguageModelProviderName,
         status_code: StatusCode,

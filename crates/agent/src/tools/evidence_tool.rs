@@ -641,7 +641,11 @@ fn replay_directory(root: &Path, recorded: Option<&str>) -> PathBuf {
         return root.to_path_buf();
     };
     let recorded = PathBuf::from(recorded);
-    if recorded.is_dir() && recorded.starts_with(root) {
+    let inside = match (recorded.canonicalize(), root.canonicalize()) {
+        (Ok(recorded), Ok(root)) => recorded.starts_with(root),
+        _ => false,
+    };
+    if inside {
         recorded
     } else {
         root.to_path_buf()
