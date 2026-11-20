@@ -1,0 +1,60 @@
+usel: 1
+site_name: bosley (example configuration)
+base_url: https://bosley.example
+engines: [all]
+market_targets: all  # geographic coverage report is global; only written locales are published
+pages:
+  - id: open-discussion
+    public: true
+    index: true
+    lastmod: '2026-11-14'
+    locales:
+      en-US:
+        slug: discussions/welcome
+        title: 'welcome to bosley — public discussions'
+        description: 'discover public conversations and community discussions on bosley.'
+        body: 'join public conversations on bosley. read discussions and contribute your perspective.'
+      ko-KR:
+        slug: discussions/welcome
+        title: 'bosley에 오신 것을 환영합니다 — 공개 토론'
+        description: 'bosley에서 공개 대화와 커뮤니티 토론을 찾아보세요.'
+        body: 'bosley에서 공개 대화에 참여하고 다양한 의견을 나눠 보세요.'
+      ru-RU:
+        slug: обсуждения/добро-пожаловать
+        title: 'добро пожаловать в bosley — открытые обсуждения'
+        description: 'открытые беседы и обсуждения сообщества на bosley.'
+        body: 'читайте открытые обсуждения и делитесь своим мнением в bosley.'
+      zh-CN:
+        slug: 讨论/欢迎
+        title: '欢迎来到 bosley — 公开讨论'
+        description: '在 bosley 发现公开对话与社区讨论。'
+        body: '阅读公开讨论，与社区分享你的观点。'
+      cs-CZ:
+        slug: diskuze/vitejte
+        title: 'vítejte na bosley — veřejné diskuze'
+        description: 'objevujte veřejné rozhovory a komunitní diskuze na bosley.'
+        body: 'čtěte veřejné diskuze a sdílejte své názory s komunitou.'
+      vi-VN:
+        slug: thao-luan/chao-mung
+        title: 'chào mừng đến với bosley — thảo luận công khai'
+        description: 'khám phá các cuộc trò chuyện và thảo luận cộng đồng trên bosley.'
+        body: 'đọc các cuộc thảo luận công khai và chia sẻ ý kiến của bạn.'
+      ar-SA:
+        slug: نقاشات/مرحبًا
+        title: 'مرحبًا بك في bosley — نقاشات عامة'
+        description: 'اكتشف المحادثات والنقاشات العامة على bosley.'
+        body: 'اقرأ النقاشات العامة وشارك وجهة نظرك مع المجتمع.'
+      hi-IN:
+        slug: चर्चा/स्वागत
+        title: 'bosley में आपका स्वागत है — सार्वजनिक चर्चा'
+        description: 'bosley पर सार्वजनिक बातचीत और सामुदायिक चर्चा खोजें।'
+        body: 'सार्वजनिक चर्चाएँ पढ़ें और अपने विचार साझा करें।'
+  - id: internal-message
+    public: false
+    index: false
+    locales:
+      en-US:
+        slug: private/internal-message
+        title: 'private account content'
+        description: 'this private example must not be exported.'
+        body: 'sensitive demo text that must never enter the compiled site'

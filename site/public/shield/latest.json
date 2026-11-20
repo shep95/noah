@@ -1,0 +1,15 @@
+{
+  "chromium": {
+    "sha256": "2442d1cfda9605ad721deb12e5937d2556e6004b16762562cc0542ad5b3deb02",
+    "url": "https://noah.asherin.com/shield/noah-shield-chromium.zip"
+  },
+  "expires": "2026-11-06T19:14:03Z",
+  "firefox": {
+    "sha256": "73e670d1c9f2d1a584dd593769d0786b856d601b06ae59225e5e11ee65ee8120",
+    "url": "https://noah.asherin.com/shield/noah-shield-firefox.zip"
+  },
+  "generated": "2026-09-27T19:14:03Z",
+  "notes": "",
+  "page": "https://noah.asherin.com/shield",
+  "version": "2026.9.27.5"
+}

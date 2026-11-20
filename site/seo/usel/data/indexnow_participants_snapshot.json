@@ -1,0 +1,14 @@
+{
+  "checked_on": "2026-11-14",
+  "source": "https://www.indexnow.org/searchengines.json",
+  "participants": {
+    "bing": "https://www.bing.com/indexnow/meta.json",
+    "yandex": "https://www.yandex.com/indexnow/meta.json",
+    "seznam": "https://search.seznam.cz/indexnow/meta.json",
+    "naver": "https://searchadvisor.naver.com/indexnow/meta.json",
+    "yep": "https://indexnow.yep.com/indexnow/meta.json",
+    "internetarchive": "https://web-static.archive.org/indexnow/meta.json",
+    "amazonbot": "https://indexnow.amazonbot.amazon/indexnow/meta.json"
+  },
+  "note": "participant status changes over time; use refresh-indexnow for current list"
+}

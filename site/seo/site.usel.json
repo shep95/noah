@@ -1,0 +1,242 @@
+{
+  "usel": 1,
+  "site_name": "noah",
+  "base_url": "https://noah.asherin.com",
+  "default_locale": "en",
+  "market_targets": "all",
+  "engines": [
+    "all"
+  ],
+  "sitemap": false,
+  "robots": {
+    "manage": false,
+    "allow_search": true,
+    "block_ai_training": true,
+    "disallow": []
+  },
+  "pages": [
+    {
+      "id": "home",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/"
+        },
+        "es": {
+          "path": "/es"
+        },
+        "pt": {
+          "path": "/pt"
+        },
+        "fr": {
+          "path": "/fr"
+        },
+        "de": {
+          "path": "/de"
+        },
+        "it": {
+          "path": "/it"
+        },
+        "nl": {
+          "path": "/nl"
+        },
+        "pl": {
+          "path": "/pl"
+        },
+        "tr": {
+          "path": "/tr"
+        },
+        "ru": {
+          "path": "/ru"
+        },
+        "uk": {
+          "path": "/uk"
+        },
+        "ar": {
+          "path": "/ar"
+        },
+        "hi": {
+          "path": "/hi"
+        },
+        "ja": {
+          "path": "/ja"
+        },
+        "ko": {
+          "path": "/ko"
+        },
+        "zh": {
+          "path": "/zh"
+        }
+      },
+      "lastmod": "2026-10-02"
+    },
+    {
+      "id": "download",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/download"
+        },
+        "es": {
+          "path": "/es/download"
+        },
+        "pt": {
+          "path": "/pt/download"
+        },
+        "fr": {
+          "path": "/fr/download"
+        },
+        "de": {
+          "path": "/de/download"
+        },
+        "it": {
+          "path": "/it/download"
+        },
+        "nl": {
+          "path": "/nl/download"
+        },
+        "pl": {
+          "path": "/pl/download"
+        },
+        "tr": {
+          "path": "/tr/download"
+        },
+        "ru": {
+          "path": "/ru/download"
+        },
+        "uk": {
+          "path": "/uk/download"
+        },
+        "ar": {
+          "path": "/ar/download"
+        },
+        "hi": {
+          "path": "/hi/download"
+        },
+        "ja": {
+          "path": "/ja/download"
+        },
+        "ko": {
+          "path": "/ko/download"
+        },
+        "zh": {
+          "path": "/zh/download"
+        }
+      },
+      "lastmod": "2026-10-02"
+    },
+    {
+      "id": "shepherd",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/shepherd"
+        }
+      },
+      "lastmod": "2026-09-26"
+    },
+    {
+      "id": "faq",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/faq"
+        }
+      },
+      "lastmod": "2026-09-26"
+    },
+    {
+      "id": "shield",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/shield"
+        }
+      },
+      "lastmod": "2026-09-27"
+    },
+    {
+      "id": "compare",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/compare"
+        }
+      },
+      "lastmod": "2026-09-26"
+    },
+    {
+      "id": "local-models",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/local-models"
+        }
+      },
+      "lastmod": "2026-09-26"
+    },
+    {
+      "id": "founder",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/founder"
+        }
+      },
+      "lastmod": "2026-09-25"
+    },
+    {
+      "id": "security",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/security"
+        }
+      },
+      "lastmod": "2026-09-25"
+    },
+    {
+      "id": "stats",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/stats"
+        }
+      },
+      "lastmod": "2026-09-26"
+    },
+    {
+      "id": "terms",
+      "public": true,
+      "index": true,
+      "render": false,
+      "locales": {
+        "en": {
+          "path": "/terms"
+        }
+      },
+      "lastmod": "2026-09-24"
+    }
+  ],
+  "indexnow_key": "491ea047bae63b11205e95a5cb0cd2ed"
+}

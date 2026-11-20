@@ -1,0 +1,1155 @@
+{
+  "version": "0.1.0",
+  "as_of": "2026-11-14",
+  "coverage_note": "seeds for research, not a claim of total global search-engine coverage; each candidate needs independent verification",
+  "engines": [
+    {
+      "lifecycle": "unverified",
+      "id": "google",
+      "name": "Google Search",
+      "kind": "general",
+      "site": "https://www.google.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "hreflang self and reciprocal alternates, international URLs; sitemap and crawlability.",
+      "evidence": [
+        {
+          "url": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "bing",
+      "name": "Bing",
+      "kind": "general",
+      "site": "https://www.bing.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "IndexNow strongly recommended; sitemaps and webmaster tools.",
+      "evidence": [
+        {
+          "url": "https://www.bing.com/webmasters/help/?topicid=62f2860b",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yandex",
+      "name": "Yandex",
+      "kind": "general",
+      "site": "https://yandex.com",
+      "origin_country": "RU",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "XML sitemaps aid discovery; regionalized experiences should be crawlable independent of bot IP.",
+      "evidence": [
+        {
+          "url": "https://yandex.com/support/webmaster/en/yandex-indexing/site-indexing",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "naver",
+      "name": "Naver",
+      "kind": "general",
+      "site": "https://search.naver.com",
+      "origin_country": "KR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Naver supports IndexNow; its Search Advisor also documents robots.txt and sitemaps.",
+      "evidence": [
+        {
+          "url": "https://searchadvisor.naver.com/guide/indexnow-about",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "seznam",
+      "name": "Seznam",
+      "kind": "general",
+      "site": "https://search.seznam.cz",
+      "origin_country": "CZ",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Seznam is a documented IndexNow participant; also has own URL addition and verification forms.",
+      "evidence": [
+        {
+          "url": "https://www.indexnow.org/searchengines.json",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "baidu",
+      "name": "Baidu",
+      "kind": "general",
+      "site": "https://www.baidu.com",
+      "origin_country": "CN",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Baidu resource platform describes API, manual, and sitemap submission; verification/quotas may apply.",
+      "evidence": [
+        {
+          "url": "https://ziyuan.baidu.com/college/articleinfo?id=3076",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "sogou",
+      "name": "Sogou",
+      "kind": "general",
+      "site": "https://www.sogou.com",
+      "origin_country": "CN",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Sogou supports sitemaps but its submission access may be invitation-only.",
+      "evidence": [
+        {
+          "url": "https://zhanzhang.sogou.com/index.php/help/sitemap",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "so360",
+      "name": "360 Search (so.com)",
+      "kind": "general",
+      "site": "https://www.so.com",
+      "origin_country": "CN",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": true,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "360 official community recommends verified sitemap submission and URL submission, not a generic API.",
+      "evidence": [
+        {
+          "url": "https://bbs.360.cn/thread-15979727-1-1.html",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "brave",
+      "name": "Brave Search",
+      "kind": "general",
+      "site": "https://search.brave.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Brave crawler is independent and uses eligibility based on Googlebot crawlability; no invented submissions.",
+      "evidence": [
+        {
+          "url": "https://search.brave.com/help/brave-search-crawler",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "mojeek",
+      "name": "Mojeek",
+      "kind": "general",
+      "site": "https://www.mojeek.com",
+      "origin_country": "GB",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Mojeek representative said in 2022 that sitemaps were not used for discovery; current support remains UNVERIFIED.",
+      "evidence": [
+        {
+          "url": "https://community.mojeek.com/t/crawling-and-webmaster/215",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "duckduckgo",
+      "name": "DuckDuckGo",
+      "kind": "metasearch",
+      "site": "https://duckduckgo.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [
+        "bing",
+        "duckduckbot",
+        "other sources"
+      ],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Traditional web links largely sourced from Bing, with other own and third-party sources; do not equate ranking.",
+      "evidence": [
+        {
+          "url": "https://safe.duckduckgo.com/duckduckgo-help-pages/results/sources",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "ecosia",
+      "name": "Ecosia",
+      "kind": "metasearch",
+      "site": "https://www.ecosia.org",
+      "origin_country": "DE",
+      "market_countries_verified": [],
+      "result_sources": [
+        "bing",
+        "google",
+        "eusp"
+      ],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Search results can come from Bing, Google, or EUSP depending on region/device/permissions.",
+      "evidence": [
+        {
+          "url": "https://support.ecosia.org/article/579-search-results-providers",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yep",
+      "name": "Yep",
+      "kind": "general",
+      "site": "https://yep.com",
+      "origin_country": "SG",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Yep is a documented IndexNow participant. Other SEO rules pending.",
+      "evidence": [
+        {
+          "url": "https://www.indexnow.org/searchengines.json",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "internetarchive",
+      "name": "Internet Archive crawler",
+      "kind": "crawler",
+      "site": "https://archive.org",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Internet Archive crawler receives IndexNow notifications; not the same as a general search engine.",
+      "evidence": [
+        {
+          "url": "https://www.indexnow.org/searchengines.json",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "amazonbot",
+      "name": "Amazonbot crawler",
+      "kind": "crawler",
+      "site": "https://www.amazon.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "documented",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": true,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "Amazonbot is an IndexNow participant crawler, not a public general search engine.",
+      "evidence": [
+        {
+          "url": "https://www.indexnow.org/searchengines.json",
+          "checked_on": "2026-11-14",
+          "scope": "specific publicly documented capability"
+        }
+      ],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": "2026-11-14"
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "coccoc",
+      "name": "Cốc Cốc",
+      "kind": "general",
+      "site": "https://coccoc.com/search",
+      "origin_country": "VN",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yahoo",
+      "name": "Yahoo Search",
+      "kind": "metasearch",
+      "site": "https://search.yahoo.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yahoojp",
+      "name": "Yahoo! Japan Search",
+      "kind": "metasearch",
+      "site": "https://search.yahoo.co.jp",
+      "origin_country": "JP",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "qwant",
+      "name": "Qwant",
+      "kind": "metasearch",
+      "site": "https://www.qwant.com",
+      "origin_country": "FR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "startpage",
+      "name": "Startpage",
+      "kind": "metasearch",
+      "site": "https://www.startpage.com",
+      "origin_country": "NL",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "kagi",
+      "name": "Kagi",
+      "kind": "metasearch",
+      "site": "https://kagi.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "swisscows",
+      "name": "Swisscows",
+      "kind": "metasearch",
+      "site": "https://swisscows.com",
+      "origin_country": "CH",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "metager",
+      "name": "MetaGer",
+      "kind": "metasearch",
+      "site": "https://metager.org",
+      "origin_country": "DE",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "lilo",
+      "name": "Lilo",
+      "kind": "metasearch",
+      "site": "https://www.lilo.org",
+      "origin_country": "FR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "presearch",
+      "name": "Presearch",
+      "kind": "metasearch",
+      "site": "https://presearch.com",
+      "origin_country": "CA",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "you",
+      "name": "You.com",
+      "kind": "answer_engine",
+      "site": "https://you.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "perplexity",
+      "name": "Perplexity",
+      "kind": "answer_engine",
+      "site": "https://www.perplexity.ai",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "reported_discontinued",
+      "id": "ask",
+      "name": "Ask.com",
+      "kind": "metasearch",
+      "site": "https://www.ask.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "aol",
+      "name": "AOL Search",
+      "kind": "metasearch",
+      "site": "https://search.aol.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "lycos",
+      "name": "Lycos",
+      "kind": "metasearch",
+      "site": "https://www.lycos.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "dogpile",
+      "name": "Dogpile",
+      "kind": "metasearch",
+      "site": "https://www.dogpile.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "webcrawler",
+      "name": "WebCrawler",
+      "kind": "metasearch",
+      "site": "https://www.webcrawler.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "reported_discontinued",
+      "id": "excite",
+      "name": "Excite",
+      "kind": "metasearch",
+      "site": "https://www.excite.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "daum",
+      "name": "Daum Search",
+      "kind": "general",
+      "site": "https://search.daum.net",
+      "origin_country": "KR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "nate",
+      "name": "Nate Search",
+      "kind": "general",
+      "site": "https://search.nate.com",
+      "origin_country": "KR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "zum",
+      "name": "ZUM Search",
+      "kind": "general",
+      "site": "https://search.zum.com",
+      "origin_country": "KR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "reported_discontinued",
+      "id": "goo",
+      "name": "goo Japan",
+      "kind": "metasearch",
+      "site": "https://search.goo.ne.jp",
+      "origin_country": "JP",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "petal",
+      "name": "Petal Search",
+      "kind": "general",
+      "site": "https://petalsearch.com",
+      "origin_country": "CN",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "rambler",
+      "name": "Rambler",
+      "kind": "metasearch",
+      "site": "https://www.rambler.ru",
+      "origin_country": "RU",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "mailru",
+      "name": "Mail.ru Search",
+      "kind": "metasearch",
+      "site": "https://go.mail.ru",
+      "origin_country": "RU",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yaani",
+      "name": "Yaani",
+      "kind": "general",
+      "site": "https://www.yaani.com.tr",
+      "origin_country": "TR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "marginalia",
+      "name": "Marginalia Search",
+      "kind": "independent",
+      "site": "https://search.marginalia.nu",
+      "origin_country": "SE",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "wiby",
+      "name": "Wiby",
+      "kind": "independent",
+      "site": "https://wiby.me",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "yacy",
+      "name": "YaCy",
+      "kind": "self_hosted",
+      "site": "https://yacy.net",
+      "origin_country": "DE",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "searxng",
+      "name": "SearXNG",
+      "kind": "self_hosted",
+      "site": "https://docs.searxng.org",
+      "origin_country": "DE",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "eusp",
+      "name": "European Search Perspective",
+      "kind": "index_provider",
+      "site": "https://www.eusp.org",
+      "origin_country": "FR",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "wikipedia",
+      "name": "Wikipedia search",
+      "kind": "vertical",
+      "site": "https://www.wikipedia.org",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "pubmed",
+      "name": "PubMed",
+      "kind": "vertical",
+      "site": "https://pubmed.ncbi.nlm.nih.gov",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "wolframalpha",
+      "name": "WolframAlpha",
+      "kind": "computational",
+      "site": "https://www.wolframalpha.com",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    },
+    {
+      "lifecycle": "unverified",
+      "id": "internetarchive_search",
+      "name": "Internet Archive Search",
+      "kind": "vertical",
+      "site": "https://archive.org/search",
+      "origin_country": "US",
+      "market_countries_verified": [],
+      "result_sources": [],
+      "verification": "research_needed",
+      "capabilities": {
+        "sitemap": null,
+        "indexnow": null,
+        "direct_submit": null,
+        "hreflang": null
+      },
+      "note": "not yet source-verified; investigate own crawler, discovery, index provider, local product features, regional requirements",
+      "evidence": [],
+      "discovered_on": "2026-11-14",
+      "last_rule_check": null
+    }
+  ]
+}

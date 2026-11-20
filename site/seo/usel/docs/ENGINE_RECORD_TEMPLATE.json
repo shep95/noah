@@ -1,0 +1,20 @@
+{
+  "id":"new-engine-slug",
+  "name":"name in operator's native language",
+  "kind":"general",
+  "site":"https://search.example.org",
+  "origin_country":"XX",
+  "market_countries_verified":[],
+  "result_sources":[],
+  "verification":"research_needed",
+  "capabilities":{
+    "sitemap":null,
+    "indexnow":null,
+    "direct_submit":null,
+    "hreflang":null
+  },
+  "note":"research identity, origin, ranking/SEO documentation and local-language practices before marking documented",
+  "evidence":[],
+  "discovered_on":"2026-11-14",
+  "last_rule_check":null
+}

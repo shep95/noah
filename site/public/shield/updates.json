@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "shield@noah.asherin.com": {
+      "updates": [
+        {
+          "version": "2026.10.3.10",
+          "update_link": "https://noah.asherin.com/shield/noah-shield-firefox.xpi",
+          "update_hash": "sha256:f6a4853331b74683eb6371ee371813dc53120c20987c49e8d9c507a3a071f992",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "128.0"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

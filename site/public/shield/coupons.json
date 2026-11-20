@@ -1,0 +1,6 @@
+{
+  "coupons": [],
+  "expires": "2026-11-06T19:14:03Z",
+  "generated": "2026-09-27T19:14:03Z",
+  "note": "Coupon codes noah shield may try at a checkout. Each entry: site (registrable domain, like example.com), code, description, expires (ISO date, required), verified (ISO date the code was last seen working). The shield drops expired entries itself; remove entries that stop working. script/build-shield stamps the dates and signs this file."
+}

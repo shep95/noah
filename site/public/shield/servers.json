@@ -1,0 +1,6 @@
+{
+  "expires": "2026-11-06T19:14:03Z",
+  "generated": "2026-09-27T19:14:03Z",
+  "note": "Vetted tunnel servers for noah shield. Empty on purpose until a server has been checked: who runs it, what it logs, that it speaks HTTPS or SOCKS5 with remote DNS. Each entry: id, name, kind (https|socks5), host, port, country (ISO 3166-1 alpha-2), city, operator, notes. script/build-shield stamps the dates and signs this file.",
+  "servers": []
+}

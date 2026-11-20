@@ -1,0 +1,5 @@
+.landing .l-shots { display: grid; grid-template-columns: 1fr; gap: 20px; margin: 16px 0 24px; }
+@media (min-width: 768px) { .landing .l-shots { grid-template-columns: 1fr 1fr; } }
+.landing .l-shot { margin: 0; }
+.landing .l-shot img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08); }
+.landing .l-shot figcaption { margin-top: 8px; font-size: 13px; color: var(--l-fg-dim); }

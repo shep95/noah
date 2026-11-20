@@ -1,0 +1,5 @@
+Contact: https://noah.asherin.com/security
+Expires: 2027-09-25T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://noah.asherin.com/.well-known/security.txt
+Policy: https://noah.asherin.com/security

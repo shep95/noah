@@ -1,0 +1,6647 @@
+{
+  "version": "0.1.0",
+  "as_of": "2026-11-14",
+  "source": "pycountry ISO-3166-1 snapshot, Babel/CLDR territory language candidates, plus Kosovo XK jurisdiction",
+  "note": "all countries and territories are registry records, NOT verified as having individual domestic search engines",
+  "countries": [
+    {
+      "code": "AD",
+      "alpha3": "AND",
+      "name": "Andorra",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ca",
+          "estimated_population_share_percent": 51.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 43.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 6.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AE",
+      "alpha3": "ARE",
+      "name": "United Arab Emirates",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 78.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 50.0,
+          "official_status": null
+        },
+        {
+          "code": "ml",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AF",
+      "alpha3": "AFG",
+      "name": "Afghanistan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fa",
+          "estimated_population_share_percent": 50.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ps",
+          "estimated_population_share_percent": 43.0,
+          "official_status": "official"
+        },
+        {
+          "code": "haz",
+          "estimated_population_share_percent": 5.9,
+          "official_status": null
+        },
+        {
+          "code": "uz_Arab",
+          "estimated_population_share_percent": 4.7,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "tk",
+          "estimated_population_share_percent": 1.7,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AG",
+      "alpha3": "ATG",
+      "name": "Antigua and Barbuda",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AI",
+      "alpha3": "AIA",
+      "name": "Anguilla",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AL",
+      "alpha3": "ALB",
+      "name": "Albania",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sq",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AM",
+      "alpha3": "ARM",
+      "name": "Armenia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "hy",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AO",
+      "alpha3": "AGO",
+      "name": "Angola",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 67.0,
+          "official_status": "official"
+        },
+        {
+          "code": "umb",
+          "estimated_population_share_percent": 29.0,
+          "official_status": null
+        },
+        {
+          "code": "kmb",
+          "estimated_population_share_percent": 25.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AQ",
+      "alpha3": "ATA",
+      "name": "Antarctica",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "und",
+          "estimated_population_share_percent": 100.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AR",
+      "alpha3": "ARG",
+      "name": "Argentina",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AS",
+      "alpha3": "ASM",
+      "name": "American Samoa",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sm",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AT",
+      "alpha3": "AUT",
+      "name": "Austria",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "de",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bar",
+          "estimated_population_share_percent": 95.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 73.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "it",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        },
+        {
+          "code": "hr",
+          "estimated_population_share_percent": 1.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sl",
+          "estimated_population_share_percent": 0.37,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "hu",
+          "estimated_population_share_percent": 0.26,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AU",
+      "alpha3": "AUS",
+      "name": "Australia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AW",
+      "alpha3": "ABW",
+      "name": "Aruba",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "official"
+        },
+        {
+          "code": "pap",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AX",
+      "alpha3": "ALA",
+      "name": "Åland Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sv",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "AZ",
+      "alpha3": "AZE",
+      "name": "Azerbaijan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "az",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        },
+        {
+          "code": "az_Cyrl",
+          "estimated_population_share_percent": 9.9,
+          "official_status": "official"
+        },
+        {
+          "code": "tly",
+          "estimated_population_share_percent": 9.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BA",
+      "alpha3": "BIH",
+      "name": "Bosnia and Herzegovina",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bs",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bs_Cyrl",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 45.0,
+          "official_status": null
+        },
+        {
+          "code": "hr",
+          "estimated_population_share_percent": 12.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sr",
+          "estimated_population_share_percent": 10.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sr_Latn",
+          "estimated_population_share_percent": 10.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BB",
+      "alpha3": "BRB",
+      "name": "Barbados",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BD",
+      "alpha3": "BGD",
+      "name": "Bangladesh",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bn",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        },
+        {
+          "code": "rkt",
+          "estimated_population_share_percent": 6.5,
+          "official_status": null
+        },
+        {
+          "code": "syl",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BE",
+      "alpha3": "BEL",
+      "name": "Belgium",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 59.0,
+          "official_status": null
+        },
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 55.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 38.0,
+          "official_status": "official"
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 22.0,
+          "official_status": "official"
+        },
+        {
+          "code": "vls",
+          "estimated_population_share_percent": 10.0,
+          "official_status": null
+        },
+        {
+          "code": "wa",
+          "estimated_population_share_percent": 5.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BF",
+      "alpha3": "BFA",
+      "name": "Burkina Faso",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mos",
+          "estimated_population_share_percent": 40.0,
+          "official_status": null
+        },
+        {
+          "code": "dyu",
+          "estimated_population_share_percent": 32.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 25.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BG",
+      "alpha3": "BGR",
+      "name": "Bulgaria",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bg",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 25.0,
+          "official_status": null
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        },
+        {
+          "code": "tr",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BH",
+      "alpha3": "BHR",
+      "name": "Bahrain",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 87.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BI",
+      "alpha3": "BDI",
+      "name": "Burundi",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "rn",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 59.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 0.05,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BJ",
+      "alpha3": "BEN",
+      "name": "Benin",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 34.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fon",
+          "estimated_population_share_percent": 25.0,
+          "official_status": null
+        },
+        {
+          "code": "yo",
+          "estimated_population_share_percent": 6.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BL",
+      "alpha3": "BLM",
+      "name": "Saint Barthélemy",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BM",
+      "alpha3": "BMU",
+      "name": "Bermuda",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 92.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BN",
+      "alpha3": "BRN",
+      "name": "Brunei Darussalam",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ms",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zh_Hant",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "ms_Arab",
+          "estimated_population_share_percent": 5.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BO",
+      "alpha3": "BOL",
+      "name": "Bolivia, Plurinational State of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        },
+        {
+          "code": "qu",
+          "estimated_population_share_percent": 32.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ay",
+          "estimated_population_share_percent": 20.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BQ",
+      "alpha3": "BES",
+      "name": "Bonaire, Sint Eustatius and Saba",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pap",
+          "estimated_population_share_percent": 81.0,
+          "official_status": null
+        },
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 8.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BR",
+      "alpha3": "BRA",
+      "name": "Brazil",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 91.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        },
+        {
+          "code": "vec",
+          "estimated_population_share_percent": 0.24,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BS",
+      "alpha3": "BHS",
+      "name": "Bahamas",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BT",
+      "alpha3": "BTN",
+      "name": "Bhutan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "dz",
+          "estimated_population_share_percent": 47.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ne",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "tsj",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BV",
+      "alpha3": "BVT",
+      "name": "Bouvet Island",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "no",
+          "estimated_population_share_percent": 100.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BW",
+      "alpha3": "BWA",
+      "name": "Botswana",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "official"
+        },
+        {
+          "code": "tn",
+          "estimated_population_share_percent": 62.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BY",
+      "alpha3": "BLR",
+      "name": "Belarus",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "be",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 12.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "BZ",
+      "alpha3": "BLZ",
+      "name": "Belize",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 28.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CA",
+      "alpha3": "CAN",
+      "name": "Canada",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 87.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 29.0,
+          "official_status": "official"
+        },
+        {
+          "code": "iu",
+          "estimated_population_share_percent": 0.11,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "iu_Latn",
+          "estimated_population_share_percent": 0.11,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "chp",
+          "estimated_population_share_percent": 0.03,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "crk",
+          "estimated_population_share_percent": 0.03,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "den",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "dgr",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "gwi",
+          "estimated_population_share_percent": 0.0,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CC",
+      "alpha3": "CCK",
+      "name": "Cocos (Keeling) Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ms_Arab",
+          "estimated_population_share_percent": 84.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 17.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CD",
+      "alpha3": "COD",
+      "name": "Congo, The Democratic Republic of the",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 51.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sw",
+          "estimated_population_share_percent": 50.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "lua",
+          "estimated_population_share_percent": 9.6,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ln",
+          "estimated_population_share_percent": 3.1,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kg",
+          "estimated_population_share_percent": 1.5,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CF",
+      "alpha3": "CAF",
+      "name": "Central African Republic",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sg",
+          "estimated_population_share_percent": 49.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 29.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CG",
+      "alpha3": "COG",
+      "name": "Congo",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CH",
+      "alpha3": "CHE",
+      "name": "Switzerland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "de",
+          "estimated_population_share_percent": 76.0,
+          "official_status": "official"
+        },
+        {
+          "code": "gsw",
+          "estimated_population_share_percent": 66.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 45.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 39.0,
+          "official_status": "official"
+        },
+        {
+          "code": "it",
+          "estimated_population_share_percent": 15.0,
+          "official_status": "official"
+        },
+        {
+          "code": "rm",
+          "estimated_population_share_percent": 0.5,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CI",
+      "alpha3": "CIV",
+      "name": "Côte d'Ivoire",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 34.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bci",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CK",
+      "alpha3": "COK",
+      "name": "Cook Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CL",
+      "alpha3": "CHL",
+      "name": "Chile",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 9.5,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CM",
+      "alpha3": "CMR",
+      "name": "Cameroon",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 68.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 38.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CN",
+      "alpha3": "CHN",
+      "name": "China",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "zh",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "wuu",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        },
+        {
+          "code": "yue",
+          "estimated_population_share_percent": 5.2,
+          "official_status": null
+        },
+        {
+          "code": "yue_Hans",
+          "estimated_population_share_percent": 5.2,
+          "official_status": null
+        },
+        {
+          "code": "ug",
+          "estimated_population_share_percent": 0.55,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "za",
+          "estimated_population_share_percent": 0.31,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mn_Mong",
+          "estimated_population_share_percent": 0.26,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "bo",
+          "estimated_population_share_percent": 0.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ko",
+          "estimated_population_share_percent": 0.15,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CO",
+      "alpha3": "COL",
+      "name": "Colombia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CR",
+      "alpha3": "CRI",
+      "name": "Costa Rica",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CU",
+      "alpha3": "CUB",
+      "name": "Cuba",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CV",
+      "alpha3": "CPV",
+      "name": "Cabo Verde",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "kea",
+          "estimated_population_share_percent": 91.0,
+          "official_status": null
+        },
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 76.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CW",
+      "alpha3": "CUW",
+      "name": "Curaçao",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pap",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 8.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CX",
+      "alpha3": "CXR",
+      "name": "Christmas Island",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 83.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CY",
+      "alpha3": "CYP",
+      "name": "Cyprus",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "el",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 73.0,
+          "official_status": null
+        },
+        {
+          "code": "tr",
+          "estimated_population_share_percent": 23.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 6.6,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "CZ",
+      "alpha3": "CZE",
+      "name": "Czechia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "cs",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 27.0,
+          "official_status": null
+        },
+        {
+          "code": "sk",
+          "estimated_population_share_percent": 16.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DE",
+      "alpha3": "DEU",
+      "name": "Germany",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "de",
+          "estimated_population_share_percent": 91.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 64.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        },
+        {
+          "code": "bar",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "nds",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        },
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        },
+        {
+          "code": "it",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        },
+        {
+          "code": "vmf",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        },
+        {
+          "code": "frr",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DJ",
+      "alpha3": "DJI",
+      "name": "Djibouti",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 50.0,
+          "official_status": "official"
+        },
+        {
+          "code": "aa",
+          "estimated_population_share_percent": 42.0,
+          "official_status": null
+        },
+        {
+          "code": "so",
+          "estimated_population_share_percent": 41.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 7.3,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DK",
+      "alpha3": "DNK",
+      "name": "Denmark",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "da",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 86.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 47.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sv",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "kl",
+          "estimated_population_share_percent": 0.12,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DM",
+      "alpha3": "DMA",
+      "name": "Dominica",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 94.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DO",
+      "alpha3": "DOM",
+      "name": "Dominican Republic",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 78.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "DZ",
+      "alpha3": "DZA",
+      "name": "Algeria",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "arq",
+          "estimated_population_share_percent": 83.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 74.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 33.0,
+          "official_status": "official"
+        },
+        {
+          "code": "kab",
+          "estimated_population_share_percent": 7.8,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "EC",
+      "alpha3": "ECU",
+      "name": "Ecuador",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        },
+        {
+          "code": "qu",
+          "estimated_population_share_percent": 17.0,
+          "official_status": "official"
+        },
+        {
+          "code": "qug",
+          "estimated_population_share_percent": 5.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "EE",
+      "alpha3": "EST",
+      "name": "Estonia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "et",
+          "estimated_population_share_percent": 71.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 56.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 50.0,
+          "official_status": null
+        },
+        {
+          "code": "fi",
+          "estimated_population_share_percent": 21.0,
+          "official_status": null
+        },
+        {
+          "code": "vro",
+          "estimated_population_share_percent": 5.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "EG",
+      "alpha3": "EGY",
+      "name": "Egypt",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 94.0,
+          "official_status": "official"
+        },
+        {
+          "code": "arz",
+          "estimated_population_share_percent": 64.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 35.0,
+          "official_status": null
+        },
+        {
+          "code": "cop",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "EH",
+      "alpha3": "ESH",
+      "name": "Western Sahara",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ER",
+      "alpha3": "ERI",
+      "name": "Eritrea",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ti",
+          "estimated_population_share_percent": 60.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 59.0,
+          "official_status": "official"
+        },
+        {
+          "code": "tig",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 4.9,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ES",
+      "alpha3": "ESP",
+      "name": "Spain",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 24.0,
+          "official_status": null
+        },
+        {
+          "code": "ca",
+          "estimated_population_share_percent": 17.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "gl",
+          "estimated_population_share_percent": 7.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "eu",
+          "estimated_population_share_percent": 2.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ast",
+          "estimated_population_share_percent": 1.3,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "oc",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ET",
+      "alpha3": "ETH",
+      "name": "Ethiopia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 43.0,
+          "official_status": null
+        },
+        {
+          "code": "am",
+          "estimated_population_share_percent": 33.0,
+          "official_status": "official"
+        },
+        {
+          "code": "om",
+          "estimated_population_share_percent": 32.0,
+          "official_status": null
+        },
+        {
+          "code": "so",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        },
+        {
+          "code": "ti",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FI",
+      "alpha3": "FIN",
+      "name": "Finland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fi",
+          "estimated_population_share_percent": 94.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 70.0,
+          "official_status": null
+        },
+        {
+          "code": "sv",
+          "estimated_population_share_percent": 44.0,
+          "official_status": "official"
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        },
+        {
+          "code": "sms",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FJ",
+      "alpha3": "FJI",
+      "name": "Fiji",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 94.0,
+          "official_status": "official"
+        },
+        {
+          "code": "hi",
+          "estimated_population_share_percent": 44.0,
+          "official_status": null
+        },
+        {
+          "code": "hif",
+          "estimated_population_share_percent": 41.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fj",
+          "estimated_population_share_percent": 39.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FK",
+      "alpha3": "FLK",
+      "name": "Falkland Islands (Malvinas)",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 77.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FM",
+      "alpha3": "FSM",
+      "name": "Micronesia, Federated States of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 57.0,
+          "official_status": "official"
+        },
+        {
+          "code": "chk",
+          "estimated_population_share_percent": 30.0,
+          "official_status": null
+        },
+        {
+          "code": "pon",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        },
+        {
+          "code": "kos",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        },
+        {
+          "code": "yap",
+          "estimated_population_share_percent": 6.6,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FO",
+      "alpha3": "FRO",
+      "name": "Faroe Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fo",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "FR",
+      "alpha3": "FRA",
+      "name": "France",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 39.0,
+          "official_status": null
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GA",
+      "alpha3": "GAB",
+      "name": "Gabon",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "puu",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GB",
+      "alpha3": "GBR",
+      "name": "United Kingdom",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        },
+        {
+          "code": "cy",
+          "estimated_population_share_percent": 1.3,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ga",
+          "estimated_population_share_percent": 0.15,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "gd",
+          "estimated_population_share_percent": 0.11,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GD",
+      "alpha3": "GRD",
+      "name": "Grenada",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GE",
+      "alpha3": "GEO",
+      "name": "Georgia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ka",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "official"
+        },
+        {
+          "code": "xmf",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        },
+        {
+          "code": "hy",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        },
+        {
+          "code": "ab",
+          "estimated_population_share_percent": 2.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "os",
+          "estimated_population_share_percent": 2.2,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GF",
+      "alpha3": "GUF",
+      "name": "French Guiana",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 62.0,
+          "official_status": "official"
+        },
+        {
+          "code": "gcr",
+          "estimated_population_share_percent": 26.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GG",
+      "alpha3": "GGY",
+      "name": "Guernsey",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GH",
+      "alpha3": "GHA",
+      "name": "Ghana",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ak",
+          "estimated_population_share_percent": 39.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 21.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ee",
+          "estimated_population_share_percent": 11.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "abr",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        },
+        {
+          "code": "gaa",
+          "estimated_population_share_percent": 2.8,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GI",
+      "alpha3": "GIB",
+      "name": "Gibraltar",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 80.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 50.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GL",
+      "alpha3": "GRL",
+      "name": "Greenland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "kl",
+          "estimated_population_share_percent": 84.0,
+          "official_status": "official"
+        },
+        {
+          "code": "da",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GM",
+      "alpha3": "GMB",
+      "name": "Gambia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 40.0,
+          "official_status": "official"
+        },
+        {
+          "code": "man",
+          "estimated_population_share_percent": 29.0,
+          "official_status": null
+        },
+        {
+          "code": "man_Nkoo",
+          "estimated_population_share_percent": 29.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GN",
+      "alpha3": "GIN",
+      "name": "Guinea",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 27.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ff",
+          "estimated_population_share_percent": 26.0,
+          "official_status": null
+        },
+        {
+          "code": "man",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        },
+        {
+          "code": "man_Nkoo",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        },
+        {
+          "code": "sus",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "nqo",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GP",
+      "alpha3": "GLP",
+      "name": "Guadeloupe",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 84.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GQ",
+      "alpha3": "GNQ",
+      "name": "Equatorial Guinea",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 87.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fan",
+          "estimated_population_share_percent": 51.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 29.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bvb",
+          "estimated_population_share_percent": 7.9,
+          "official_status": null
+        },
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 0.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GR",
+      "alpha3": "GRC",
+      "name": "Greece",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "el",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 51.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 7.3,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GS",
+      "alpha3": "SGS",
+      "name": "South Georgia and the South Sandwich Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GT",
+      "alpha3": "GTM",
+      "name": "Guatemala",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "quc",
+          "estimated_population_share_percent": 7.0,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GU",
+      "alpha3": "GUM",
+      "name": "Guam",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 91.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "ch",
+          "estimated_population_share_percent": 22.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GW",
+      "alpha3": "GNB",
+      "name": "Guinea-Bissau",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "GY",
+      "alpha3": "GUY",
+      "name": "Guyana",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HK",
+      "alpha3": "HKG",
+      "name": "Hong Kong",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "zh_Hant",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "yue",
+          "estimated_population_share_percent": 90.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 51.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zh",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HM",
+      "alpha3": "HMD",
+      "name": "Heard Island and McDonald Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "und",
+          "estimated_population_share_percent": 100.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HN",
+      "alpha3": "HND",
+      "name": "Honduras",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 78.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HR",
+      "alpha3": "HRV",
+      "name": "Croatia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "hr",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 49.0,
+          "official_status": null
+        },
+        {
+          "code": "it",
+          "estimated_population_share_percent": 1.6,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "vec",
+          "estimated_population_share_percent": 0.7,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HT",
+      "alpha3": "HTI",
+      "name": "Haiti",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ht",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 42.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "HU",
+      "alpha3": "HUN",
+      "name": "Hungary",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "hu",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 20.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ID",
+      "alpha3": "IDN",
+      "name": "Indonesia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "id",
+          "estimated_population_share_percent": 64.0,
+          "official_status": "official"
+        },
+        {
+          "code": "jv",
+          "estimated_population_share_percent": 34.0,
+          "official_status": null
+        },
+        {
+          "code": "su",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        },
+        {
+          "code": "mad",
+          "estimated_population_share_percent": 6.3,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IE",
+      "alpha3": "IRL",
+      "name": "Ireland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ga",
+          "estimated_population_share_percent": 22.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IL",
+      "alpha3": "ISR",
+      "name": "Israel",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "he",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 85.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 20.0,
+          "official_status": "official"
+        },
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IM",
+      "alpha3": "IMN",
+      "name": "Isle of Man",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "gv",
+          "estimated_population_share_percent": 1.8,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IN",
+      "alpha3": "IND",
+      "name": "India",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "hi",
+          "estimated_population_share_percent": 41.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 19.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bn",
+          "estimated_population_share_percent": 8.1,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "te",
+          "estimated_population_share_percent": 7.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mr",
+          "estimated_population_share_percent": 7.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ta",
+          "estimated_population_share_percent": 5.9,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ur",
+          "estimated_population_share_percent": 5.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "gu",
+          "estimated_population_share_percent": 4.5,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kn",
+          "estimated_population_share_percent": 3.7,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ml",
+          "estimated_population_share_percent": 3.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "or",
+          "estimated_population_share_percent": 3.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "pa",
+          "estimated_population_share_percent": 2.8,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "as",
+          "estimated_population_share_percent": 1.3,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mai",
+          "estimated_population_share_percent": 1.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ne",
+          "estimated_population_share_percent": 0.56,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sat",
+          "estimated_population_share_percent": 0.55,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ks",
+          "estimated_population_share_percent": 0.41,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kok",
+          "estimated_population_share_percent": 0.32,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sd",
+          "estimated_population_share_percent": 0.26,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sd_Deva",
+          "estimated_population_share_percent": 0.14,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kha",
+          "estimated_population_share_percent": 0.08,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sa",
+          "estimated_population_share_percent": 0.0,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IO",
+      "alpha3": "IOT",
+      "name": "British Indian Ocean Territory",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IQ",
+      "alpha3": "IRQ",
+      "name": "Iraq",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 68.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 35.0,
+          "official_status": null
+        },
+        {
+          "code": "ckb",
+          "estimated_population_share_percent": 20.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "az_Arab",
+          "estimated_population_share_percent": 1.8,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IR",
+      "alpha3": "IRN",
+      "name": "Iran, Islamic Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fa",
+          "estimated_population_share_percent": 75.0,
+          "official_status": "official"
+        },
+        {
+          "code": "az_Arab",
+          "estimated_population_share_percent": 24.0,
+          "official_status": null
+        },
+        {
+          "code": "mzn",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IS",
+      "alpha3": "ISL",
+      "name": "Iceland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "is",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "IT",
+      "alpha3": "ITA",
+      "name": "Italy",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "it",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 34.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 20.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "lmo",
+          "estimated_population_share_percent": 5.7,
+          "official_status": null
+        },
+        {
+          "code": "vec",
+          "estimated_population_share_percent": 1.3,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "JE",
+      "alpha3": "JEY",
+      "name": "Jersey",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "JM",
+      "alpha3": "JAM",
+      "name": "Jamaica",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "jam",
+          "estimated_population_share_percent": 95.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "JO",
+      "alpha3": "JOR",
+      "name": "Jordan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 66.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 45.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "JP",
+      "alpha3": "JPN",
+      "name": "Japan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ja",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KE",
+      "alpha3": "KEN",
+      "name": "Kenya",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sw",
+          "estimated_population_share_percent": 66.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 19.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ki",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "luy",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "luo",
+          "estimated_population_share_percent": 9.8,
+          "official_status": null
+        },
+        {
+          "code": "kam",
+          "estimated_population_share_percent": 7.6,
+          "official_status": null
+        },
+        {
+          "code": "kln",
+          "estimated_population_share_percent": 7.6,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KG",
+      "alpha3": "KGZ",
+      "name": "Kyrgyzstan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ky",
+          "estimated_population_share_percent": 48.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 36.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KH",
+      "alpha3": "KHM",
+      "name": "Cambodia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "km",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KI",
+      "alpha3": "KIR",
+      "name": "Kiribati",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "gil",
+          "estimated_population_share_percent": 60.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KM",
+      "alpha3": "COM",
+      "name": "Comoros",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 66.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zdj",
+          "estimated_population_share_percent": 37.0,
+          "official_status": "official"
+        },
+        {
+          "code": "wni",
+          "estimated_population_share_percent": 34.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 26.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KN",
+      "alpha3": "KNA",
+      "name": "Saint Kitts and Nevis",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KP",
+      "alpha3": "PRK",
+      "name": "Korea, Democratic People's Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ko",
+          "estimated_population_share_percent": 88.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KR",
+      "alpha3": "KOR",
+      "name": "Korea, Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ko",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KW",
+      "alpha3": "KWT",
+      "name": "Kuwait",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KY",
+      "alpha3": "CYM",
+      "name": "Cayman Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "KZ",
+      "alpha3": "KAZ",
+      "name": "Kazakhstan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 72.0,
+          "official_status": "official"
+        },
+        {
+          "code": "kk",
+          "estimated_population_share_percent": 64.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 6.4,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LA",
+      "alpha3": "LAO",
+      "name": "Lao People's Democratic Republic",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "lo",
+          "estimated_population_share_percent": 69.0,
+          "official_status": "official"
+        },
+        {
+          "code": "kjg",
+          "estimated_population_share_percent": 5.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LB",
+      "alpha3": "LBN",
+      "name": "Lebanon",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 100.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 40.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 38.0,
+          "official_status": null
+        },
+        {
+          "code": "hy",
+          "estimated_population_share_percent": 5.2,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LC",
+      "alpha3": "LCA",
+      "name": "Saint Lucia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LI",
+      "alpha3": "LIE",
+      "name": "Liechtenstein",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "de",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "gsw",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LK",
+      "alpha3": "LKA",
+      "name": "Sri Lanka",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "si",
+          "estimated_population_share_percent": 68.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ta",
+          "estimated_population_share_percent": 15.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 10.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LR",
+      "alpha3": "LBR",
+      "name": "Liberia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 83.0,
+          "official_status": "official"
+        },
+        {
+          "code": "kpe",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LS",
+      "alpha3": "LSO",
+      "name": "Lesotho",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "st",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 27.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zu",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LT",
+      "alpha3": "LTU",
+      "name": "Lithuania",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "lt",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 80.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 38.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LU",
+      "alpha3": "LUX",
+      "name": "Luxembourg",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 92.0,
+          "official_status": "official"
+        },
+        {
+          "code": "lb",
+          "estimated_population_share_percent": 67.0,
+          "official_status": "official"
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 56.0,
+          "official_status": null
+        },
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 16.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LV",
+      "alpha3": "LVA",
+      "name": "Latvia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "lv",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 46.0,
+          "official_status": null
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 38.0,
+          "official_status": null
+        },
+        {
+          "code": "ltg",
+          "estimated_population_share_percent": 8.9,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "LY",
+      "alpha3": "LBY",
+      "name": "Libya",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 74.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MA",
+      "alpha3": "MAR",
+      "name": "Morocco",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ary",
+          "estimated_population_share_percent": 87.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 62.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 36.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "zgh",
+          "estimated_population_share_percent": 22.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        },
+        {
+          "code": "tzm",
+          "estimated_population_share_percent": 9.8,
+          "official_status": "official"
+        },
+        {
+          "code": "shi",
+          "estimated_population_share_percent": 8.7,
+          "official_status": null
+        },
+        {
+          "code": "shi_Latn",
+          "estimated_population_share_percent": 8.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MC",
+      "alpha3": "MCO",
+      "name": "Monaco",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MD",
+      "alpha3": "MDA",
+      "name": "Moldova, Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ro",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "uk",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        },
+        {
+          "code": "bg",
+          "estimated_population_share_percent": 9.4,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ME",
+      "alpha3": "MNE",
+      "name": "Montenegro",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sr_Latn",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sq",
+          "estimated_population_share_percent": 7.9,
+          "official_status": null
+        },
+        {
+          "code": "sr",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MF",
+      "alpha3": "MAF",
+      "name": "Saint Martin (French part)",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 84.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MG",
+      "alpha3": "MDG",
+      "name": "Madagascar",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mg",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 27.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 18.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MH",
+      "alpha3": "MHL",
+      "name": "Marshall Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "mh",
+          "estimated_population_share_percent": 73.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MK",
+      "alpha3": "MKD",
+      "name": "North Macedonia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mk",
+          "estimated_population_share_percent": 67.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sq",
+          "estimated_population_share_percent": 25.0,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ML",
+      "alpha3": "MLI",
+      "name": "Mali",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bm",
+          "estimated_population_share_percent": 46.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 17.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ffm",
+          "estimated_population_share_percent": 7.7,
+          "official_status": null
+        },
+        {
+          "code": "snk",
+          "estimated_population_share_percent": 5.9,
+          "official_status": null
+        },
+        {
+          "code": "mwk",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MM",
+      "alpha3": "MMR",
+      "name": "Myanmar",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "my",
+          "estimated_population_share_percent": 64.0,
+          "official_status": "official"
+        },
+        {
+          "code": "shn",
+          "estimated_population_share_percent": 6.4,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MN",
+      "alpha3": "MNG",
+      "name": "Mongolia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mn",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "kk_Arab",
+          "estimated_population_share_percent": 7.2,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MO",
+      "alpha3": "MAC",
+      "name": "Macao",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "zh_Hant",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "yue",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        },
+        {
+          "code": "zh",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        },
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 2.3,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MP",
+      "alpha3": "MNP",
+      "name": "Northern Mariana Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 97.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "ch",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MQ",
+      "alpha3": "MTQ",
+      "name": "Martinique",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MR",
+      "alpha3": "MRT",
+      "name": "Mauritania",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "ff",
+          "estimated_population_share_percent": 5.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MS",
+      "alpha3": "MSR",
+      "name": "Montserrat",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 64.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MT",
+      "alpha3": "MLT",
+      "name": "Malta",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mt",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 88.0,
+          "official_status": "official"
+        },
+        {
+          "code": "it",
+          "estimated_population_share_percent": 56.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MU",
+      "alpha3": "MUS",
+      "name": "Mauritius",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "mfe",
+          "estimated_population_share_percent": 90.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 73.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 72.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bho",
+          "estimated_population_share_percent": 8.6,
+          "official_status": null
+        },
+        {
+          "code": "ur",
+          "estimated_population_share_percent": 5.2,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MV",
+      "alpha3": "MDV",
+      "name": "Maldives",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "dv",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 75.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MW",
+      "alpha3": "MWI",
+      "name": "Malawi",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ny",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "tum",
+          "estimated_population_share_percent": 8.4,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MX",
+      "alpha3": "MEX",
+      "name": "Mexico",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 83.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MY",
+      "alpha3": "MYS",
+      "name": "Malaysia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ms",
+          "estimated_population_share_percent": 75.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 21.0,
+          "official_status": null
+        },
+        {
+          "code": "zh",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "MZ",
+      "alpha3": "MOZ",
+      "name": "Mozambique",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 27.0,
+          "official_status": "official"
+        },
+        {
+          "code": "vmw",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "ndc",
+          "estimated_population_share_percent": 9.9,
+          "official_status": null
+        },
+        {
+          "code": "ts",
+          "estimated_population_share_percent": 7.9,
+          "official_status": null
+        },
+        {
+          "code": "ngl",
+          "estimated_population_share_percent": 6.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NA",
+      "alpha3": "NAM",
+      "name": "Namibia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "af",
+          "estimated_population_share_percent": 75.0,
+          "official_status": null
+        },
+        {
+          "code": "kj",
+          "estimated_population_share_percent": 35.0,
+          "official_status": null
+        },
+        {
+          "code": "ng",
+          "estimated_population_share_percent": 21.0,
+          "official_status": null
+        },
+        {
+          "code": "naq",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "hz",
+          "estimated_population_share_percent": 9.1,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 7.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NC",
+      "alpha3": "NCL",
+      "name": "New Caledonia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NE",
+      "alpha3": "NER",
+      "name": "Niger",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ha",
+          "estimated_population_share_percent": 41.0,
+          "official_status": null
+        },
+        {
+          "code": "dje",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fuq",
+          "estimated_population_share_percent": 7.0,
+          "official_status": null
+        },
+        {
+          "code": "tmh",
+          "estimated_population_share_percent": 6.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NF",
+      "alpha3": "NFK",
+      "name": "Norfolk Island",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NG",
+      "alpha3": "NGA",
+      "name": "Nigeria",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 53.0,
+          "official_status": "official"
+        },
+        {
+          "code": "pcm",
+          "estimated_population_share_percent": 21.0,
+          "official_status": null
+        },
+        {
+          "code": "ha",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "ig",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "yo",
+          "estimated_population_share_percent": 13.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fuv",
+          "estimated_population_share_percent": 6.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NI",
+      "alpha3": "NIC",
+      "name": "Nicaragua",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 78.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NL",
+      "alpha3": "NLD",
+      "name": "Netherlands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 90.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 71.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 19.0,
+          "official_status": null
+        },
+        {
+          "code": "nds",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "li",
+          "estimated_population_share_percent": 5.5,
+          "official_status": null
+        },
+        {
+          "code": "fy",
+          "estimated_population_share_percent": 4.3,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NO",
+      "alpha3": "NOR",
+      "name": "Norway",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "nb",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "no",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "nn",
+          "estimated_population_share_percent": 25.0,
+          "official_status": "official"
+        },
+        {
+          "code": "se",
+          "estimated_population_share_percent": 0.29,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NP",
+      "alpha3": "NPL",
+      "name": "Nepal",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ne",
+          "estimated_population_share_percent": 44.0,
+          "official_status": "official"
+        },
+        {
+          "code": "mai",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "bho",
+          "estimated_population_share_percent": 6.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NR",
+      "alpha3": "NRU",
+      "name": "Nauru",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "na",
+          "estimated_population_share_percent": 70.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NU",
+      "alpha3": "NIU",
+      "name": "Niue",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 56.0,
+          "official_status": "official"
+        },
+        {
+          "code": "niu",
+          "estimated_population_share_percent": 56.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "NZ",
+      "alpha3": "NZL",
+      "name": "New Zealand",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "mi",
+          "estimated_population_share_percent": 2.8,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "OM",
+      "alpha3": "OMN",
+      "name": "Oman",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PA",
+      "alpha3": "PAN",
+      "name": "Panama",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 69.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PE",
+      "alpha3": "PER",
+      "name": "Peru",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 73.0,
+          "official_status": "official"
+        },
+        {
+          "code": "qu",
+          "estimated_population_share_percent": 15.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PF",
+      "alpha3": "PYF",
+      "name": "French Polynesia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ty",
+          "estimated_population_share_percent": 31.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zh_Hant",
+          "estimated_population_share_percent": 7.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PG",
+      "alpha3": "PNG",
+      "name": "Papua New Guinea",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tpi",
+          "estimated_population_share_percent": 71.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 50.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ho",
+          "estimated_population_share_percent": 2.1,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PH",
+      "alpha3": "PHL",
+      "name": "Philippines",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 64.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fil",
+          "estimated_population_share_percent": 60.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 31.0,
+          "official_status": null
+        },
+        {
+          "code": "ceb",
+          "estimated_population_share_percent": 24.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ilo",
+          "estimated_population_share_percent": 9.6,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "hil",
+          "estimated_population_share_percent": 8.4,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "war",
+          "estimated_population_share_percent": 2.9,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "pag",
+          "estimated_population_share_percent": 1.4,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mdh",
+          "estimated_population_share_percent": 1.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "tsg",
+          "estimated_population_share_percent": 1.1,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PK",
+      "alpha3": "PAK",
+      "name": "Pakistan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ur",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "pa_Arab",
+          "estimated_population_share_percent": 70.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 50.0,
+          "official_status": "official"
+        },
+        {
+          "code": "lah",
+          "estimated_population_share_percent": 40.0,
+          "official_status": null
+        },
+        {
+          "code": "ps",
+          "estimated_population_share_percent": 16.0,
+          "official_status": null
+        },
+        {
+          "code": "sd",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        },
+        {
+          "code": "skr",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PL",
+      "alpha3": "POL",
+      "name": "Poland",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pl",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 33.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 19.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 18.0,
+          "official_status": null
+        },
+        {
+          "code": "csb",
+          "estimated_population_share_percent": 0.13,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "lt",
+          "estimated_population_share_percent": 0.02,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PM",
+      "alpha3": "SPM",
+      "name": "Saint Pierre and Miquelon",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PN",
+      "alpha3": "PCN",
+      "name": "Pitcairn",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 92.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PR",
+      "alpha3": "PRI",
+      "name": "Puerto Rico",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 87.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 49.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PS",
+      "alpha3": "PSE",
+      "name": "Palestine, State of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 87.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PT",
+      "alpha3": "PRT",
+      "name": "Portugal",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 27.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 10.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PW",
+      "alpha3": "PLW",
+      "name": "Palau",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pau",
+          "estimated_population_share_percent": 74.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 8.6,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "PY",
+      "alpha3": "PRY",
+      "name": "Paraguay",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "gn",
+          "estimated_population_share_percent": 80.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 3.2,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "QA",
+      "alpha3": "QAT",
+      "name": "Qatar",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fa",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "RE",
+      "alpha3": "REU",
+      "name": "Réunion",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        },
+        {
+          "code": "rcf",
+          "estimated_population_share_percent": 71.0,
+          "official_status": null
+        },
+        {
+          "code": "ta",
+          "estimated_population_share_percent": 15.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "RO",
+      "alpha3": "ROU",
+      "name": "Romania",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ro",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 31.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 10.0,
+          "official_status": null
+        },
+        {
+          "code": "hu",
+          "estimated_population_share_percent": 6.6,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "RS",
+      "alpha3": "SRB",
+      "name": "Serbia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sr",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sr_Latn",
+          "estimated_population_share_percent": 99.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sq",
+          "estimated_population_share_percent": 19.0,
+          "official_status": null
+        },
+        {
+          "code": "hu",
+          "estimated_population_share_percent": 4.8,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ro",
+          "estimated_population_share_percent": 2.1,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "hr",
+          "estimated_population_share_percent": 0.93,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sk",
+          "estimated_population_share_percent": 0.85,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "uk",
+          "estimated_population_share_percent": 0.0,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "RU",
+      "alpha3": "RUS",
+      "name": "Russian Federation",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 94.0,
+          "official_status": "official"
+        },
+        {
+          "code": "tt",
+          "estimated_population_share_percent": 1.4,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ba",
+          "estimated_population_share_percent": 1.3,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ce",
+          "estimated_population_share_percent": 0.66,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "av",
+          "estimated_population_share_percent": 0.39,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "udm",
+          "estimated_population_share_percent": 0.38,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sah",
+          "estimated_population_share_percent": 0.32,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kbd",
+          "estimated_population_share_percent": 0.31,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "myv",
+          "estimated_population_share_percent": 0.31,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mdf",
+          "estimated_population_share_percent": 0.21,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kum",
+          "estimated_population_share_percent": 0.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "kv",
+          "estimated_population_share_percent": 0.18,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "lez",
+          "estimated_population_share_percent": 0.18,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "krc",
+          "estimated_population_share_percent": 0.17,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "inh",
+          "estimated_population_share_percent": 0.16,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "tyv",
+          "estimated_population_share_percent": 0.13,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ady",
+          "estimated_population_share_percent": 0.09,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "az_Cyrl",
+          "estimated_population_share_percent": 0.09,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "lbe",
+          "estimated_population_share_percent": 0.08,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "koi",
+          "estimated_population_share_percent": 0.04,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "RW",
+      "alpha3": "RWA",
+      "name": "Rwanda",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "rw",
+          "estimated_population_share_percent": 77.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 15.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 5.8,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SA",
+      "alpha3": "SAU",
+      "name": "Saudi Arabia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SB",
+      "alpha3": "SLB",
+      "name": "Solomon Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "pis",
+          "estimated_population_share_percent": 82.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SC",
+      "alpha3": "SYC",
+      "name": "Seychelles",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "crs",
+          "estimated_population_share_percent": 98.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 53.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 38.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SD",
+      "alpha3": "SDN",
+      "name": "Sudan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "apd",
+          "estimated_population_share_percent": 61.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 61.0,
+          "official_status": "official"
+        },
+        {
+          "code": "bej",
+          "estimated_population_share_percent": 5.4,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SE",
+      "alpha3": "SWE",
+      "name": "Sweden",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sv",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 86.0,
+          "official_status": null
+        },
+        {
+          "code": "fi",
+          "estimated_population_share_percent": 2.2,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SG",
+      "alpha3": "SGP",
+      "name": "Singapore",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zh",
+          "estimated_population_share_percent": 77.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ms",
+          "estimated_population_share_percent": 14.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ta",
+          "estimated_population_share_percent": 2.1,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SH",
+      "alpha3": "SHN",
+      "name": "Saint Helena, Ascension and Tristan da Cunha",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 68.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SI",
+      "alpha3": "SVN",
+      "name": "Slovenia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sl",
+          "estimated_population_share_percent": 87.0,
+          "official_status": "official"
+        },
+        {
+          "code": "hr",
+          "estimated_population_share_percent": 61.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 59.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 42.0,
+          "official_status": null
+        },
+        {
+          "code": "vec",
+          "estimated_population_share_percent": 1.4,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SJ",
+      "alpha3": "SJM",
+      "name": "Svalbard and Jan Mayen",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "nb",
+          "estimated_population_share_percent": 51.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 41.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SK",
+      "alpha3": "SVK",
+      "name": "Slovakia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sk",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "cs",
+          "estimated_population_share_percent": 47.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 26.0,
+          "official_status": null
+        },
+        {
+          "code": "de",
+          "estimated_population_share_percent": 22.0,
+          "official_status": null
+        },
+        {
+          "code": "hu",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SL",
+      "alpha3": "SLE",
+      "name": "Sierra Leone",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "kri",
+          "estimated_population_share_percent": 95.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 35.0,
+          "official_status": "official"
+        },
+        {
+          "code": "men",
+          "estimated_population_share_percent": 27.0,
+          "official_status": null
+        },
+        {
+          "code": "tem",
+          "estimated_population_share_percent": 26.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SM",
+      "alpha3": "SMR",
+      "name": "San Marino",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "it",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SN",
+      "alpha3": "SEN",
+      "name": "Senegal",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "wo",
+          "estimated_population_share_percent": 70.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 26.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ff",
+          "estimated_population_share_percent": 21.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "srr",
+          "estimated_population_share_percent": 11.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "dyo",
+          "estimated_population_share_percent": 2.6,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "sav",
+          "estimated_population_share_percent": 1.5,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mfv",
+          "estimated_population_share_percent": 0.77,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "bjt",
+          "estimated_population_share_percent": 0.61,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "snf",
+          "estimated_population_share_percent": 0.24,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "knf",
+          "estimated_population_share_percent": 0.21,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "bsc",
+          "estimated_population_share_percent": 0.1,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "mey",
+          "estimated_population_share_percent": 0.04,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "tnr",
+          "estimated_population_share_percent": 0.02,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SO",
+      "alpha3": "SOM",
+      "name": "Somalia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "so",
+          "estimated_population_share_percent": 78.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 34.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SR",
+      "alpha3": "SUR",
+      "name": "Suriname",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "srn",
+          "estimated_population_share_percent": 68.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SS",
+      "alpha3": "SSD",
+      "name": "South Sudan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 27.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 27.0,
+          "official_status": "official"
+        },
+        {
+          "code": "nus",
+          "estimated_population_share_percent": 5.6,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ST",
+      "alpha3": "STP",
+      "name": "Sao Tome and Principe",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 20.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SV",
+      "alpha3": "SLV",
+      "name": "El Salvador",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 89.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SX",
+      "alpha3": "SXM",
+      "name": "Sint Maarten (Dutch part)",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 68.0,
+          "official_status": "official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "vic",
+          "estimated_population_share_percent": 6.7,
+          "official_status": null
+        },
+        {
+          "code": "nl",
+          "estimated_population_share_percent": 3.4,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SY",
+      "alpha3": "SYR",
+      "name": "Syrian Arab Republic",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 85.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 80.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ku",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 5.9,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "SZ",
+      "alpha3": "SWZ",
+      "name": "Eswatini",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 80.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ss",
+          "estimated_population_share_percent": 58.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zu",
+          "estimated_population_share_percent": 6.8,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TC",
+      "alpha3": "TCA",
+      "name": "Turks and Caicos Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TD",
+      "alpha3": "TCD",
+      "name": "Chad",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 17.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 13.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TF",
+      "alpha3": "ATF",
+      "name": "French Southern Territories",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 100.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TG",
+      "alpha3": "TGO",
+      "name": "Togo",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 41.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ee",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TH",
+      "alpha3": "THA",
+      "name": "Thailand",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "th",
+          "estimated_population_share_percent": 80.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 27.0,
+          "official_status": null
+        },
+        {
+          "code": "tts",
+          "estimated_population_share_percent": 24.0,
+          "official_status": null
+        },
+        {
+          "code": "nod",
+          "estimated_population_share_percent": 9.6,
+          "official_status": null
+        },
+        {
+          "code": "sou",
+          "estimated_population_share_percent": 8.0,
+          "official_status": null
+        },
+        {
+          "code": "mfa",
+          "estimated_population_share_percent": 5.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TJ",
+      "alpha3": "TJK",
+      "name": "Tajikistan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tg",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TK",
+      "alpha3": "TKL",
+      "name": "Tokelau",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tkl",
+          "estimated_population_share_percent": 69.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 38.0,
+          "official_status": "official"
+        },
+        {
+          "code": "sm",
+          "estimated_population_share_percent": 20.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TL",
+      "alpha3": "TLS",
+      "name": "Timor-Leste",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "pt",
+          "estimated_population_share_percent": 59.0,
+          "official_status": "official"
+        },
+        {
+          "code": "tet",
+          "estimated_population_share_percent": 59.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TM",
+      "alpha3": "TKM",
+      "name": "Turkmenistan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tk",
+          "estimated_population_share_percent": 70.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 12.0,
+          "official_status": null
+        },
+        {
+          "code": "uz",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TN",
+      "alpha3": "TUN",
+      "name": "Tunisia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "aeb",
+          "estimated_population_share_percent": 90.0,
+          "official_status": null
+        },
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 53.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TO",
+      "alpha3": "TON",
+      "name": "Tonga",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "to",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 28.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TR",
+      "alpha3": "TUR",
+      "name": "Türkiye",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tr",
+          "estimated_population_share_percent": 93.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 17.0,
+          "official_status": null
+        },
+        {
+          "code": "ku",
+          "estimated_population_share_percent": 5.5,
+          "official_status": null
+        },
+        {
+          "code": "apc",
+          "estimated_population_share_percent": 5.2,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TT",
+      "alpha3": "TTO",
+      "name": "Trinidad and Tobago",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 88.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TV",
+      "alpha3": "TUV",
+      "name": "Tuvalu",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "tvl",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 9.1,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TW",
+      "alpha3": "TWN",
+      "name": "Taiwan, Province of China",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "zh_Hant",
+          "estimated_population_share_percent": 95.0,
+          "official_status": "official"
+        },
+        {
+          "code": "nan_Hant",
+          "estimated_population_share_percent": 57.0,
+          "official_status": "official"
+        },
+        {
+          "code": "hak_Hant",
+          "estimated_population_share_percent": 11.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "TZ",
+      "alpha3": "TZA",
+      "name": "Tanzania, United Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sw",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 69.0,
+          "official_status": "official"
+        },
+        {
+          "code": "suk",
+          "estimated_population_share_percent": 8.7,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "UA",
+      "alpha3": "UKR",
+      "name": "Ukraine",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "uk",
+          "estimated_population_share_percent": 65.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 46.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "UG",
+      "alpha3": "UGA",
+      "name": "Uganda",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sw",
+          "estimated_population_share_percent": 75.0,
+          "official_status": "official"
+        },
+        {
+          "code": "lg",
+          "estimated_population_share_percent": 13.0,
+          "official_status": null
+        },
+        {
+          "code": "nyn",
+          "estimated_population_share_percent": 6.3,
+          "official_status": null
+        },
+        {
+          "code": "cgg",
+          "estimated_population_share_percent": 5.4,
+          "official_status": null
+        },
+        {
+          "code": "xog",
+          "estimated_population_share_percent": 5.3,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 3.9,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "UM",
+      "alpha3": "UMI",
+      "name": "United States Minor Outlying Islands",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "US",
+      "alpha3": "USA",
+      "name": "United States",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "es",
+          "estimated_population_share_percent": 9.6,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "haw",
+          "estimated_population_share_percent": 0.01,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "UY",
+      "alpha3": "URY",
+      "name": "Uruguay",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 88.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "UZ",
+      "alpha3": "UZB",
+      "name": "Uzbekistan",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "uz",
+          "estimated_population_share_percent": 85.0,
+          "official_status": "official"
+        },
+        {
+          "code": "uz_Cyrl",
+          "estimated_population_share_percent": 15.0,
+          "official_status": "official"
+        },
+        {
+          "code": "ru",
+          "estimated_population_share_percent": 14.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VA",
+      "alpha3": "VAT",
+      "name": "Holy See (Vatican City State)",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "it",
+          "estimated_population_share_percent": 82.0,
+          "official_status": "de_facto_official"
+        },
+        {
+          "code": "la",
+          "estimated_population_share_percent": 82.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VC",
+      "alpha3": "VCT",
+      "name": "Saint Vincent and the Grenadines",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 96.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VE",
+      "alpha3": "VEN",
+      "name": "Venezuela, Bolivarian Republic of",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "es",
+          "estimated_population_share_percent": 82.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VG",
+      "alpha3": "VGB",
+      "name": "Virgin Islands, British",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 98.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VI",
+      "alpha3": "VIR",
+      "name": "Virgin Islands, U.S.",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 75.0,
+          "official_status": "de_facto_official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VN",
+      "alpha3": "VNM",
+      "name": "Viet Nam",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "vi",
+          "estimated_population_share_percent": 86.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "VU",
+      "alpha3": "VUT",
+      "name": "Vanuatu",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bi",
+          "estimated_population_share_percent": 90.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 83.0,
+          "official_status": "official"
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 31.0,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "WF",
+      "alpha3": "WLF",
+      "name": "Wallis and Futuna",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 83.0,
+          "official_status": "official"
+        },
+        {
+          "code": "wls",
+          "estimated_population_share_percent": 59.0,
+          "official_status": null
+        },
+        {
+          "code": "fud",
+          "estimated_population_share_percent": 30.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "WS",
+      "alpha3": "WSM",
+      "name": "Samoa",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sm",
+          "estimated_population_share_percent": 100.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 2.1,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "XK",
+      "alpha3": null,
+      "name": "Kosovo",
+      "registry": "additional jurisdiction (not ISO 3166-1 alpha-2)",
+      "language_candidates": [
+        {
+          "code": "sq",
+          "estimated_population_share_percent": null,
+          "official_status": "official"
+        },
+        {
+          "code": "sr",
+          "estimated_population_share_percent": null,
+          "official_status": "official"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited"
+    },
+    {
+      "code": "YE",
+      "alpha3": "YEM",
+      "name": "Yemen",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "ar",
+          "estimated_population_share_percent": 74.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 9.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "YT",
+      "alpha3": "MYT",
+      "name": "Mayotte",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "swb",
+          "estimated_population_share_percent": 88.0,
+          "official_status": null
+        },
+        {
+          "code": "fr",
+          "estimated_population_share_percent": 63.0,
+          "official_status": "official"
+        },
+        {
+          "code": "buc",
+          "estimated_population_share_percent": 23.0,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ZA",
+      "alpha3": "ZAF",
+      "name": "South Africa",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "en",
+          "estimated_population_share_percent": 31.0,
+          "official_status": "official"
+        },
+        {
+          "code": "zu",
+          "estimated_population_share_percent": 24.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "xh",
+          "estimated_population_share_percent": 18.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "af",
+          "estimated_population_share_percent": 13.0,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "nso",
+          "estimated_population_share_percent": 9.4,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "tn",
+          "estimated_population_share_percent": 8.2,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "st",
+          "estimated_population_share_percent": 7.9,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ts",
+          "estimated_population_share_percent": 4.4,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ss",
+          "estimated_population_share_percent": 2.7,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "ve",
+          "estimated_population_share_percent": 2.3,
+          "official_status": "official_regional"
+        },
+        {
+          "code": "nr",
+          "estimated_population_share_percent": 1.6,
+          "official_status": "official_regional"
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ZM",
+      "alpha3": "ZMB",
+      "name": "Zambia",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "bem",
+          "estimated_population_share_percent": 34.0,
+          "official_status": null
+        },
+        {
+          "code": "ny",
+          "estimated_population_share_percent": 19.0,
+          "official_status": null
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 16.0,
+          "official_status": "official"
+        },
+        {
+          "code": "toi",
+          "estimated_population_share_percent": 11.0,
+          "official_status": null
+        },
+        {
+          "code": "loz",
+          "estimated_population_share_percent": 5.5,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    },
+    {
+      "code": "ZW",
+      "alpha3": "ZWE",
+      "name": "Zimbabwe",
+      "registry": "ISO 3166-1",
+      "language_candidates": [
+        {
+          "code": "sn",
+          "estimated_population_share_percent": 81.0,
+          "official_status": "official"
+        },
+        {
+          "code": "en",
+          "estimated_population_share_percent": 42.0,
+          "official_status": "official"
+        },
+        {
+          "code": "nd",
+          "estimated_population_share_percent": 12.0,
+          "official_status": "official"
+        },
+        {
+          "code": "mxc",
+          "estimated_population_share_percent": 6.5,
+          "official_status": null
+        },
+        {
+          "code": "ndc",
+          "estimated_population_share_percent": 6.1,
+          "official_status": null
+        },
+        {
+          "code": "kck",
+          "estimated_population_share_percent": 5.3,
+          "official_status": null
+        }
+      ],
+      "engines_verified": [],
+      "search_engine_discovery_status": "not_audited",
+      "note": "language data is a CLDR starting point, not an official SEO market assessment"
+    }
+  ]
+}

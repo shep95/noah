@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>usel / global search compiler</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand"><span class="logo">u</span><div><strong>usel</strong><small>universal search engine language</small></div></div>
+    <div class="rail-group"><div class="eyebrow">workspace</div><button class="nav active" data-tab="overview">overview</button><button class="nav" data-tab="compiler">compiler</button><button class="nav" data-tab="engines">search engines</button><button class="nav" data-tab="countries">countries</button></div>
+    <div class="rail-foot"><span class="live-dot"></span> local-only development studio <p>documentation-aware, not a live ranking promise.</p></div>
+  </aside>
+  <main class="main">
+    <header class="top"><div><span class="eyebrow">research / development / verification</span><h1 id="page-title">global search coverage</h1></div><span class="status-label">v0.2 · working prototype</span></header>
+    <section id="overview" class="panel active">
+      <p class="lede">one SEO source, many search engines and languages. engine capabilities remain independent even when results come from shared indexes.</p>
+      <div class="metrics"><article><div class="metric" id="country-count">—</div><small>geographic records</small></article><article><div class="metric" id="engine-count">—</div><small>engine and crawler profiles</small></article><article><div class="metric" id="documented-count">—</div><small>documentation-reviewed profiles</small></article></div>
+      <div class="section-block"><div class="section-heading"><h2>what it does</h2><span>tested locally</span></div><div class="cap-grid"><div><div class="cap-num">01 / source</div><h3>write once</h3><p>define public pages, localized content and indexing intent in one YAML or JSON configuration.</p></div><div><div class="cap-num">02 / compile</div><h3>publishable HTML</h3><p>emit crawlable pages, canonical links, language alternates, sitemaps, robots.txt and schema.</p></div><div><div class="cap-num">03 / evidence</div><h3>engine differences</h3><p>track official rules, IndexNow partners, inherited result providers and unresolved research.</p></div><div><div class="cap-num">04 / audit</div><h3>verify outputs</h3><p>check generated paths, sitemap contents, non-indexed pages and reciprocal hreflang.</p></div></div></div>
+      <div class="note">the registry is worldwide in structure, but rules are not yet verified for every search service. the studio never invents translations, submissions, rankings or search traffic.</div>
+    </section>
+    <section id="compiler" class="panel">
+      <div class="section-heading"><div><h2>source editor</h2><p>edit the example, then compile a real website output ZIP.</p></div><div class="actions"><button id="load-example" class="secondary">load example</button><button id="compile" class="primary">compile &amp; download</button></div></div>
+      <label for="source">usel specification · YAML / JSON</label>
+      <textarea id="source" spellcheck="false" aria-label="USEL configuration" placeholder="loading example…"></textarea>
+      <div class="note" id="compiler-status" aria-live="polite">the example uses the reserved .example domain. replace it with your real, verified domain before publishing.</div>
+    </section>
+    <section id="engines" class="panel">
+      <div class="section-heading"><div><h2>engine capability registry</h2><p>each search provider has its own evidence and rules status.</p></div><label class="search-wrap"><input id="engine-search" type="search" placeholder="filter engines, providers, countries…" aria-label="filter search engines"></label></div>
+      <div class="table-wrap"><table><thead><tr><th>engine</th><th>kind</th><th>sitemaps</th><th>IndexNow</th><th>rule evidence</th></tr></thead><tbody id="engine-rows"></tbody></table></div>
+      <p class="table-foot">“unknown” is never treated as “unsupported.” provider relationships do not imply identical ranking rules.</p>
+    </section>
+    <section id="countries" class="panel">
+      <div class="section-heading"><div><h2>geographic coverage</h2><p>249 ISO countries/territories + one additional jurisdiction.</p></div><label class="search-wrap"><input id="country-search" type="search" placeholder="filter country or code…" aria-label="filter countries"></label></div>
+      <div class="table-wrap"><table><thead><tr><th>territory / country</th><th>code</th><th>language candidates (CLDR)</th><th>market review</th></tr></thead><tbody id="country-rows"></tbody></table></div>
+      <p class="table-foot">a geographic record is not evidence that a country has its own independent search engine. market research remains a separate step.</p>
+    </section>
+  </main>
+</div>
+<script src="/app.js" defer></script>
+</body></html>
