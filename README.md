@@ -39,6 +39,21 @@ Each file has a `.sha256` next to it (add `.sha256` to the link) so you can chec
 5. **mission control**: every conversation, the decisions waiting on you, evidence, spend and how past work held up.
 6. **device room**: antivirus, firewall, encryption, updates, open ports, health and a system-wide ad blocker.
 
+## screenshots
+
+<p align="center"><img src="docs/readme/screens/editor.png" alt="the editor in noah's dark theme over its wallpaper" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/readme/screens/shepherd.png" alt="shepherd's panel beside the code"><br><sub><b>shepherd</b>: set up any provider or a local model, then ask</sub></td>
+<td width="50%"><img src="docs/readme/screens/terminal.png" alt="the terminal room"><br><sub><b>terminal</b>: under the code, in the same window</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/readme/screens/mission.png" alt="mission control"><br><sub><b>mission control</b>: decisions, evidence, spend and outcomes</sub></td>
+<td width="50%"><img src="docs/readme/screens/donate.png" alt="the donate box with the bitcoin address"><br><sub><b>donate</b>: the bitcoin address, one click to copy</sub></td>
+</tr>
+</table>
+
 ## how a change flows
 
 ```mermaid

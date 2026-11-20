@@ -1,6 +1,6 @@
 use gpui::{ClipboardItem, DismissEvent, EventEmitter, FocusHandle, Focusable};
 use theme::ActiveTheme;
-use ui::{AlertModal, prelude::*};
+use ui::{AlertModal, TintColor, prelude::*};
 
 use crate::ModalView;
 
@@ -93,7 +93,7 @@ impl Render for DonateModal {
                             "copy-bitcoin-address",
                             if self.copied { "copied" } else { "copy address" },
                         )
-                        .style(ButtonStyle::Filled)
+                        .style(ButtonStyle::Tinted(TintColor::Accent))
                         .on_click(cx.listener(|this, _, _window, cx| this.copy_address(cx))),
                     ),
             )
