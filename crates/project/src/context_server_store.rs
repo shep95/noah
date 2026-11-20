@@ -1139,11 +1139,14 @@ impl ContextServerStore {
         let mut merged = HashMap::default();
         for worktree in worktree_store.read(cx).visible_worktrees(cx) {
             let worktree_id = worktree.read(cx).id();
-            let location = settings::SettingsLocation {
+            // A worktree shared by a collaboration host isn't on this machine:
+            // its project settings are the host's, so their context servers
+            // (commands this machine would start) are not taken from it.
+            let location = worktree.read(cx).is_local().then(|| settings::SettingsLocation {
                 worktree_id,
                 path: RelPath::empty(),
-            };
-            for (id, settings) in &ProjectSettings::get(Some(location), cx).context_servers {
+            });
+            for (id, settings) in &ProjectSettings::get(location, cx).context_servers {
                 merged
                     .entry(id.clone())
                     .or_insert_with(|| ContextServerSettingsEntry {
