@@ -75,6 +75,12 @@ const TOOLS: &[ToolInfo] = &[
         regex_explanation: "Patterns are matched against the browser command and its arguments, for example `open https://example.com` or `click @e3`.",
     },
     ToolInfo {
+        id: "computer",
+        name: "Screen",
+        description: "Seeing and controlling this computer's screen: screenshots, clicks and typing in any application",
+        regex_explanation: "Patterns are matched against the action, for example `click at 120,340` or `type \"hello\"`.",
+    },
+    ToolInfo {
         id: "evidence",
         name: "Evidence",
         description: "Repeating test commands to find flaky tests, and mutation testing (temporary edits, always restored)",

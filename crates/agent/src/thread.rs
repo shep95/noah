@@ -1,5 +1,5 @@
 use crate::{
-    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, CodebaseTool,
+    ApplyCodeActionTool, AskUserTool, BrowserTool, CodeActionStore, CodebaseTool, ComputerTool,
     ContextServerRegistry, CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel,
     DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, EvidenceTool, FetchTool, FindPathTool,
     FindReferencesTool, GetCodeActionsTool, GoToDefinitionTool, GrepTool, ListAddonsTool,
@@ -2179,7 +2179,9 @@ impl Thread {
             language_registry,
         ));
         self.add_tool(FetchTool::new(self.project.read(cx).client().http_client()));
-        self.add_tool(crate::FootprintTool::new(self.project.read(cx).client().http_client()));
+        self.add_tool(crate::FootprintTool::new(
+            self.project.read(cx).client().http_client(),
+        ));
         self.add_tool(FindPathTool::new(self.project.clone()));
         self.add_tool(GrepTool::new(self.project.clone()));
         self.add_tool(ListDirectoryTool::new(self.project.clone()));
@@ -2198,6 +2200,7 @@ impl Thread {
         ));
         self.add_tool(WebSearchTool);
         self.add_tool(BrowserTool);
+        self.add_tool(ComputerTool);
         self.add_tool(ModelFileTool);
         self.add_tool(EvidenceTool::new(self.project.clone()));
         self.add_tool(VerifyTool::new(self.project.clone()));

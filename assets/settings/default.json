@@ -1288,6 +1288,10 @@
     // Whether shepherd may take screenshots of pages in the browser room.
     // Off until you turn it on; each screenshot asks first either way.
     "browser_screenshots": false,
+    // Whether shepherd may see and control this computer's screen (mouse,
+    // keyboard, screenshots of the whole desktop) for tasks you give it.
+    // Off until you turn it on; each action asks unless full access is on.
+    "computer_use": false,
     // After shepherd changes code, noah runs the project's own check and hands
     // failures back to be fixed, until it passes (three rounds at most).
     "verify_after_edits": true,
@@ -1328,6 +1332,7 @@
         "enable_all_context_servers": true,
         "tools": {
           "browser": true,
+          "computer": true,
           "codebase": true,
           "copy_path": true,
           "create_directory": true,

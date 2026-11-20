@@ -1017,6 +1017,7 @@ mod tests {
             auto_approve: false,
             research_mode: Default::default(),
             browser_screenshots: false,
+            computer_use: false,
             canvas: false,
             verify_after_edits: false,
             monthly_budget_usd: None,

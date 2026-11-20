@@ -3042,9 +3042,7 @@ impl AgentPanel {
                             trusted_worktrees.trust(
                                 &worktree_store,
                                 HashSet::from_iter([
-                                    project::trusted_worktrees::PathTrust::AbsPath(
-                                        folder.clone(),
-                                    ),
+                                    project::trusted_worktrees::PathTrust::AbsPath(folder.clone()),
                                 ]),
                                 cx,
                             );
@@ -6309,16 +6307,16 @@ impl AgentPanel {
         let auto_approve = AgentSettings::get_global(cx).auto_approve;
         let auto_approve_button = IconButton::new("toggle-auto-approve", IconName::CheckDouble)
             .icon_size(IconSize::Small)
-            .icon_color(if auto_approve { Color::Accent } else { Color::Muted })
+            .icon_color(if auto_approve { Color::Warning } else { Color::Muted })
             .toggle_state(auto_approve)
             .tooltip(move |_, cx| {
                 Tooltip::with_meta(
-                    if auto_approve { "auto-approve is on" } else { "auto-approve" },
+                    if auto_approve { "full access is on" } else { "full access" },
                     None,
                     if auto_approve {
-                        "shepherd acts without asking; press to be asked again"
+                        "shepherd edits, runs commands and browses without asking. wiping the disk is still refused, and each message can be restored. press to be asked again"
                     } else {
-                        "let shepherd do everything without asking you first"
+                        "let shepherd edit, run commands and browse without asking you first"
                     },
                     cx,
                 )

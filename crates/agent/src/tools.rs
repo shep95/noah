@@ -6,6 +6,7 @@ mod cost_of_tool;
 mod explain_diff_tool;
 mod footprint_tool;
 mod browser_tool;
+mod computer_tool;
 mod codebase_tool;
 mod context_server_registry;
 mod copy_path_tool;
@@ -89,6 +90,7 @@ pub use cost_of_tool::*;
 pub use explain_diff_tool::*;
 pub use footprint_tool::*;
 pub use browser_tool::*;
+pub use computer_tool::*;
 pub use codebase_tool::*;
 pub use context_server_registry::*;
 pub use copy_path_tool::*;
@@ -227,6 +229,7 @@ tools! {
     FootprintTool,
     BrowserTool,
     CodebaseTool,
+    ComputerTool,
     CopyPathTool,
     CreateDirectoryTool,
     CreateThreadTool,

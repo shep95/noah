@@ -8925,14 +8925,28 @@ fn ai_page(cx: &App) -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
-                title: "Auto-Approve",
-                description: "shepherd never stops to ask for approval: every tool call, sandbox request and sensitive edit runs as approved, whatever the tool permission rules say. Also a switch in the shepherd panel's toolbar.",
+                title: "Full Access",
+                description: "shepherd never stops to ask: every edit, command, browser and screen action runs as approved, whatever the tool permission rules say. Wiping the disk or home folder is still refused, and each message can be restored. Also a switch in the shepherd panel's toolbar.",
                 field: Box::new(SettingField {
                     organization_override: None,
                     json_path: Some("agent.auto_approve"),
                     pick: |settings_content| settings_content.agent.as_ref()?.auto_approve.as_ref(),
                     write: |settings_content, value, _| {
                         settings_content.agent.get_or_insert_default().auto_approve = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Screen Control",
+                description: "Let shepherd see and control this computer's screen (screenshots, mouse and keyboard in any application) for tasks you give it. Each action asks unless full access is on. On macOS, noah also needs Screen Recording and Accessibility permission.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.computer_use"),
+                    pick: |settings_content| settings_content.agent.as_ref()?.computer_use.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().computer_use = value;
                     },
                 }),
                 metadata: None,

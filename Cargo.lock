@@ -279,6 +279,7 @@ dependencies = [
  "html_to_markdown",
  "http_client",
  "http_proxy",
+ "image",
  "indoc",
  "itertools 0.14.0",
  "language",

@@ -469,9 +469,12 @@ pub fn decide_permission_from_settings(
     inputs: &[String],
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
-    // The person asked not to be asked; rules and patterns are skipped.
+    // The person asked not to be asked; their rules and patterns are skipped,
+    // but the built-in bans (wiping the disk or home folder) still refuse
+    // rather than ask, so full access never means unrecoverable.
     if settings.auto_approve {
-        return ToolPermissionDecision::Allow;
+        return check_hardcoded_security_rules(tool_name, inputs, ShellKind::system())
+            .unwrap_or(ToolPermissionDecision::Allow);
     }
     ToolPermissionDecision::from_input(
         tool_name,
@@ -570,6 +573,28 @@ mod tests {
     use settings::{DockPosition, NotifyWhenAgentWaiting, PlaySoundWhenAgentDone};
     use std::sync::Arc;
 
+    #[test]
+    fn full_access_still_refuses_wiping_the_disk() {
+        let mut settings = test_agent_settings(ToolPermissions::default());
+        settings.auto_approve = true;
+        assert!(matches!(
+            decide_permission_from_settings(
+                TerminalTool::NAME,
+                &["rm -rf /".to_string()],
+                &settings
+            ),
+            ToolPermissionDecision::Deny(_)
+        ));
+        assert_eq!(
+            decide_permission_from_settings(
+                TerminalTool::NAME,
+                &["cargo test".to_string()],
+                &settings
+            ),
+            ToolPermissionDecision::Allow
+        );
+    }
+
     fn test_agent_settings(tool_permissions: ToolPermissions) -> AgentSettings {
         AgentSettings {
             enabled: true,
@@ -603,6 +628,7 @@ mod tests {
             auto_approve: false,
             research_mode: Default::default(),
             browser_screenshots: false,
+            computer_use: false,
             canvas: false,
             verify_after_edits: false,
             monthly_budget_usd: None,

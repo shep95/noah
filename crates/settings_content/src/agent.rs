@@ -358,6 +358,12 @@ pub struct AgentSettingsContent {
     ///
     /// Default: false
     pub browser_screenshots: Option<bool>,
+    /// Whether shepherd may see and control this computer's screen (mouse,
+    /// keyboard and screenshots of the whole desktop) for tasks you give it.
+    /// Each action asks unless auto-approve is on.
+    ///
+    /// Default: false
+    pub computer_use: Option<bool>,
     /// After shepherd changes code, noah runs the project's own check (build,
     /// tests or type check, found per project), hands failures back to
     /// shepherd to fix, and repeats until it passes or three rounds are up.
