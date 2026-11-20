@@ -1,7 +1,90 @@
 > [!IMPORTANT]
 > Remove this line to confirm you've reviewed this PR before submitting.
 
+<p align="center"><img src="docs/readme/hero.svg" alt="noah" width="100%"></p>
+
 # noah
+
+## download
+
+| platform | get it | notes |
+|---|---|---|
+| **windows** (x64) | [noah-windows-x86_64.exe](https://noah.asherin.com/downloads/noah-windows-x86_64.exe) | installer; see "this file might be a security risk" below |
+| **linux** (x64) | [noah-linux-x86_64.tar.xz](https://noah.asherin.com/downloads/noah-linux-x86_64.tar.xz) · [.deb](https://noah.asherin.com/downloads/noah-linux-amd64.deb) | unpack and run `bin/noah`, or install the `.deb` |
+| **macos** | not published yet | build from source for now |
+| **ios / android** | not available | noah's interface framework (GPUI) only runs on desktop systems |
+| **from source** | `cargo run --release` | any desktop system |
+
+Each file has a `.sha256` next to it (add `.sha256` to the link) so you can check the download.
+
+## capabilities, in order
+
+<table>
+<tr>
+<td><img src="docs/readme/cap1.svg" alt="1 edit"></td>
+<td><img src="docs/readme/cap2.svg" alt="2 shepherd"></td>
+<td><img src="docs/readme/cap3.svg" alt="3 offline"></td>
+</tr>
+<tr>
+<td><img src="docs/readme/cap4.svg" alt="4 browser room"></td>
+<td><img src="docs/readme/cap5.svg" alt="5 mission control"></td>
+<td><img src="docs/readme/cap6.svg" alt="6 device room"></td>
+</tr>
+</table>
+
+1. **edit**: a fast, native, GPU-rendered editor (a fork of Zed) with language servers, git and a terminal.
+2. **shepherd**: the built-in agent. It plans, edits, runs the project's own checks and hands in evidence for each change.
+3. **offline**: point shepherd at a local model through Ollama and nothing you type leaves the computer. Editing, git, the terminal and the device room need no network at all.
+4. **browser room**: a real browser shepherd can read and click in while you watch, and take over at any time.
+5. **mission control**: every conversation, the decisions waiting on you, evidence, spend and how past work held up.
+6. **device room**: antivirus, firewall, encryption, updates, open ports, health and a system-wide ad blocker.
+
+## how a change flows
+
+```mermaid
+flowchart LR
+    A([you ask]) --> B[shepherd plans]
+    B --> C[edits files]
+    C --> D{project check<br/>build · tests · types}
+    D -- fails --> C
+    D -- passes --> E[evidence: commands run,<br/>claims tied to them]
+    E --> F[second-family review]
+    F --> G([you accept or reject])
+```
+
+## how noah is put together
+
+```mermaid
+flowchart TB
+    subgraph machine[your computer]
+        UI[editor · rooms · rail] --> AG[shepherd agent]
+        AG --> T[tools: files · terminal · browser]
+        AG --> K[(system keychain:<br/>your API keys)]
+        AG --> L[local model via Ollama]
+    end
+    AG -. only with your key .-> P[model provider]
+    UI -. signed updates .-> U[noah.asherin.com]
+```
+
+## offline
+
+1. install [Ollama](https://ollama.com) and pull a model, for example `ollama pull qwen2.5-coder`.
+2. in noah, open shepherd and choose **set up models**, then **Ollama (your computer)**.
+3. pick the model in the model menu. shepherd now runs entirely on this machine.
+
+Auto-update checks and web search need the network. When it isn't there they fail and say so, and nothing else stops working.
+
+## donate
+
+noah is free, with no ads and no tracking. If it helps you, a bitcoin donation keeps it going:
+
+```
+bc1qwhu7xz88spa56mfvmg0zhtwlr4sny0qel2k2t8
+```
+
+Inside noah, the **donate** button on the left rail shows the address with a copy button.
+
+## more
 
 **noah** is a fast, native code editor with a built-in AI pair-programmer called **shepherd**.
 It is a fork of [Zed](https://github.com/zed-industries/zed), rebranded and extended by

@@ -18,6 +18,7 @@ mod persistence;
 pub mod rail_apps;
 mod room_rail;
 pub mod searchable;
+pub mod donate_modal;
 pub mod security_modal;
 pub mod shared_screen;
 pub use shared_screen::SharedScreen;
@@ -30,7 +31,7 @@ mod toolbar;
 pub mod welcome;
 pub use room_rail::{
     EnterBrowserRoom, EnterChangesRoom, EnterDeviceRoom, EnterMissionRoom, EnterFilesRoom, EnterShepherdRoom, EnterTerminalRoom,
-    EnterWriteRoom, Room, SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
+    EnterWriteRoom, OpenDonate, Room, SHEPHERD_AWAITING_APPROVAL, SHEPHERD_WORKING,
 };
 pub mod workspace_error;
 mod workspace_settings;

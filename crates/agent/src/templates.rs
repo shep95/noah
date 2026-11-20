@@ -238,8 +238,8 @@ mod tests {
         };
         let templates = Templates::new();
         let rendered = template.render(&templates).unwrap();
-        assert!(rendered.contains("you are a pattern-reading assistant"));
-        assert!(rendered.contains("Today's Date: 2026-01-01"));
+        assert!(rendered.contains("you are shepherd. a multidisciplinary"));
+        assert!(rendered.contains("Now: 2026-01-01"));
         assert!(rendered.contains("you are running inside noah"));
         assert!(rendered.contains("test-model"));
     }

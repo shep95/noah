@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="150" viewBox="0 0 380 150">
+  <rect x="1" y="1" width="378" height="148" rx="22" fill="#111412" stroke="#2c3a33" stroke-width="2"/>
+  <circle cx="46" cy="50" r="22" fill="#23362d"/>
+  <text x="46" y="58" text-anchor="middle" fill="#cfe3d8" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="22" font-weight="600">3</text>
+  <text x="84" y="58" fill="#eeeeee" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="22" font-weight="600">offline</text>
+  <text x="24" y="104" fill="#9aa69f" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="16">local models through Ollama;</text>
+  <text x="24" y="128" fill="#9aa69f" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="16">nothing leaves the machine</text>
+</svg>

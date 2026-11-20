@@ -424,9 +424,13 @@ pub fn listen_for_cli_connections(opener: OpenListener) -> Result<()> {
             let live = UnixDatagram::unbound()
                 .and_then(|probe| probe.connect(&sock_path))
                 .is_ok();
-            if !live {
-                std::fs::remove_file(&sock_path).log_err();
+            // A live socket means another copy of noah is running: report it
+            // so this launch hands its paths over instead of opening a second
+            // copy on the same database and session.
+            if live {
+                anyhow::bail!("noah is already running");
             }
+            std::fs::remove_file(&sock_path).log_err();
         }
         Err(_) => {}
     }

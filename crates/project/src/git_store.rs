@@ -3484,6 +3484,16 @@ impl GitStore {
     /// A path a collaborator or a remote editor names must sit inside a
     /// shared worktree; the request is theirs, the disk is this machine's.
     fn ensure_inside_worktrees(this: &Entity<Self>, path: &Path, cx: &AsyncApp) -> Result<()> {
+        // `starts_with` compares components without resolving `..`, so
+        // `/project/../elsewhere` would otherwise pass.
+        anyhow::ensure!(
+            path.is_absolute()
+                && !path
+                    .components()
+                    .any(|component| matches!(component, std::path::Component::ParentDir)),
+            "the path {} is outside the shared project",
+            path.display()
+        );
         let inside = cx.update(|cx| {
             let worktree_store = this.read(cx).worktree_store.read(cx);
             worktree_store

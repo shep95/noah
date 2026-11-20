@@ -594,8 +594,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             cx.new(|cx| which_key::PendingKeystrokesIndicator::new(window, cx));
         let image_info = cx.new(|_cx| ImageInfo::new(workspace));
 
-
-
         let cursor_position =
             cx.new(|_| go_to_line::cursor_position::CursorPosition::new(workspace));
         let line_ending_indicator =
@@ -698,7 +696,14 @@ fn show_software_emulation_warning_if_needed(
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) {
-    if specs.is_software_emulated && std::env::var("ZED_ALLOW_EMULATED_GPU").is_err() {
+    // Once per run: every new window would otherwise repeat the warning and
+    // steal focus from whatever prompt that window opened with.
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if specs.is_software_emulated
+        && std::env::var("NOAH_ALLOW_EMULATED_GPU").is_err()
+        && std::env::var("ZED_ALLOW_EMULATED_GPU").is_err()
+        && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed)
+    {
         let (graphics_api, docs_url, open_url) = if cfg!(target_os = "windows") {
             (
                 "DirectX",
@@ -720,7 +725,7 @@ fn show_software_emulation_warning_if_needed(
             will result in awful performance.
 
             For troubleshooting see: {}
-            Set ZED_ALLOW_EMULATED_GPU=1 env var to permanently override.
+            Set NOAH_ALLOW_EMULATED_GPU=1 env var to permanently override.
             "#},
             graphics_api, specs.device_name, docs_url
         );
@@ -801,15 +806,22 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
 }
 
 /// Whether any open project carries a debugger launch configuration.
-fn debug_launch_config_exists(workspace: &WeakEntity<Workspace>, cx: &mut AsyncWindowContext) -> bool {
+fn debug_launch_config_exists(
+    workspace: &WeakEntity<Workspace>,
+    cx: &mut AsyncWindowContext,
+) -> bool {
     workspace
         .read_with(cx, |workspace, cx| {
-            workspace.project().read(cx).visible_worktrees(cx).any(|worktree| {
-                let root = worktree.read(cx).abs_path();
-                [".zed/debug.json", ".noah/debug.json", ".vscode/launch.json"]
-                    .iter()
-                    .any(|file| root.join(file).is_file())
-            })
+            workspace
+                .project()
+                .read(cx)
+                .visible_worktrees(cx)
+                .any(|worktree| {
+                    let root = worktree.read(cx).abs_path();
+                    [".zed/debug.json", ".noah/debug.json", ".vscode/launch.json"]
+                        .iter()
+                        .any(|file| root.join(file).is_file())
+                })
         })
         .unwrap_or(false)
 }

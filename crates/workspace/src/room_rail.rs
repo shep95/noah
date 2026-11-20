@@ -29,6 +29,8 @@ actions!(
         EnterMissionRoom,
         /// Opens the device room: this computer's security and health.
         EnterDeviceRoom,
+        /// Shows how to support noah with a bitcoin donation.
+        OpenDonate,
     ]
 );
 
@@ -142,6 +144,9 @@ pub(crate) fn room_actions(div: Div, cx: &mut Context<Workspace>) -> Div {
     .on_action(cx.listener(|workspace, _: &EnterDeviceRoom, window, cx| {
         workspace.enter_room(Room::Device, window, cx)
     }))
+    .on_action(
+        cx.listener(|workspace, _: &OpenDonate, window, cx| workspace.open_donate(window, cx)),
+    )
     .on_action(cx.listener(
         |workspace, _: &zed_actions::ToggleBackgroundColors, _window, cx| {
             let adapts = crate::WorkspaceSettings::get_global(cx).wallpaper_adapts_theme;
@@ -287,6 +292,7 @@ fn settings_menu(window: &mut Window, cx: &mut App) -> Entity<ContextMenu> {
             )
             .action("mission control", Box::new(EnterMissionRoom))
             .action("device security", Box::new(EnterDeviceRoom))
+            .action("donate", Box::new(OpenDonate))
             .separator()
             .header("tools")
             .action(
@@ -462,10 +468,13 @@ impl Workspace {
             crate::notifications::NotificationId::unique::<CaptureNotification>(),
             message,
         );
+        // Only successes fade on their own; a failure stays until it is read.
         if let Some(path) = path {
-            toast = toast.on_click("show in folder", move |_, cx| cx.reveal_path(&path));
+            toast = toast
+                .on_click("show in folder", move |_, cx| cx.reveal_path(&path))
+                .autohide();
         }
-        self.show_toast(toast.autohide(), cx);
+        self.show_toast(toast, cx);
     }
 
     /// The room whose panel is showing, or the writing room when none is.
@@ -653,7 +662,7 @@ impl Workspace {
                                 .size(px(6.))
                                 .rounded_full()
                                 .bg(if awaiting_approval {
-                                    status.success
+                                    status.warning
                                 } else {
                                     colors.text_muted
                                 }),
@@ -990,6 +999,15 @@ impl Workspace {
                     })
             }))
             .child(
+                IconButton::new("donate", IconName::Sparkle)
+                    .icon_size(IconSize::Small)
+                    .icon_color(Color::Muted)
+                    .tooltip(|_window, cx| Tooltip::for_action("donate", &OpenDonate, cx))
+                    .on_click(cx.listener(|workspace, _, window, cx| {
+                        workspace.open_donate(window, cx)
+                    })),
+            )
+            .child(
                 div().pb_3().child(
                     PopoverMenu::new("settings-menu")
                         .trigger_with_tooltip(
@@ -1002,5 +1020,13 @@ impl Workspace {
                         .menu(|window, cx| Some(settings_menu(window, cx))),
                 ),
             )
+    }
+}
+
+impl Workspace {
+    pub fn open_donate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.toggle_modal(window, cx, |_window, cx| {
+            crate::donate_modal::DonateModal::new(cx)
+        });
     }
 }

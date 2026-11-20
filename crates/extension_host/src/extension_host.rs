@@ -672,6 +672,11 @@ impl ExtensionStore {
             .map(|(id, _)| id.as_ref())
             .collect::<Vec<_>>()
             .join(",");
+        if extension_ids.is_empty() {
+            return Task::ready(Ok(Vec::new()));
+        }
+        let requested_ids: collections::HashSet<Arc<str>> =
+            extension_ids.split(',').map(Arc::from).collect();
         let task = self.fetch_extensions_from_api(
             "/extensions/updates",
             &[
@@ -691,12 +696,18 @@ impl ExtensionStore {
             this.update(cx, |this, _cx| {
                 extensions
                     .into_iter()
+                    // Only extensions that were asked about: the registry's
+                    // answer must not be able to install something new or
+                    // update one the person opted out of.
                     .filter(|extension| {
                         this.extension_index
                             .extensions
                             .get(&extension.id)
-                            .is_none_or(|installed_extension| {
-                                installed_extension.manifest.version != extension.manifest.version
+                            .is_some_and(|installed_extension| {
+                                !installed_extension.dev
+                                    && requested_ids.contains(&extension.id)
+                                    && installed_extension.manifest.version
+                                        != extension.manifest.version
                             })
                     })
                     .collect()

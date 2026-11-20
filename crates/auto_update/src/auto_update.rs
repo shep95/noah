@@ -662,6 +662,15 @@ impl AutoUpdater {
         };
         let release_channel = cx.update(|cx| ReleaseChannel::try_global(cx));
         let manifest = Self::fetch_noah_manifest(&client, release_channel).await?;
+        // Checked before the build number is believed: an unsigned manifest
+        // must not be able to report "up to date" and freeze updates.
+        #[cfg(not(test))]
+        manifest.verify_signature()?;
+        #[cfg(test)]
+        match cx.try_read_global::<tests::ReleaseKeyOverride, _>(|key, _| key.0.clone()) {
+            Some(key) => manifest.verify_signature_with(&key)?,
+            None => manifest.verify_signature()?,
+        }
         if !noah_release::is_newer(manifest.build, installed_build, downloaded_build) {
             this.update(cx, |this, cx| {
                 this.status = match previous_status {
@@ -676,13 +685,6 @@ impl AutoUpdater {
                 cx.notify();
             });
             return Ok(());
-        }
-        #[cfg(not(test))]
-        manifest.verify_signature()?;
-        #[cfg(test)]
-        match cx.try_read_global::<tests::ReleaseKeyOverride, _>(|key, _| key.0.clone()) {
-            Some(key) => manifest.verify_signature_with(&key)?,
-            None => manifest.verify_signature()?,
         }
         let newer_version = manifest.version();
         let asset = manifest.asset_for(OS, ARCH).cloned().ok_or_else(|| {

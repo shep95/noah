@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c0c0c"/><stop offset="1" stop-color="#1d2a24"/>
+    </linearGradient>
+    <clipPath id="r"><rect width="1200" height="360" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1200" height="360" fill="url(#g)"/>
+    <path d="M0 290 C 260 220 420 300 640 250 S 1000 190 1200 240 V360 H0Z" fill="#23362d" opacity=".8"/>
+    <path d="M0 320 C 300 280 520 340 760 300 S 1060 270 1200 300 V360 H0Z" fill="#15211b"/>
+  </g>
+  <text x="80" y="150" fill="#eeeeee" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="84" font-weight="600">noah</text>
+  <text x="84" y="205" fill="#a8b5ae" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="26">a native code editor with shepherd, an agent that proves its work</text>
+  <text x="84" y="245" fill="#6f7d75" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="20">free · offline-capable · your keys stay on your machine</text>
+</svg>
