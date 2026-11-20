@@ -2345,6 +2345,8 @@ impl Render for DevicePanel {
             .key_context("DevicePanel")
             .track_focus(&self.focus_handle)
             .size_full()
+            // Opens over the wallpaper; the backing keeps its text readable.
+            .bg(cx.theme().colors().panel_background)
             .px_3()
             .pb_4()
             .overflow_y_scroll()

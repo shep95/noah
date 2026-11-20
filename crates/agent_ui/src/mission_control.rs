@@ -1430,6 +1430,9 @@ impl Render for MissionControlPanel {
             .key_context("MissionControlPanel")
             .track_focus(&self.focus_handle)
             .size_full()
+            // Opens over the wallpaper; without a backing its small text sits
+            // straight on the photo.
+            .bg(cx.theme().colors().panel_background)
             .px_3()
             .pb_4()
             .overflow_y_scroll()
