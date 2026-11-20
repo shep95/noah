@@ -1,6 +1,6 @@
 use gpui::{Action, IntoElement, ParentElement, RenderOnce};
 use language_model::{IconOrSvg, LanguageModelRegistry, ZED_CLOUD_PROVIDER_ID};
-use ui::{Divider, List, ListBulletItem, prelude::*};
+use ui::{Divider, List, ListBulletItem, TintColor, prelude::*};
 
 pub struct ApiKeysWithProviders {
     configured_providers: Vec<(IconOrSvg, SharedString)>,
@@ -212,34 +212,58 @@ impl RenderOnce for ApiKeysWithoutProviders {
             )
             .child(
                 Label::new(
-                    "These give you a free key in a minute, no card needed. Paste it under set up models. Each line says where the company is and what it does with what you send.",
+                    "These give you a free key in a minute, no card needed. Each one says where the company is and what it does with what you send.",
                 )
                 .size(LabelSize::Small)
                 .color(Color::Muted),
             )
-            .children(FREE_PROVIDERS.iter().map(|provider| {
-                v_flex()
-                    .child(
-                        Button::new(provider.id, format!("{} ({})", provider.name, provider.country))
-                            .full_width()
-                            .style(ButtonStyle::Subtle)
-                            .label_size(LabelSize::Small)
-                            .end_icon(Icon::new(IconName::ArrowUpRight).size(IconSize::XSmall))
-                            .on_click(move |_, _, cx| cx.open_url(provider.url)),
-                    )
-                    .child(
-                        Label::new(provider.data)
-                            .size(LabelSize::XSmall)
-                            .color(Color::Muted),
-                    )
-            }))
             .child(
                 Button::new("configure-providers", "set up models")
                     .full_width()
-                    .style(ButtonStyle::Outlined)
+                    .style(ButtonStyle::Tinted(TintColor::Accent))
                     .on_click(move |_, window, cx| {
                         window.dispatch_action(zed_actions::agent::OpenSettings.boxed_clone(), cx);
                     }),
             )
+            .child(v_flex().gap_0p5().children(FREE_PROVIDERS.iter().map(|provider| {
+                // One target per provider: the name, where it is and what it
+                // does with your data read as a single choice.
+                h_flex()
+                    .id(provider.id)
+                    .w_full()
+                    .px_2()
+                    .py_1p5()
+                    .gap_2()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|style| style.bg(cx.theme().colors().element_hover))
+                    .on_click(move |_, _, cx| cx.open_url(provider.url))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_0p5()
+                            .child(
+                                h_flex()
+                                    .gap_1p5()
+                                    .child(Label::new(provider.name).size(LabelSize::Small))
+                                    .child(
+                                        Label::new(provider.country)
+                                            .size(LabelSize::XSmall)
+                                            .color(Color::Muted),
+                                    ),
+                            )
+                            .child(
+                                Label::new(provider.data)
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                            ),
+                    )
+                    .child(
+                        Icon::new(IconName::ArrowUpRight)
+                            .size(IconSize::XSmall)
+                            .color(Color::Muted),
+                    )
+            })))
     }
 }

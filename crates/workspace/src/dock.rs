@@ -8,10 +8,10 @@ use client::proto;
 use db::kvp::KeyValueStore;
 
 use gpui::{
-    Action, Anchor, AnyView, App, Axis, Context, Entity, EntityId, EventEmitter, FocusHandle,
-    Focusable, IntoElement, KeyContext, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-    Render, SharedString, StyleRefinement, Styled, Subscription, WeakEntity, Window, deferred, div,
-    px,
+    Action, Anchor, AnimationExt as _, AnyView, App, Axis, Context, ElementId, Entity, EntityId,
+    EventEmitter, FocusHandle, Focusable, IntoElement, KeyContext, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement, Render, SharedString, StyleRefinement, Styled, Subscription,
+    WeakEntity, Window, deferred, div, px,
 };
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore, TerminalDockPosition};
@@ -1357,6 +1357,7 @@ impl Render for Dock {
                 })
                 .child(
                     div()
+                        .relative()
                         .map(|this| match self.position().axis() {
                             Axis::Horizontal => this.w_full().h_full(),
                             Axis::Vertical => this.h_full().w_full(),
@@ -1366,6 +1367,25 @@ impl Render for Dock {
                                 .panel
                                 .to_any()
                                 .cached(StyleRefinement::default().v_flex().size_full()),
+                        )
+                        // Arrives from the edge it lives on, so where a panel
+                        // went is where it comes back from. Keyed by panel so
+                        // switching panels plays it again; reduce motion skips it.
+                        .with_animation(
+                            ElementId::Name(
+                                format!("dock-arrive-{}", entry.panel.panel_id()).into(),
+                            ),
+                            gpui::Animation::new(std::time::Duration::from_millis(160))
+                                .with_easing(gpui::ease_out_quint()),
+                            move |this, delta| {
+                                let offset = px((1.0 - delta) * 8.0);
+                                let this = this.opacity(delta);
+                                match position {
+                                    DockPosition::Left => this.left(-offset),
+                                    DockPosition::Right => this.left(offset),
+                                    DockPosition::Bottom => this.top(offset),
+                                }
+                            },
                         ),
                 )
                 .when(self.resizable(cx), |this| {
