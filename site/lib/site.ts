@@ -33,7 +33,7 @@ export type Installer = {
 }
 
 /** The published release, matching `version` in public/downloads/latest.json. */
-export const RELEASE_VERSION = '2026.10.2'
+export const RELEASE_VERSION = '2026.11.21'
 
 // Every installer the release pipeline can produce; lib/installers.ts keeps
 // the pages to the ones published so far.
@@ -43,9 +43,9 @@ export const INSTALLERS: Installer[] = [
     label: 'Windows 10 and 11 (64-bit)',
     file: 'noah-windows-x86_64.exe',
     format: 'installer (.exe)',
-    size: '98 MB',
+    size: '97 MB',
     requirement: 'windows 10+',
-    sha256: '78bfe3f524015fbbc0706b961be2f52991b9fd80f0cb40e81d140f715f511b02',
+    sha256: '64802813ba75f919e91985f258f6668aa0c8765cfbcde044c34c5ad466ef2629',
   },
   {
     platform: 'linux',
